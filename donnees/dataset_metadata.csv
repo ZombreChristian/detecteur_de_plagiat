@@ -1,0 +1,121 @@
+﻿document_id,type_document,secteur,zone,annee,structure,document_source,relation,similarite_attendue,type_anomalie,source
+TDR-001,TDR,Agriculture,Centre-Est,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-002,TDR,Agriculture,Centre-Est,2026,Structure fictive,TDR-001,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-003,TDR,Agriculture,Centre-Est,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-004,TDR,Hydraulique,Nord,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-005,TDR,Hydraulique,Nord,2026,Structure fictive,TDR-004,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-006,TDR,Hydraulique,Nord,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-007,TDR,Santé,Centre-Nord,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-008,TDR,Santé,Centre-Nord,2026,Structure fictive,TDR-007,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-009,TDR,Santé,Centre-Nord,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-010,TDR,Éducation,Boucle du Mouhoun,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-011,TDR,Éducation,Boucle du Mouhoun,2026,Structure fictive,TDR-010,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-012,TDR,Éducation,Boucle du Mouhoun,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-013,TDR,Environnement,Nord,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-014,TDR,Environnement,Nord,2026,Structure fictive,TDR-013,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-015,TDR,Environnement,Nord,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-016,TDR,Énergie,Est,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-017,TDR,Énergie,Est,2026,Structure fictive,TDR-016,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-018,TDR,Énergie,Est,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-019,TDR,Numérique,Centre,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-020,TDR,Numérique,Centre,2026,Structure fictive,TDR-019,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-021,TDR,Numérique,Centre,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-022,TDR,Gouvernance,Centre-Ouest,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-023,TDR,Gouvernance,Centre-Ouest,2026,Structure fictive,TDR-022,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-024,TDR,Gouvernance,Centre-Ouest,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-025,TDR,Protection sociale,Sahel,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-026,TDR,Protection sociale,Sahel,2026,Structure fictive,TDR-025,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-027,TDR,Protection sociale,Sahel,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-028,TDR,Emploi,Hauts-Bassins,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-029,TDR,Emploi,Hauts-Bassins,2026,Structure fictive,TDR-028,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-030,TDR,Emploi,Hauts-Bassins,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-031,TDR,Aménagement,Cascades,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-032,TDR,Aménagement,Cascades,2026,Structure fictive,TDR-031,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-033,TDR,Aménagement,Cascades,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-034,TDR,Développement local,Sud-Ouest,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-035,TDR,Développement local,Sud-Ouest,2026,Structure fictive,TDR-034,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-036,TDR,Développement local,Sud-Ouest,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-037,TDR,Nutrition,Centre-Nord,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-038,TDR,Nutrition,Centre-Nord,2026,Structure fictive,TDR-037,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-039,TDR,Nutrition,Centre-Nord,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-040,TDR,Eau agricole,Hauts-Bassins,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-041,TDR,Eau agricole,Hauts-Bassins,2026,Structure fictive,TDR-040,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-042,TDR,Eau agricole,Hauts-Bassins,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-043,TDR,Mobilité,Boucle du Mouhoun,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-044,TDR,Mobilité,Boucle du Mouhoun,2026,Structure fictive,TDR-043,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-045,TDR,Mobilité,Boucle du Mouhoun,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-046,TDR,Statistique,Centre-Sud,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-047,TDR,Statistique,Centre-Sud,2026,Structure fictive,TDR-046,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-048,TDR,Statistique,Centre-Sud,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-049,TDR,Climat,Sahel,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-050,TDR,Climat,Sahel,2026,Structure fictive,TDR-049,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-051,TDR,Climat,Sahel,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-052,TDR,Genre,Centre-Est,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-053,TDR,Genre,Centre-Est,2026,Structure fictive,TDR-052,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-054,TDR,Genre,Centre-Est,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-055,TDR,Sécurité alimentaire,Est,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-056,TDR,Sécurité alimentaire,Est,2026,Structure fictive,TDR-055,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-057,TDR,Sécurité alimentaire,Est,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+TDR-058,TDR,Patrimoine,Centre-Ouest,2026,Structure fictive,,original,distinct,aucune,synthétique
+TDR-059,TDR,Patrimoine,Centre-Ouest,2026,Structure fictive,TDR-058,near_duplicate,élevé,quasi-doublon,synthétique
+TDR-060,TDR,Patrimoine,Centre-Ouest,2026,Structure fictive,,close_non_duplicate,moyen,faux positif potentiel,synthétique
+RAP-001,Rapport,Agriculture,Centre-Est,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-002,Rapport,Hydraulique,Nord,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-003,Rapport,Santé,Centre-Nord,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-004,Rapport,Éducation,Boucle du Mouhoun,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-005,Rapport,Environnement,Nord,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-006,Rapport,Énergie,Est,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-007,Rapport,Numérique,Centre,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-008,Rapport,Gouvernance,Centre-Ouest,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-009,Rapport,Protection sociale,Sahel,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-010,Rapport,Emploi,Hauts-Bassins,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-011,Rapport,Aménagement,Cascades,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-012,Rapport,Développement local,Sud-Ouest,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-013,Rapport,Nutrition,Centre-Nord,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-014,Rapport,Eau agricole,Hauts-Bassins,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-015,Rapport,Mobilité,Boucle du Mouhoun,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-016,Rapport,Statistique,Centre-Sud,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-017,Rapport,Climat,Sahel,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-018,Rapport,Genre,Centre-Est,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-019,Rapport,Sécurité alimentaire,Est,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-020,Rapport,Patrimoine,Centre-Ouest,2026,Structure fictive,,original,faible,aucune,synthétique
+RAP-021,Rapport,Agriculture,Centre-Est,2026,Structure fictive,RAP-001,literal_copy,très élevé,copie littérale,synthétique
+RAP-022,Rapport,Hydraulique,Nord,2026,Structure fictive,RAP-002,literal_copy,très élevé,copie littérale,synthétique
+RAP-023,Rapport,Santé,Centre-Nord,2026,Structure fictive,RAP-003,literal_copy,très élevé,copie littérale,synthétique
+RAP-024,Rapport,Éducation,Boucle du Mouhoun,2026,Structure fictive,RAP-004,literal_copy,très élevé,copie littérale,synthétique
+RAP-025,Rapport,Environnement,Nord,2026,Structure fictive,RAP-005,literal_copy,très élevé,copie littérale,synthétique
+RAP-026,Rapport,Énergie,Est,2026,Structure fictive,RAP-006,literal_copy,très élevé,copie littérale,synthétique
+RAP-027,Rapport,Numérique,Centre,2026,Structure fictive,RAP-007,literal_copy,très élevé,copie littérale,synthétique
+RAP-028,Rapport,Gouvernance,Centre-Ouest,2026,Structure fictive,RAP-008,literal_copy,très élevé,copie littérale,synthétique
+RAP-029,Rapport,Protection sociale,Sahel,2026,Structure fictive,RAP-009,literal_copy,très élevé,copie littérale,synthétique
+RAP-030,Rapport,Emploi,Hauts-Bassins,2026,Structure fictive,RAP-010,literal_copy,très élevé,copie littérale,synthétique
+RAP-031,Rapport,Aménagement,Cascades,2026,Structure fictive,RAP-011,literal_copy,très élevé,copie littérale,synthétique
+RAP-032,Rapport,Développement local,Sud-Ouest,2026,Structure fictive,RAP-012,literal_copy,très élevé,copie littérale,synthétique
+RAP-033,Rapport,Nutrition,Centre-Nord,2026,Structure fictive,RAP-013,literal_copy,très élevé,copie littérale,synthétique
+RAP-034,Rapport,Eau agricole,Hauts-Bassins,2026,Structure fictive,RAP-014,literal_copy,très élevé,copie littérale,synthétique
+RAP-035,Rapport,Mobilité,Boucle du Mouhoun,2026,Structure fictive,RAP-015,literal_copy,très élevé,copie littérale,synthétique
+RAP-036,Rapport,Statistique,Centre-Sud,2026,Structure fictive,RAP-016,literal_copy,très élevé,copie littérale,synthétique
+RAP-037,Rapport,Climat,Sahel,2026,Structure fictive,RAP-017,literal_copy,très élevé,copie littérale,synthétique
+RAP-038,Rapport,Genre,Centre-Est,2026,Structure fictive,RAP-018,literal_copy,très élevé,copie littérale,synthétique
+RAP-039,Rapport,Sécurité alimentaire,Est,2026,Structure fictive,RAP-019,literal_copy,très élevé,copie littérale,synthétique
+RAP-040,Rapport,Patrimoine,Centre-Ouest,2026,Structure fictive,RAP-020,literal_copy,très élevé,copie littérale,synthétique
+RAP-041,Rapport,Agriculture,Centre-Est,2026,Structure fictive,RAP-001,paraphrase,élevé,paraphrase,synthétique
+RAP-042,Rapport,Hydraulique,Nord,2026,Structure fictive,RAP-002,paraphrase,élevé,paraphrase,synthétique
+RAP-043,Rapport,Santé,Centre-Nord,2026,Structure fictive,RAP-003,paraphrase,élevé,paraphrase,synthétique
+RAP-044,Rapport,Éducation,Boucle du Mouhoun,2026,Structure fictive,RAP-004,paraphrase,élevé,paraphrase,synthétique
+RAP-045,Rapport,Environnement,Nord,2026,Structure fictive,RAP-005,paraphrase,élevé,paraphrase,synthétique
+RAP-046,Rapport,Énergie,Est,2026,Structure fictive,RAP-006,paraphrase,élevé,paraphrase,synthétique
+RAP-047,Rapport,Numérique,Centre,2026,Structure fictive,RAP-007,paraphrase,élevé,paraphrase,synthétique
+RAP-048,Rapport,Gouvernance,Centre-Ouest,2026,Structure fictive,RAP-008,paraphrase,élevé,paraphrase,synthétique
+RAP-049,Rapport,Protection sociale,Sahel,2026,Structure fictive,RAP-009,paraphrase,élevé,paraphrase,synthétique
+RAP-050,Rapport,Emploi,Hauts-Bassins,2026,Structure fictive,RAP-010,paraphrase,élevé,paraphrase,synthétique
+RAP-051,Rapport,Aménagement,Cascades,2026,Structure fictive,RAP-011,paraphrase,élevé,paraphrase,synthétique
+RAP-052,Rapport,Développement local,Sud-Ouest,2026,Structure fictive,RAP-012,paraphrase,élevé,paraphrase,synthétique
+RAP-053,Rapport,Nutrition,Centre-Nord,2026,Structure fictive,RAP-013,paraphrase,élevé,paraphrase,synthétique
+RAP-054,Rapport,Eau agricole,Hauts-Bassins,2026,Structure fictive,RAP-014,paraphrase,élevé,paraphrase,synthétique
+RAP-055,Rapport,Mobilité,Boucle du Mouhoun,2026,Structure fictive,RAP-015,paraphrase,élevé,paraphrase,synthétique
+RAP-056,Rapport,Statistique,Centre-Sud,2026,Structure fictive,,difficult_near_duplicate,moyen-élevé,passages récurrents + proximité thématique,synthétique
+RAP-057,Rapport,Climat,Sahel,2026,Structure fictive,,difficult_near_duplicate,moyen-élevé,passages récurrents + proximité thématique,synthétique
+RAP-058,Rapport,Genre,Centre-Est,2026,Structure fictive,,difficult_near_duplicate,moyen-élevé,passages récurrents + proximité thématique,synthétique
+RAP-059,Rapport,Sécurité alimentaire,Est,2026,Structure fictive,,difficult_near_duplicate,moyen-élevé,passages récurrents + proximité thématique,synthétique
+RAP-060,Rapport,Patrimoine,Centre-Ouest,2026,Structure fictive,,difficult_near_duplicate,moyen-élevé,passages récurrents + proximité thématique,synthétique
