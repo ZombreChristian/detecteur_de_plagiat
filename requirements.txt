@@ -1,0 +1,16 @@
+python-docx
+pandas
+numpy
+scikit-learn
+sentence-transformers
+transformers
+torch
+scipy
+joblib
+fastapi
+uvicorn
+python-multipart
+openpyxl
+matplotlib
+seaborn
+pytest
