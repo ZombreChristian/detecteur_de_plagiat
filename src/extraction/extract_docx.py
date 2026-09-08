@@ -16,15 +16,26 @@ def extract_docx(path: Path) -> str:
     return "\n".join(parts)
 
 def main():
+    # S'assurer que le dossier existe
+    DATA.mkdir(parents=True, exist_ok=True)
+
     rows = []
     for folder in [DATA / "TDR", DATA / "Rapport d'etude"]:
         for path in sorted(folder.glob("*.docx")):
             text = extract_docx(path)
-            rows.append({"document_id": path.stem, "type_document": folder.name, "path": str(path.relative_to(ROOT)), "text": text, "nb_caracteres": len(text), "nb_mots": len(text.split())})
+            rows.append({
+                "document_id": path.stem,
+                "type_document": folder.name,
+                "path": str(path.relative_to(ROOT)),
+                "text": text,
+                "nb_caracteres": len(text),
+                "nb_mots": len(text.split())
+            })
     df = pd.DataFrame(rows)
     df.to_csv(OUT, index=False, encoding="utf-8-sig")
     print(f"Documents extraits : {len(df)}")
     print(df.groupby("type_document").size())
+
 
 if __name__ == "__main__":
     main()
