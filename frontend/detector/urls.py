@@ -1,7 +1,4 @@
 from django.urls import path
 from . import views
-
-urlpatterns = [
-    path("", views.dashboard, name="dashboard"),
-    path("analyse/", views.analyse, name="analyse"),
-]
+app_name = "detector"
+urlpatterns = [path("", views.dashboard, name="dashboard"), path("analyser/", views.analyser, name="analyser"), path("resultats/", views.resultats, name="resultats")]
