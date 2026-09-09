@@ -11,8 +11,11 @@ fastapi
 uvicorn
 python-multipart
 requests
-django
+django>=5.0,<6.0
+psycopg[binary]>=3.2,<4.0
 openpyxl
+reportlab
 matplotlib
 seaborn
 pytest
+pypdf
