@@ -6,7 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 
-ROOT=Path(__file__).resolve().parents[2]; DOCS=ROOT/"donnees/documents_extraits.csv"; PAIRS=ROOT/"donnees/pairs.csv"; OUT=ROOT/"resultats/semantic_predictions.csv"
+ROOT=Path(__file__).resolve().parents[2]; DOCS=ROOT/"donnees/documents_nettoyes.csv"; PAIRS=ROOT/"donnees/pairs.csv"; OUT=ROOT/"resultats/semantic_predictions.csv"
 MODEL_NAME="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 def main():

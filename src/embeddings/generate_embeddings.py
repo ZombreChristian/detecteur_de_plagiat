@@ -5,7 +5,7 @@ import pandas as pd
 from sentence_transformers import SentenceTransformer
 
 ROOT = Path(__file__).resolve().parents[2]
-DOCS = ROOT / "donnees" / "documents_extraits.csv"
+DOCS = ROOT / "donnees" / "documents_nettoyes.csv"
 OUT = ROOT / "modeles" / "embeddings.npz"
 MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
