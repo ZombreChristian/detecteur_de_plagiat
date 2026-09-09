@@ -1,97 +1,114 @@
-# Détecteur de plagiat et de doublon d'études
+# DOCSEC — Détecteur de plagiat et de doublon d'études
 
-Plateforme de détection documentaire conforme au cahier des charges : doublons de TDR, plagiat littéral/paraphrasé dans les rapports, explicabilité par sources et passages, journalisation et stockage PostgreSQL.
+Prototype de détection documentaire conforme au cahier des charges : détection de quasi-doublons de TDR, détection de copies/paraphrases dans les rapports, explicabilité par sources et passages, historique des analyses et export des résultats.
 
 ## Architecture
-- **Moteur ML** : TF-IDF + Sentence Transformer multilingue + score hybride.
-- **Localisation** : comparaison passage par passage.
-- **API** : FastAPI (`api/app.py`).
-- **Interface** : Django (`frontend/`).
-- **Base** : PostgreSQL.
-- **Administration** : Django Admin pour documents, analyses et whitelist.
 
-## Arborescence principale
 ```text
-api/                    API FastAPI
-donnees/TDR/            corpus TDR
-donnees/Rapport d'etude/ corpus rapports
-src/passages/           localisation des passages
-src/prediction/         détection d'une paire
-src/training/           apprentissage/évaluation
-frontend/               application Django
-  detector/             modèles, vues, migrations
-  templates/            interface web
-  static/               CSS
-docker-compose.yml      PostgreSQL
+DOCX
+  ↓
+Extraction et nettoyage
+  ↓
+TF-IDF + Sentence Transformer multilingue
+  ↓
+Score hybride lexical/sémantique
+  ↓
+Pré-sélection des sources
+  ↓
+Localisation des passages similaires
+  ↓
+FastAPI
+  ↓
+Django + PostgreSQL
 ```
 
+## Corpus
+
+- `donnees/TDR/` : TDR utilisés pour la détection de doublons.
+- `donnees/Rapport d'etude/` : rapports utilisés pour la détection de plagiat.
+- `donnees/dataset_metadata.csv` : métadonnées et relations attendues du corpus synthétique.
+
+Le corpus est synthétique et sert à valider le pipeline avant intégration de données réelles.
+
 ## Installation
+
+Depuis la racine :
+
 ```bash
 python -m venv .venv
 # Windows
-.venv\\Scripts\\activate
+.venv\Scripts\activate
 # Linux/WSL
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### PostgreSQL avec Docker
+## PostgreSQL
+
+Le projet utilise PostgreSQL et non SQLite.
+
 ```bash
 docker compose up -d postgres
 ```
-Le service crée la base `detecteur_plagiat` sur `localhost:5432`.
 
-Copiez `frontend/.env.example` vers `frontend/.env` et adaptez le mot de passe si nécessaire. Les variables peuvent aussi être définies directement dans l'environnement système.
+Créer ensuite `frontend/.env` à partir de `frontend/.env.example`.
 
-## Initialisation Django
+## Base Django
+
 ```bash
 cd frontend
 python manage.py migrate
 python manage.py createsuperuser
 ```
 
-## Démarrage
-Ouvrir deux terminaux.
+## Lancer l'application
 
-Terminal 1 — API :
+Terminal 1, depuis la racine :
+
 ```bash
 uvicorn api.app:app --reload --port 8000
 ```
 
-Terminal 2 — Django :
+Terminal 2 :
+
 ```bash
 cd frontend
 python manage.py runserver 127.0.0.1:8001
 ```
 
-Interface : `http://127.0.0.1:8001/`
-Administration : `http://127.0.0.1:8001/admin/`
-Documentation API : `http://127.0.0.1:8000/docs`
+Interfaces :
+
+- Django : `http://127.0.0.1:8001/`
+- Administration : `http://127.0.0.1:8001/admin/`
+- Documentation API : `http://127.0.0.1:8000/docs`
+- Santé API : `http://127.0.0.1:8000/api/health`
+
+## Fonctionnalités
+
+- Analyse plagiat des rapports.
+- Analyse doublon des TDR.
+- TF-IDF pour le recouvrement lexical.
+- Sentence Transformer multilingue pour la similarité sémantique.
+- Score hybride : 35 % lexical + 65 % sémantique.
+- Classement des sources les plus proches.
+- Localisation des passages similaires.
+- Score de nouveauté.
+- Seuils distincts pour plagiat et doublon.
+- Historique PostgreSQL.
+- Administration Django.
+- Export PDF et Excel.
+- Whitelist des passages administratifs récurrents via Django Admin.
 
 ## API
-- `GET /api/health` : état du service et taille des corpus.
-- `POST /api/detect/plagiarism` : analyse d'un rapport DOCX.
-- `POST /api/detect/duplicate` : analyse d'un TDR DOCX.
-- `POST /api/compare` : comparaison directe de deux DOCX.
 
-Le champ multipart attendu pour les détections est `file`.
+`POST /api/detect/plagiarism` avec un champ multipart `file`.
 
-## Pipeline scientifique
-1. Extraction du document.
-2. Nettoyage/normalisation.
-3. Segmentation en passages.
-4. Préfiltrage lexical TF-IDF.
-5. Encodage sémantique multilingue.
-6. Fusion TF-IDF (35 %) + sémantique (65 %).
-7. Classement des documents sources.
-8. Localisation des passages similaires.
-9. Décision selon un seuil configurable par moteur.
-10. Calcul du score de nouveauté et conservation du résultat dans PostgreSQL.
+`POST /api/detect/duplicate` avec un champ multipart `file`.
 
-Les seuils actuels sont des seuils initiaux à calibrer sur le corpus réel : `0.55` pour les rapports et `0.70` pour les TDR. Ils ne constituent pas une preuve juridique automatique.
+`POST /api/compare` permet de comparer directement deux DOCX.
 
-## Données
-Le corpus synthétique permet de valider le pipeline. Pour une mise en production, les données réelles doivent être importées avec leurs métadonnées : titre, objet, portée géographique, secteur, résultats attendus, entité commanditaire, année, budget, statut et document source.
+## Important pour les essais
 
-## Important
-Les modèles lourds et les résultats générés localement restent exclus du versionnage. Les données administratives réelles doivent être hébergées selon les exigences de souveraineté, confidentialité, droits d'accès et conservation prévues par le projet.
+Le moteur ne doit pas comparer le document envoyé avec lui-même. Les sources sont recherchées dans le corpus correspondant au mode choisi. Les seuils sont des valeurs initiales et doivent être calibrés à partir des résultats d'évaluation sur des données annotées.
+
+Les modèles et résultats générés localement ne sont pas versionnés par Git.
