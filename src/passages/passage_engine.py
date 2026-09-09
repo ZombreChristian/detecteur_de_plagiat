@@ -11,48 +11,94 @@ MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 def get_model():
     return SentenceTransformer(MODEL_NAME)
 
+
+def normalize_passage(text):
+    text = re.sub(r"\s+", " ", text or "").strip().lower()
+    return text
+
+
 def split_into_passages(text, max_chars=1200):
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", text) if p.strip()]
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", text or "") if p.strip()]
     passages = []
-    for p in paragraphs:
-        if len(p) <= max_chars:
-            passages.append(p)
-        else:
-            sentences = re.split(r"(?<=[.!?])\s+", p)
-            current = ""
-            for s in sentences:
-                if current and len(current) + len(s) + 1 > max_chars:
-                    passages.append(current.strip()); current = s
-                else:
-                    current = f"{current} {s}".strip()
-            if current: passages.append(current)
+    for paragraph in paragraphs:
+        if len(paragraph) <= max_chars:
+            passages.append(paragraph)
+            continue
+        sentences = re.split(r"(?<=[.!?])\s+", paragraph)
+        current = ""
+        for sentence in sentences:
+            if current and len(current) + len(sentence) + 1 > max_chars:
+                passages.append(current.strip())
+                current = sentence
+            else:
+                current = f"{current} {sentence}".strip()
+        if current:
+            passages.append(current)
     return passages
+
 
 def compare_passages(candidate_passages, source_passages, threshold=0.50, top_k=10):
     if not candidate_passages or not source_passages:
         return []
+
     texts = candidate_passages + source_passages
-    tfidf = TfidfVectorizer(ngram_range=(1,2), sublinear_tf=True).fit_transform(texts)
-    lexical = cosine_similarity(tfidf[:len(candidate_passages)], tfidf[len(candidate_passages):])
-    emb = get_model().encode(texts, normalize_embeddings=True, show_progress_bar=False)
-    semantic = np.matmul(emb[:len(candidate_passages)], emb[len(candidate_passages):].T)
+    tfidf = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True).fit_transform(texts)
+    lexical = cosine_similarity(
+        tfidf[:len(candidate_passages)],
+        tfidf[len(candidate_passages):],
+    )
+    embeddings = get_model().encode(
+        texts,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    )
+    semantic = np.matmul(
+        embeddings[:len(candidate_passages)],
+        embeddings[len(candidate_passages):].T,
+    )
+
     matches = []
-    for i, cp in enumerate(candidate_passages):
-        j = int(np.argmax(0.35 * lexical[i] + 0.65 * semantic[i]))
-        score = float(0.35 * lexical[i, j] + 0.65 * semantic[i, j])
-        if score >= threshold:
-            matches.append({"candidate_passage": cp, "source_passage": source_passages[j], "tfidf_score": round(float(lexical[i,j]),4), "semantic_score": round(float(semantic[i,j]),4), "score": round(score,4)})
-    matches.sort(key=lambda x: x["score"], reverse=True)
+    for i, candidate in enumerate(candidate_passages):
+        combined = 0.35 * lexical[i] + 0.65 * semantic[i]
+        # Ignore very short generic headings unless lexical overlap is also strong.
+        candidate_words = normalize_passage(candidate).split()
+        for j in np.argsort(combined)[::-1][:3]:
+            score = float(combined[j])
+            lexical_score = float(lexical[i, j])
+            semantic_score = float(semantic[i, j])
+            source = source_passages[j]
+            source_words = normalize_passage(source).split()
+            if len(candidate_words) < 7 and score < 0.85:
+                continue
+            if score >= threshold:
+                matches.append({
+                    "candidate_passage": candidate,
+                    "source_passage": source,
+                    "tfidf_score": round(lexical_score, 4),
+                    "semantic_score": round(semantic_score, 4),
+                    "score": round(score, 4),
+                })
+                break
+
+    matches.sort(key=lambda item: item["score"], reverse=True)
     return matches[:top_k]
 
+
 def calculate_coverage(candidate_passages, matches):
-    if not candidate_passages: return 0.0
-    matched = {m["candidate_passage"] for m in matches}
+    if not candidate_passages:
+        return 0.0
+    matched = {normalize_passage(m["candidate_passage"]) for m in matches}
     return round(len(matched) / len(candidate_passages), 4)
 
+
 def analyze_document_pair(candidate_text, source_text, threshold=0.50, top_k=10):
-    cp = split_into_passages(candidate_text)
-    sp = split_into_passages(source_text)
-    matches = compare_passages(cp, sp, threshold, top_k)
-    coverage = calculate_coverage(cp, matches)
-    return {"matches": matches, "coverage": coverage, "passages_candidate": len(cp), "passages_source": len(sp)}
+    candidate_passages = split_into_passages(candidate_text)
+    source_passages = split_into_passages(source_text)
+    matches = compare_passages(candidate_passages, source_passages, threshold, top_k)
+    coverage = calculate_coverage(candidate_passages, matches)
+    return {
+        "matches": matches,
+        "coverage": coverage,
+        "passages_candidate": len(candidate_passages),
+        "passages_source": len(source_passages),
+    }
