@@ -1,3 +1,39 @@
 {% load static %}
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DOCSEC — Réception</title><link rel="stylesheet" href="{% static 'css/app.css' %}"></head>
-<body><header><div class="brand">DOC<span>SEC</span></div><nav><a href="{% url 'detector:dashboard' %}">Tableau de bord</a><a href="{% url 'detector:reception' %}">Réception</a><a href="{% url 'detector:analyser' %}">Analyse libre</a><a href="{% url 'detector:resultats' %}">Historique</a><a href="{% url 'detector:logout' %}">Déconnexion</a></nav></header><main><section class="hero"><small>PARCOURS DOCUMENTAIRE</small><h1>Du TDR au rapport d'étude</h1><p>Le TDR est vérifié en premier. S'il est différent des TDR déjà enregistrés, il peut poursuivre son cycle et son rapport associé pourra ensuite être réceptionné et contrôlé.</p></section>{% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}<div class="grid two"><section class="card workflow-card"><div class="step">01</div><h2>Vérifier un TDR</h2><p>Comparez le TDR à la base existante. Le système fournit les scores TF-IDF, sémantique et hybride, puis décide : <strong>SIMILAIRE</strong> ou <strong>DIFFERENT</strong>.</p><form method="post" enctype="multipart/form-data" class="form">{% csrf_token %}<input type="hidden" name="mode" value="tdr"><label>Document TDR<input type="file" name="document" accept=".docx" required></label><button class="button" type="submit">Vérifier le TDR</button></form></section><section class="card workflow-card {% if not request.session.validated_tdr_name %}disabled-card{% endif %}"><div class="step">02</div><h2>Réceptionner le rapport</h2>{% if request.session.validated_tdr_name %}<p>TDR validé : <strong>{{ request.session.validated_tdr_name }}</strong></p><p>Le rapport associé peut maintenant être soumis au contrôle de plagiat.</p><form method="post" enctype="multipart/form-data" class="form">{% csrf_token %}<input type="hidden" name="mode" value="report"><label>Rapport d'étude<input type="file" name="document" accept=".docx" required></label><button class="button" type="submit">Contrôler le rapport</button></form>{% else %}<p class="muted">Cette étape sera activée après validation d'un TDR différent de ceux déjà présents dans la base.</p>{% endif %}</section></div></main></body></html>
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DOCSEC — Vérification</title><link rel="stylesheet" href="{% static 'css/app.css' %}">
+<style>
+.processing{display:none;margin-top:24px;padding:30px;border-radius:18px;background:#fff;border:1px solid #dfe5ee;box-shadow:0 15px 40px rgba(15,23,42,.10)}
+.processing.show{display:flex;align-items:center;gap:24px}.spinner{width:62px;height:62px;border:6px solid #e5e7eb;border-top-color:#182230;border-radius:50%;animation:spin .8s linear infinite;flex:none}@keyframes spin{to{transform:rotate(360deg)}}
+.processing h3{margin:0 0 6px;font-size:20px}.processing p{margin:0 0 14px;color:#667085}.progress-wrap{width:min(620px,60vw);height:12px;background:#e5e7eb;border-radius:20px;overflow:hidden}.progress-fill{width:0;height:100%;background:#182230;border-radius:20px;transition:width .35s ease}.progress-info{display:flex;justify-content:space-between;margin-top:8px;font-weight:800;font-size:13px}.processing-steps{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}.processing-step{padding:7px 11px;border-radius:20px;background:#f1f5f9;color:#64748b;font-size:12px}.processing-step.active{background:#e2e8f0;color:#182230;font-weight:800}
+@media(max-width:700px){.processing.show{align-items:flex-start}.progress-wrap{width:100%}}
+</style>
+</head>
+<body>
+<div class="app-shell">
+<aside class="sidebar">
+<div class="brand">DOC<span>SEC</span></div><div class="side-caption">ANALYSE DOCUMENTAIRE</div>
+<a class="side-link" href="{% url 'detector:dashboard' %}">⌂ <span>Tableau de bord</span></a>
+<a class="side-link active" href="{% url 'detector:reception' %}">✓ <span>Vérifier un TDR</span></a>
+<a class="side-link" href="{% url 'detector:analyser' %}">＋ <span>Nouvelle analyse</span></a>
+<a class="side-link" href="{% url 'detector:resultats' %}">◷ <span>Historique</span></a>
+<a class="side-link" href="/admin/">⚙ <span>Administration</span></a>
+<div class="sidebar-bottom"><div class="user-mini"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Utilisateur connecté</small></div><a class="side-link logout" href="{% url 'detector:logout' %}">↪ <span>Déconnexion</span></a></div>
+</aside>
+<main class="dashboard-main">
+<div class="topbar"><div><small>PARCOURS DOCUMENTAIRE</small><h1>Vérification du TDR</h1></div></div>
+{% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
+<div id="workflow-content" class="grid two">
+<section class="card workflow-card"><div class="step">01</div><h2>Vérifier un TDR</h2><p>Déposez le nouveau TDR. DOCSEC le vérifie automatiquement dans la base des TDR existants.</p>
+<form id="tdr-form" method="post" enctype="multipart/form-data" class="form">{% csrf_token %}<input type="hidden" name="mode" value="tdr"><label>Document TDR<input id="tdr-file" type="file" name="document" accept=".docx" required></label><button id="tdr-button" class="button" type="submit">Vérifier le TDR</button></form></section>
+<section class="card workflow-card {% if not request.session.validated_tdr_name %}disabled-card{% endif %}"><div class="step">02</div><h2>Réceptionner le rapport</h2>{% if request.session.validated_tdr_name %}<p>TDR validé : <strong>{{ request.session.validated_tdr_name }}</strong></p><p>Le rapport associé peut maintenant être soumis au contrôle de plagiat.</p><form method="post" enctype="multipart/form-data" class="form">{% csrf_token %}<input type="hidden" name="mode" value="report"><label>Rapport d'étude<input type="file" name="document" accept=".docx" required></label><button class="button" type="submit">Contrôler le rapport</button></form>{% else %}<p class="muted">Cette étape sera activée après validation d'un TDR différent de ceux déjà présents dans la base.</p>{% endif %}</section>
+</div>
+<section id="processing" class="processing" aria-live="polite"><div class="spinner"></div><div style="flex:1"><h3>Analyse du TDR en cours…</h3><p id="process-text">Lecture du document et extraction du contenu.</p><div class="progress-wrap"><div id="progress-fill" class="progress-fill"></div></div><div class="progress-info"><span>Progression</span><span id="progress-percent">0 %</span></div><div class="processing-steps"><span id="ps1" class="processing-step active">Lecture</span><span id="ps2" class="processing-step">TF-IDF</span><span id="ps3" class="processing-step">Sémantique</span><span id="ps4" class="processing-step">Décision</span></div></div></section>
+</main></div>
+<script>
+const form=document.getElementById('tdr-form');const processing=document.getElementById('processing');const button=document.getElementById('tdr-button');const file=document.getElementById('tdr-file');const fill=document.getElementById('progress-fill');const pct=document.getElementById('progress-percent');const txt=document.getElementById('process-text');
+if(form){form.addEventListener('submit',function(e){if(!file.files.length)return;processing.classList.add('show');button.disabled=true;button.textContent='Analyse en cours…';file.disabled=true;let p=0;let stage=0;const steps=[document.getElementById('ps1'),document.getElementById('ps2'),document.getElementById('ps3'),document.getElementById('ps4')];const messages=['Lecture du document et extraction du contenu.','Calcul de la similarité lexicale TF-IDF.','Analyse sémantique du contenu du TDR.','Calcul du score hybride et décision.'];const timer=setInterval(function(){p=Math.min(p+3+Math.floor(Math.random()*5),96);fill.style.width=p+'%';pct.textContent=p+' %';let next=p<25?0:p<52?1:p<80?2:3;if(next!==stage){stage=next;txt.textContent=messages[stage];steps.forEach((s,i)=>s.classList.toggle('active',i===stage));}},450);window.addEventListener('pagehide',()=>clearInterval(timer));});}
+</script>
+</body></html>
