@@ -31,6 +31,35 @@ def logout_view(request):
     return redirect("detector:login")
 
 
+def _get_uploaded_docx(request):
+    """Récupère le DOCX même si le template utilise un nom de champ différent.
+
+    Le frontend a évolué plusieurs fois. On accepte donc les noms historiques
+    document / tdr_document / report_document / file, sans modifier le design.
+    """
+    candidates = ("document", "tdr_document", "report_document", "file")
+    for field_name in candidates:
+        uploaded = request.FILES.get(field_name)
+        if uploaded and uploaded.name:
+            return uploaded
+
+    # Dernier filet de sécurité : prendre le premier fichier réellement envoyé.
+    for uploaded in request.FILES.values():
+        if uploaded and uploaded.name:
+            return uploaded
+    return None
+
+
+def _validate_docx(uploaded):
+    """Valide un fichier DOCX sans dépendre du content-type du navigateur."""
+    if not uploaded or not uploaded.name:
+        return False
+    name = uploaded.name.strip().lower()
+    if not name.endswith(".docx"):
+        return False
+    return True
+
+
 @login_required
 def dashboard(request):
     recent = Analysis.objects.filter(user=request.user).order_by("-created_at")[:8]
@@ -40,8 +69,6 @@ def dashboard(request):
     to_review = Analysis.objects.filter(user=request.user, decision="A EXAMINER").count()
     tdr_checks = Analysis.objects.filter(user=request.user, mode="duplicate").count()
     report_checks = Analysis.objects.filter(user=request.user, mode="plagiarism").count()
-    # Volume du registre national (socle commun aux deux moteurs, cf. cahier des charges B.0) :
-    # distinct de l'historique personnel de vérifications ci-dessus.
     registry_total = StudyDocument.objects.count()
     registry_tdr = StudyDocument.objects.filter(document_type="TDR").count()
     registry_rapport = StudyDocument.objects.filter(document_type="RAPPORT").count()
@@ -57,17 +84,34 @@ def reception(request):
     """Parcours métier : vérifier le TDR, puis autoriser la réception du rapport associé."""
     if request.method == "GET":
         return render(request, "reception.html")
+
     mode = request.POST.get("mode", "tdr")
-    uploaded = request.FILES.get("document")
-    if not uploaded or not uploaded.name.lower().endswith(".docx"):
+    uploaded = _get_uploaded_docx(request)
+    if not _validate_docx(uploaded):
         messages.error(request, "Veuillez sélectionner un document DOCX valide.")
         return redirect("detector:reception")
+
     endpoint = "/api/detect/duplicate" if mode == "tdr" else "/api/detect/plagiarism"
     try:
-        response = requests.post(f"{settings.FASTAPI_URL}{endpoint}", files={"file": (uploaded.name, uploaded.file, uploaded.content_type)}, timeout=600)
+        response = requests.post(
+            f"{settings.FASTAPI_URL}{endpoint}",
+            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            timeout=600,
+        )
         response.raise_for_status()
         result = response.json()
-        analysis = Analysis.objects.create(user=request.user, document_name=uploaded.name, mode="duplicate" if mode == "tdr" else "plagiarism", decision=result.get("decision", ""), hybrid_score=result.get("hybrid_score"), semantic_score=result.get("semantic_score"), tfidf_score=result.get("tfidf_score"), novelty_score=result.get("novelty_score"), result_json=result, duration_ms=result.get("duration_ms"))
+        analysis = Analysis.objects.create(
+            user=request.user,
+            document_name=uploaded.name,
+            mode="duplicate" if mode == "tdr" else "plagiarism",
+            decision=result.get("decision", ""),
+            hybrid_score=result.get("hybrid_score"),
+            semantic_score=result.get("semantic_score"),
+            tfidf_score=result.get("tfidf_score"),
+            novelty_score=result.get("novelty_score"),
+            result_json=result,
+            duration_ms=result.get("duration_ms"),
+        )
         request.session["last_result"] = result
         request.session["last_analysis_id"] = analysis.id
         request.session["last_document_name"] = uploaded.name
@@ -89,23 +133,40 @@ def reception(request):
 def analyser(request):
     if request.method != "POST":
         return render(request, "analyser.html")
-    uploaded = request.FILES.get("document")
+
+    uploaded = _get_uploaded_docx(request)
     mode = request.POST.get("mode", "plagiarism")
     if mode not in ("plagiarism", "duplicate"):
         messages.error(request, "Mode d'analyse invalide.")
         return redirect("detector:analyser")
-    if not uploaded or not uploaded.name.lower().endswith(".docx"):
+    if not _validate_docx(uploaded):
         messages.error(request, "Veuillez sélectionner un document DOCX valide.")
         return redirect("detector:analyser")
+
     endpoint = "/api/detect/duplicate" if mode == "duplicate" else "/api/detect/plagiarism"
     start = time.perf_counter()
     try:
-        response = requests.post(f"{settings.FASTAPI_URL}{endpoint}", files={"file": (uploaded.name, uploaded.file, uploaded.content_type)}, timeout=600)
+        response = requests.post(
+            f"{settings.FASTAPI_URL}{endpoint}",
+            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            timeout=600,
+        )
         response.raise_for_status()
         result = response.json()
         duration = round((time.perf_counter() - start) * 1000)
         result["duration_ms"] = duration
-        Analysis.objects.create(user=request.user, document_name=uploaded.name, mode=mode, decision=result.get("decision", ""), hybrid_score=result.get("hybrid_score"), semantic_score=result.get("semantic_score"), tfidf_score=result.get("tfidf_score"), novelty_score=result.get("novelty_score"), result_json=result, duration_ms=duration)
+        Analysis.objects.create(
+            user=request.user,
+            document_name=uploaded.name,
+            mode=mode,
+            decision=result.get("decision", ""),
+            hybrid_score=result.get("hybrid_score"),
+            semantic_score=result.get("semantic_score"),
+            tfidf_score=result.get("tfidf_score"),
+            novelty_score=result.get("novelty_score"),
+            result_json=result,
+            duration_ms=duration,
+        )
         request.session["last_result"] = result
         request.session["last_document_name"] = uploaded.name
         return redirect("detector:resultats")
