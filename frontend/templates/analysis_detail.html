@@ -1,0 +1,78 @@
+{% load static %}
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DOCSEC — Détail de l'analyse</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+<div class="console">
+<aside class="rail">
+  <div class="rail-brand"><div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div><div class="brand-tag">Registre national des études — PTBA</div></div>
+  <nav class="rail-nav">
+    <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">#</span><span>Tableau de bord</span></a>
+    <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">↳</span><span>Vérifier un TDR</span></a>
+    <a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico">+</span><span>Nouvelle analyse</span></a>
+    <a class="rail-link active" href="{% url 'detector:resultats' %}"><span class="ico">≡</span><span>Historique</span></a>
+    <a class="rail-link" href="/admin/"><span class="ico">*</span><span>Administration</span></a>
+  </nav>
+  <div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div>
+</aside>
+<main class="main">
+  <div class="ctxbar"><div><h1>Détail de l'analyse</h1><div class="lede">Résultat enregistré dans l'historique DOCSEC</div></div><div class="actions"><a class="btn" href="{% url 'detector:dashboard' %}">← Tableau de bord</a></div></div>
+  <div class="page-pad">
+    <section class="panel">
+      <div class="panel-head"><div><h2>{{ analysis.document_name }}</h2><div class="muted" style="font-size:12px;margin-top:5px">{{ analysis.created_at|date:'d/m/Y H:i:s' }}</div></div><div>{% if analysis.decision == 'SIMILAIRE' %}<span class="status status-alert">SIMILAIRE</span>{% elif analysis.decision == 'DIFFERENT' %}<span class="status status-ok">DIFFERENT</span>{% else %}<span class="status status-neutral">{{ analysis.decision|default:'—' }}</span>{% endif %}</div></div>
+      <div class="panel-body">
+        <div class="engines" style="margin:0">
+          <div class="engine"><div class="engine-kicker muted">Type de contrôle</div><h3>{{ analysis.get_mode_display }}</h3><p>{% if analysis.mode == 'duplicate' %}Vérification de doublon d'un TDR par rapport au registre existant.{% else %}Contrôle de plagiat d'un rapport par rapport au corpus existant.{% endif %}</p></div>
+          <div class="engine"><div class="engine-kicker muted">Seuil de décision</div><h3>{% if result.threshold != None %}{{ result.threshold|floatformat:3 }}{% else %}—{% endif %}</h3><p>La décision SIMILAIRE est retenue lorsque le score hybride atteint le seuil configuré.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="pulse">
+      <div class="pulse-cell"><b class="mono">{% if analysis.tfidf_score != None %}{{ analysis.tfidf_score|floatformat:3 }}{% else %}—{% endif %}</b><span>TF-IDF</span></div>
+      <div class="pulse-cell"><b class="mono">{% if analysis.semantic_score != None %}{{ analysis.semantic_score|floatformat:3 }}{% else %}—{% endif %}</b><span>Analyse sémantique</span></div>
+      <div class="pulse-cell"><b class="mono">{% if analysis.hybrid_score != None %}{{ analysis.hybrid_score|floatformat:3 }}{% else %}—{% endif %}</b><span>Score hybride</span></div>
+      <div class="pulse-cell"><b class="mono">{% if analysis.novelty_score != None %}{{ analysis.novelty_score|floatformat:3 }}{% else %}—{% endif %}</b><span>Nouveauté</span></div>
+      <div class="pulse-cell"><b class="mono">{% if analysis.duration_ms != None %}{{ analysis.duration_ms }} ms{% else %}—{% endif %}</b><span>Durée</span></div>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Document et décision</h2></div>
+      <div class="panel-body">
+        <p><strong>Document :</strong> {{ analysis.document_name }}</p>
+        <p><strong>Meilleure source :</strong> {{ result.best_source|default:'Aucune source identifiée' }}</p>
+        {% if analysis.mode == 'duplicate' %}
+          {% if analysis.decision == 'SIMILAIRE' %}<p>Ce TDR présente une similarité suffisante avec un sujet déjà enregistré. Il n'est pas retenu comme nouveau sujet d'étude.</p>{% elif analysis.decision == 'DIFFERENT' %}<p>Aucun TDR existant ne présente une similarité suffisante. Le sujet peut poursuivre le processus d'étude.</p>{% endif %}
+        {% else %}
+          {% if analysis.decision == 'SIMILAIRE' %}<p>Le rapport présente des éléments suffisamment proches du corpus existant. Consultez les sources et passages signalés ci-dessous.</p>{% elif analysis.decision == 'DIFFERENT' %}<p>Aucune similarité suffisante n'a été détectée selon le seuil configuré.</p>{% endif %}
+        {% endif %}
+      </div>
+    </section>
+
+    {% if result.sources %}
+    <section class="panel">
+      <div class="panel-head"><h2>Documents sources proches</h2></div>
+      <div style="overflow-x:auto"><table class="ledger"><thead><tr><th>Source</th><th style="text-align:right">Score hybride</th><th style="text-align:right">Sémantique</th><th style="text-align:right">TF-IDF</th></tr></thead><tbody>
+      {% for source in result.sources|slice:':20' %}<tr><td class="doc-name">{{ source.source|default:source.document|default:'—' }}</td><td class="num">{{ source.hybrid_score|default:source.score|floatformat:3 }}</td><td class="num">{{ source.semantic_score|floatformat:3 }}</td><td class="num">{{ source.tfidf_score|floatformat:3 }}</td></tr>{% endfor %}
+      </tbody></table></div>
+    </section>
+    {% endif %}
+
+    {% if result.matches %}
+    <section class="panel">
+      <div class="panel-head"><h2>Passages signalés</h2></div>
+      <div class="panel-body">
+        {% for match in result.matches|slice:':20' %}
+          <div style="padding:14px 0;border-bottom:1px solid rgba(0,0,0,.08)"><strong>{{ match.source|default:match.document|default:'Source' }}</strong><div class="muted" style="font-size:12px;margin:5px 0">Score : {{ match.score|default:match.hybrid_score|floatformat:3 }}</div><div style="font-size:13px;line-height:1.6">{{ match.text|default:match.passage|default:match.content|default:'' }}</div></div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</main>
+</div>
+</body></html>
