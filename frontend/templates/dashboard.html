@@ -1,3 +1,91 @@
 {% load static %}
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DOCSEC — Tableau de bord</title><link rel="stylesheet" href="{% static 'css/app.css' %}"></head>
-<body><div class="app-shell"><aside class="sidebar"><div class="brand">DOC<span>SEC</span></div><div class="side-caption">ANALYSE DOCUMENTAIRE</div><a class="side-link active" href="{% url 'detector:dashboard' %}">⌂ <span>Tableau de bord</span></a><a class="side-link" href="{% url 'detector:reception' %}">✓ <span>Réception TDR / Rapport</span></a><a class="side-link" href="{% url 'detector:analyser' %}">＋ <span>Analyse libre</span></a><a class="side-link" href="{% url 'detector:resultats' %}">◷ <span>Historique</span></a><a class="side-link" href="/admin/">⚙ <span>Administration</span></a><div class="sidebar-bottom"><div class="user-mini"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Utilisateur connecté</small></div><a class="side-link logout" href="{% url 'detector:logout' %}">↪ <span>Déconnexion</span></a></div></aside><main class="dashboard-main"><div class="topbar"><div><small>ESPACE DE TRAVAIL</small><h1>Tableau de bord</h1></div><a class="button" href="{% url 'detector:reception' %}">+ Nouvelle réception</a></div><section class="welcome"><div><small>DOCSEC</small><h2>Bonjour {{ request.user.first_name|default:request.user.username }}, bienvenue.</h2><p>Suivez les TDR vérifiés et les rapports d'étude reçus depuis un seul espace.</p></div><div class="welcome-icon">✓</div></section><section class="metrics"><div class="metric"><small>ANALYSES TOTALES</small><b>{{ total }}</b><span>Vérifications réalisées</span></div><div class="metric"><small>TDR VÉRIFIÉS</small><b>{{ tdr_checks }}</b><span>Avant programmation</span></div><div class="metric"><small>RAPPORTS CONTRÔLÉS</small><b>{{ report_checks }}</b><span>À la réception</span></div><div class="metric"><small>SIMILAIRES</small><b>{{ similar }}</b><span>À ne pas retenir</span></div></section><div class="grid two"><section class="card"><div class="card-head"><div><small>PROCESSUS</small><h2>Parcours de traitement</h2></div></div><div class="timeline"><div><span>1</span><strong>Vérification du TDR</strong><p>Comparer avec les TDR déjà présents.</p></div><div><span>2</span><strong>Décision</strong><p>SIMILAIRE ou DIFFERENT selon les scores.</p></div><div><span>3</span><strong>Réception du rapport</strong><p>Le rapport associé passe au contrôle de plagiat.</p></div></div></section><section class="card"><div class="card-head"><div><small>ÉTAT</small><h2>Vue rapide</h2></div></div><div class="status-line"><span>Différents</span><strong>{{ different }}</strong></div><div class="status-line"><span>Similaires</span><strong>{{ similar }}</strong></div><div class="status-line"><span>À examiner</span><strong>{{ to_review }}</strong></div><a class="button secondary" href="{% url 'detector:resultats' %}">Voir l'historique</a></section></div><section class="card"><div class="card-head"><div><small>ACTIVITÉ</small><h2>Dernières analyses</h2></div><a href="{% url 'detector:resultats' %}">Tout voir →</a></div>{% for item in recent %}<div class="row"><div><strong>{{ item.document_name }}</strong><br><small>{{ item.created_at|date:'d/m/Y H:i' }} · {{ item.get_mode_display }}</small></div><div><span class="badge">{{ item.decision }}</span> <strong>{{ item.hybrid_score|floatformat:3 }}</strong></div></div>{% empty %}<p class="muted">Aucune analyse pour le moment.</p>{% endfor %}</section></main></div></body></html>
+<body>
+<div class="console">
+<aside class="rail">
+  <div class="rail-brand">
+    <div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div>
+    <div class="brand-tag">Registre national des études — PTBA</div>
+  </div>
+  <nav class="rail-nav">
+    <a class="rail-link active" href="{% url 'detector:dashboard' %}"><span class="ico">#</span><span>Tableau de bord</span></a>
+    <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">↳</span><span>Vérifier un TDR</span></a>
+    <a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico">+</span><span>Nouvelle analyse</span></a>
+    <a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico">≡</span><span>Historique</span></a>
+    <a class="rail-link" href="/admin/"><span class="ico">*</span><span>Administration</span></a>
+  </nav>
+  <div class="rail-foot">
+    <div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div>
+    <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="ctxbar">
+    <div>
+      <h1>Tableau de bord</h1>
+      <div class="lede">Vue d'ensemble du registre et de vos vérifications récentes</div>
+    </div>
+    <div class="actions">
+      <a class="btn" href="{% url 'detector:reception' %}">Vérifier un TDR</a>
+      <a class="btn btn-primary" href="{% url 'detector:analyser' %}">Nouvelle analyse</a>
+    </div>
+  </div>
+
+  <div class="pulse">
+    <div class="pulse-cell"><b class="mono">{{ registry_total }}</b><span>Études au registre</span></div>
+    <div class="pulse-cell"><b class="mono">{{ registry_tdr }}</b><span>TDR référencés</span></div>
+    <div class="pulse-cell"><b class="mono">{{ registry_rapport }}</b><span>Rapports référencés</span></div>
+    <div class="pulse-cell"><b class="mono">{{ total }}</b><span>Vérifications effectuées</span></div>
+    <div class="pulse-cell"><b class="mono">{{ similar }}</b><span>Alertes de similarité</span></div>
+  </div>
+
+  <div class="page-pad">
+    <div class="engines">
+      <section class="engine doublon">
+        <div class="engine-kicker muted">Détection de doublon — à la programmation</div>
+        <h2>Doublon PTBA</h2>
+        <p>Compare l'objet, le périmètre et les résultats attendus d'un TDR au registre existant, avant tout financement, pour éviter de programmer deux fois la même étude.</p>
+        <div class="engine-stat"><b>{{ tdr_checks }}</b><span>TDR vérifiés</span></div>
+        <a class="btn" href="{% url 'detector:reception' %}">Vérifier un TDR</a>
+      </section>
+      <section class="engine plagiat">
+        <div class="engine-kicker muted">Détection de plagiat — à la réception</div>
+        <h2>Plagiat des livrables</h2>
+        <p>Compare un rapport reçu au corpus déjà déposé et localise les passages recouvrant une source, copie littérale ou paraphrase.</p>
+        <div class="engine-stat"><b>{{ report_checks }}</b><span>rapports contrôlés</span></div>
+        <a class="btn" href="{% url 'detector:analyser' %}">Contrôler un rapport</a>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Dernières vérifications</h2>
+        <a class="see-all" href="{% url 'detector:resultats' %}">Historique complet</a>
+      </div>
+      {% if recent %}
+      <table class="ledger">
+        <thead><tr><th>Document</th><th>Type</th><th>Décision</th><th style="text-align:right">Score hybride</th></tr></thead>
+        <tbody>
+        {% for item in recent %}
+          <tr>
+            <td class="doc-name">{{ item.document_name }}<span class="doc-meta">{{ item.created_at|date:'d/m/Y H:i' }}</span></td>
+            <td class="muted">{{ item.get_mode_display }}</td>
+            <td>
+              {% if item.decision == 'SIMILAIRE' %}<span class="status status-alert">SIMILAIRE</span>
+              {% elif item.decision == 'DIFFERENT' %}<span class="status status-ok">DIFFERENT</span>
+              {% else %}<span class="status status-neutral">{{ item.decision|default:"—" }}</span>{% endif %}
+            </td>
+            <td class="num">{{ item.hybrid_score|floatformat:3 }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+        <div class="ledger-empty">Aucune vérification pour le moment. Commencez par contrôler un TDR ou un rapport.</div>
+      {% endif %}
+    </section>
+  </div>
+</main>
+</div>
+</body></html>

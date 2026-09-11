@@ -1,4 +1,39 @@
 {% load static %}
 <!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DOCSEC — Connexion</title><link rel="stylesheet" href="{% static 'css/app.css' %}"></head>
-<body class="auth-page"><main class="auth-wrap"><section class="auth-card"><div class="brand">DOC<span>SEC</span></div><small>PLATEFORME SÉCURISÉE D'ANALYSE DOCUMENTAIRE</small><h1>Bienvenue</h1><p class="muted">Connectez-vous pour accéder au tableau de bord et aux outils de vérification.</p><form method="post" class="form">{% csrf_token %}{% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}<label>{{ form.username.label }}{{ form.username }}{% for error in form.username.errors %}<small class="error">{{ error }}</small>{% endfor %}</label><label>{{ form.password.label }}{{ form.password }}{% for error in form.password.errors %}<small class="error">{{ error }}</small>{% endfor %}</label><button class="button" type="submit">Se connecter</button></form></section></main></body></html>
+<body>
+<div class="auth-shell">
+  <section class="auth-aside">
+    <div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div>
+    <h1>Registre national des études du PTBA</h1>
+    <p class="lede">Un socle commun à deux moteurs de détection : éviter de financer deux fois la même étude, et vérifier qu'un livrable reçu n'est pas recyclé d'un rapport existant. L'outil signale ; la décision reste toujours humaine.</p>
+    <div class="auth-facts">
+      <div><b>01</b><span>Doublon détecté à la programmation, par similarité sémantique entre TDR.</span></div>
+      <div><b>02</b><span>Plagiat détecté à la réception, avec localisation précise des passages en cause.</span></div>
+      <div><b>03</b><span>Chaque alerte est instruite et tranchée par un agent habilité, de façon tracée.</span></div>
+    </div>
+  </section>
+  <section class="auth-panel">
+    <div class="auth-panel-inner">
+      <div class="brand" style="margin-bottom:28px"><span class="brand-mark">DOC<b>SEC</b></span></div>
+      <h2>Connexion</h2>
+      <p class="lede">Accès réservé aux agents habilités.</p>
+      <form method="post">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="field">
+          <label>{{ form.username.label }}</label>
+          {{ form.username }}
+          {% for error in form.username.errors %}<small class="error">{{ error }}</small>{% endfor %}
+        </div>
+        <div class="field">
+          <label>{{ form.password.label }}</label>
+          {{ form.password }}
+          {% for error in form.password.errors %}<small class="error">{{ error }}</small>{% endfor %}
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">Se connecter</button>
+      </form>
+    </div>
+  </section>
+</div>
+</body></html>

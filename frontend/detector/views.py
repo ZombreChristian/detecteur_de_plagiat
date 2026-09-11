@@ -40,7 +40,16 @@ def dashboard(request):
     to_review = Analysis.objects.filter(user=request.user, decision="A EXAMINER").count()
     tdr_checks = Analysis.objects.filter(user=request.user, mode="duplicate").count()
     report_checks = Analysis.objects.filter(user=request.user, mode="plagiarism").count()
-    return render(request, "dashboard.html", {"recent": recent, "total": total, "similar": similar, "different": different, "to_review": to_review, "tdr_checks": tdr_checks, "report_checks": report_checks})
+    # Volume du registre national (socle commun aux deux moteurs, cf. cahier des charges B.0) :
+    # distinct de l'historique personnel de vérifications ci-dessus.
+    registry_total = StudyDocument.objects.count()
+    registry_tdr = StudyDocument.objects.filter(document_type="TDR").count()
+    registry_rapport = StudyDocument.objects.filter(document_type="RAPPORT").count()
+    return render(request, "dashboard.html", {
+        "recent": recent, "total": total, "similar": similar, "different": different,
+        "to_review": to_review, "tdr_checks": tdr_checks, "report_checks": report_checks,
+        "registry_total": registry_total, "registry_tdr": registry_tdr, "registry_rapport": registry_rapport,
+    })
 
 
 @login_required

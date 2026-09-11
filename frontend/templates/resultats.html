@@ -3,39 +3,120 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DOCSEC — Résultat</title><link rel="stylesheet" href="{% static 'css/app.css' %}">
-<style>
-.result-hero{align-items:center}.decision{min-width:190px;text-align:center}.decision strong{font-size:1.8rem;letter-spacing:.04em}
-.result-message{margin-top:18px;padding:18px 20px;border-radius:14px;font-weight:600}.result-message.danger{background:#fff1f2;color:#b42318;border:1px solid #fecdd3}.result-message.ok{background:#ecfdf3;color:#067647;border:1px solid #abefc6}
-.metric-note{display:block;margin-top:6px;color:#64748b;font-size:.78rem}.source-list{margin-top:6px}.source-item{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:15px 0;border-bottom:1px solid #e5e7eb}.source-item:last-child{border-bottom:0}.source-name{font-weight:700;word-break:break-word}.source-scores{color:#64748b;font-size:.86rem;margin-top:5px}.source-best{font-size:1.15rem;font-weight:800;white-space:nowrap}
-</style>
+<title>DOCSEC — Dossier d'analyse</title><link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
 <body>
-<div class="app-shell">
-<aside class="sidebar">
-<div class="brand">DOC<span>SEC</span></div><div class="side-caption">ANALYSE DOCUMENTAIRE</div>
-<a class="side-link" href="{% url 'detector:dashboard' %}">⌂ <span>Tableau de bord</span></a>
-<a class="side-link" href="{% url 'detector:reception' %}">✓ <span>Vérifier un TDR</span></a>
-<a class="side-link" href="{% url 'detector:analyser' %}">＋ <span>Nouvelle analyse</span></a>
-<a class="side-link active" href="{% url 'detector:resultats' %}">◷ <span>Historique</span></a>
-<a class="side-link" href="/admin/">⚙ <span>Administration</span></a>
-<div class="sidebar-bottom"><div class="user-mini"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Utilisateur connecté</small></div><a class="side-link logout" href="{% url 'detector:logout' %}">↪ <span>Déconnexion</span></a></div>
+<div class="console">
+<aside class="rail">
+  <div class="rail-brand">
+    <div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div>
+    <div class="brand-tag">Registre national des études — PTBA</div>
+  </div>
+  <nav class="rail-nav">
+    <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">#</span><span>Tableau de bord</span></a>
+    <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">↳</span><span>Vérifier un TDR</span></a>
+    <a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico">+</span><span>Nouvelle analyse</span></a>
+    <a class="rail-link active" href="{% url 'detector:resultats' %}"><span class="ico">≡</span><span>Historique</span></a>
+    <a class="rail-link" href="/admin/"><span class="ico">*</span><span>Administration</span></a>
+  </nav>
+  <div class="rail-foot">
+    <div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div>
+    <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
+  </div>
 </aside>
-<main class="dashboard-main">
-<div class="topbar"><div><small>RÉSULTAT DE L'ANALYSE</small><h1>Vérification du TDR</h1></div><a class="button" href="{% url 'detector:reception' %}">Vérifier un autre TDR</a></div>
-{% if result %}
-<section class="result-hero">
-<div><span class="result-label">DOCUMENT ANALYSÉ</span><h2>{{ document_name }}</h2></div>
-<div class="decision {% if result.decision == 'SIMILAIRE' %}decision-danger{% else %}decision-ok{% endif %}"><small>DÉCISION</small><strong>{{ result.decision }}</strong></div>
-</section>
-<section class="score-grid">
-<div class="score-card"><small>ANALYSE LEXICALE</small><strong>{{ result.tfidf_score|floatformat:3 }}</strong><span class="metric-note">TF-IDF</span></div>
-<div class="score-card"><small>ANALYSE SÉMANTIQUE</small><strong>{{ result.semantic_score|floatformat:3 }}</strong><span class="metric-note">Compréhension du sens</span></div>
-<div class="score-card featured"><small>SCORE HYBRIDE</small><strong>{{ result.hybrid_score|floatformat:3 }}</strong><span class="metric-note">Score utilisé pour la décision</span></div>
-</section>
-{% if result.decision == 'SIMILAIRE' %}<div class="result-message danger">⚠ Ce TDR présente une similarité suffisante avec un sujet déjà enregistré. Il n'est pas retenu comme nouveau sujet d'étude.</div>{% else %}<div class="result-message ok">✓ Aucun TDR existant ne présente une similarité suffisante. Le sujet peut poursuivre le processus d'étude.</div>{% endif %}
-<section class="card"><div class="card-head"><div><small>RÉFÉRENCE</small><h2>TDR le plus proche</h2></div><span class="threshold">Seuil : {{ result.threshold|floatformat:2 }}</span></div>{% if result.best_source %}<div class="source-item"><div><div class="source-name">{{ result.best_source }}</div><div class="source-scores">Lexical {{ result.tfidf_score|floatformat:3 }} · Sémantique {{ result.semantic_score|floatformat:3 }}</div></div><div class="source-best">{{ result.hybrid_score|floatformat:3 }}</div></div>{% else %}<p class="muted">Aucune référence trouvée.</p>{% endif %}</section>
-<section class="card actions"><a class="button" href="{% url 'detector:export_pdf' %}">Exporter PDF</a><a class="button secondary" href="{% url 'detector:export_excel' %}">Exporter Excel</a></section>
-{% else %}<section class="card"><p>Aucun résultat récent. Lancez une vérification.</p></section>{% endif %}
-</main></div>
+
+<main class="main">
+  <div class="ctxbar">
+    <div>
+      <h1>Dossier d'analyse</h1>
+      <div class="lede">Résultat détaillé, sources et passages en cause</div>
+    </div>
+    <div class="actions"><a class="btn" href="{% url 'detector:reception' %}">Vérifier un autre document</a></div>
+  </div>
+
+  {% if result %}
+  <div class="dossier-head">
+    <div>
+      <div class="id mono">{{ result.mode|default:"analyse"|upper }}{% if result.duration_ms %} · {{ result.duration_ms }} ms{% endif %}</div>
+      <h1>{{ document_name }}</h1>
+      <div class="meta">Seuil appliqué : <span class="mono">{{ result.threshold|floatformat:2 }}</span></div>
+    </div>
+    <div class="verdict {% if result.decision == 'SIMILAIRE' %}v-alert{% else %}v-ok{% endif %}">
+      <small>Décision</small>
+      <strong>{{ result.decision }}</strong>
+    </div>
+  </div>
+
+  <div class="score-rail">
+    <div class="score-cell"><small>Analyse lexicale</small><strong>{{ result.tfidf_score|floatformat:3 }}</strong><span>TF-IDF</span></div>
+    <div class="score-cell"><small>Analyse sémantique</small><strong>{{ result.semantic_score|floatformat:3 }}</strong><span>Embeddings</span></div>
+    <div class="score-cell emph"><small>Score hybride</small><strong>{{ result.hybrid_score|floatformat:3 }}</strong><span>Base de la décision</span></div>
+    {% if result.novelty_score %}<div class="score-cell"><small>Nouveauté</small><strong>{{ result.novelty_score|floatformat:3 }}</strong><span>Distance au plus proche voisin</span></div>{% endif %}
+  </div>
+
+  {% if result.decision == 'SIMILAIRE' %}
+    <div class="verdict-note v-alert">Ce document présente une similarité suffisante avec un document déjà enregistré au registre. L'alerte doit être instruite et tranchée par un agent habilité — l'outil ne rejette rien seul.</div>
+  {% else %}
+    <div class="verdict-note v-ok">Aucun document existant ne présente une similarité suffisante avec le corpus comparé.</div>
+  {% endif %}
+
+  <div class="section-title">
+    <h2>Sources les plus proches</h2>
+    <p>Classement par score hybride (35 % lexical, 65 % sémantique)</p>
+  </div>
+  <section class="panel sources-table">
+    {% if result.sources %}
+    <table class="ledger">
+      <thead><tr><th>Source</th><th style="text-align:right">TF-IDF</th><th style="text-align:right">Sémantique</th><th style="text-align:right">Hybride</th></tr></thead>
+      <tbody>
+      {% for source in result.sources %}
+        <tr>
+          <td class="doc-name">{{ source.source }}</td>
+          <td class="num">{{ source.tfidf_score|floatformat:3 }}</td>
+          <td class="num">{{ source.semantic_score|floatformat:3 }}</td>
+          <td class="num">{{ source.hybrid_score|floatformat:3 }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="ledger-empty">Aucune source trouvée dans le corpus comparé.</div>
+    {% endif %}
+  </section>
+
+  {% if result.matches %}
+    <div class="section-title">
+      <h2>Passages en cause</h2>
+      <p>Explicabilité : le motif exact du rapprochement, pas seulement un score</p>
+    </div>
+    <section class="evidence">
+      {% for group in result.matches %}
+        <div class="evidence-source">
+          <div class="evidence-source-head">
+            <span class="name">{{ group.source }}</span>
+            <span class="cov">couverture {{ group.coverage|floatformat:2 }} · {{ group.matches|length }} passage{{ group.matches|length|pluralize }}</span>
+          </div>
+          {% for match in group.matches %}
+            <div class="evidence-match">
+              <div class="evidence-match-score">score {{ match.score|floatformat:3 }} · lexical {{ match.tfidf_score|floatformat:3 }} · sémantique {{ match.semantic_score|floatformat:3 }}</div>
+              <div class="evidence-quote candidate"><span class="tag">Document contrôlé</span>{{ match.candidate_passage }}</div>
+              <div class="evidence-quote source"><span class="tag">Source — {{ group.source }}</span>{{ match.source_passage }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  <div class="actions-row">
+    <a class="btn" href="{% url 'detector:export_pdf' %}">Exporter en PDF</a>
+    <a class="btn" href="{% url 'detector:export_excel' %}">Exporter en Excel</a>
+  </div>
+  {% else %}
+    <div class="page-pad">
+      <section class="panel"><div class="panel-body">Aucun résultat récent. Lancez une vérification depuis « Vérifier un TDR » ou « Nouvelle analyse ».</div></section>
+    </div>
+  {% endif %}
+</main>
+</div>
 </body></html>

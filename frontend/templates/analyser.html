@@ -3,45 +3,73 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DOCSEC — Vérification</title>
+<title>DOCSEC — Nouvelle analyse</title>
 <link rel="stylesheet" href="{% static 'css/app.css' %}">
-<style>
-.analysis-stage{display:none;margin-top:24px;padding:34px;border:1px solid #e2e8f0;border-radius:20px;background:#fff;box-shadow:0 12px 35px rgba(15,23,42,.08)}
-.analysis-stage.visible{display:flex;align-items:center;gap:28px}.analysis-spinner{width:64px;height:64px;border-radius:50%;border:6px solid #e2e8f0;border-top-color:#2563eb;animation:spin .85s linear infinite;flex:0 0 auto}@keyframes spin{to{transform:rotate(360deg)}}
-.stage-title{font-size:1.1rem;font-weight:800}.stage-text{margin:6px 0 16px;color:#64748b}.stage-progress{height:9px;background:#e2e8f0;border-radius:999px;overflow:hidden;min-width:300px}.stage-progress span{display:block;height:100%;width:0;background:#2563eb;border-radius:999px;transition:width .45s ease}.stage-percent{display:block;margin-top:8px;font-weight:800;color:#2563eb}.stage-steps{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.stage-step{padding:7px 10px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:.78rem}.stage-step.current{background:#dbeafe;color:#1d4ed8;font-weight:700}
-</style>
 </head>
 <body>
-<div class="app-shell">
-<aside class="sidebar">
-<div class="brand">DOC<span>SEC</span></div><div class="side-caption">ANALYSE DOCUMENTAIRE</div>
-<a class="side-link" href="{% url 'detector:dashboard' %}">⌂ <span>Tableau de bord</span></a>
-<a class="side-link" href="{% url 'detector:reception' %}">✓ <span>Vérifier un TDR</span></a>
-<a class="side-link active" href="{% url 'detector:analyser' %}">＋ <span>Nouvelle analyse</span></a>
-<a class="side-link" href="{% url 'detector:resultats' %}">◷ <span>Historique</span></a>
-<a class="side-link" href="/admin/">⚙ <span>Administration</span></a>
-<div class="sidebar-bottom"><div class="user-mini"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Utilisateur connecté</small></div><a class="side-link logout" href="{% url 'detector:logout' %}">↪ <span>Déconnexion</span></a></div>
+<div class="console">
+<aside class="rail">
+  <div class="rail-brand">
+    <div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div>
+    <div class="brand-tag">Registre national des études — PTBA</div>
+  </div>
+  <nav class="rail-nav">
+    <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">#</span><span>Tableau de bord</span></a>
+    <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">↳</span><span>Vérifier un TDR</span></a>
+    <a class="rail-link active" href="{% url 'detector:analyser' %}"><span class="ico">+</span><span>Nouvelle analyse</span></a>
+    <a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico">≡</span><span>Historique</span></a>
+    <a class="rail-link" href="/admin/"><span class="ico">*</span><span>Administration</span></a>
+  </nav>
+  <div class="rail-foot">
+    <div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div>
+    <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
+  </div>
 </aside>
-<main class="dashboard-main">
-<div class="topbar"><div><small>NOUVELLE ANALYSE</small><h1>Vérification du document</h1></div></div>
-<section class="card form-card" id="form-card">
-<div class="card-head"><div><small>MODULE</small><h2>Choisir le contrôle à effectuer</h2></div></div>
-<form id="analysis-form" class="form" method="post" enctype="multipart/form-data">
-{% csrf_token %}
-<label>Type de contrôle<select name="mode"><option value="duplicate">Doublon — TDR / objet d'étude</option><option value="plagiarism">Plagiat — rapport d'étude</option></select></label>
-<label>Document à contrôler<input id="document-input" type="file" name="document" accept=".docx" required></label>
-<button id="submit-button" class="button" type="submit">Lancer la vérification</button>
-</form></section>
-<section id="loading" class="analysis-stage" aria-live="polite">
-<div class="analysis-spinner"></div><div style="flex:1">
-<div class="stage-title" id="loading-title">Analyse en cours…</div>
-<p class="stage-text" id="loading-text">Lecture du document et préparation du contrôle.</p>
-<div class="stage-progress"><span id="progress-bar"></span></div><small class="stage-percent" id="loading-percent">0 %</small>
-<div class="stage-steps"><span class="stage-step current" id="step1">Lecture</span><span class="stage-step" id="step2">Analyse lexicale</span><span class="stage-step" id="step3">Analyse sémantique</span><span class="stage-step" id="step4">Décision</span></div>
-</div></section>
-</main></div>
+
+<main class="main">
+  <div class="ctxbar">
+    <div>
+      <h1>Nouvelle analyse</h1>
+      <div class="lede">Contrôle libre d'un document, hors parcours de réception guidé</div>
+    </div>
+  </div>
+
+  <div class="page-pad">
+    {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
+
+    <section class="panel" id="form-card" style="max-width:640px">
+      <div class="panel-head"><h2>Choisir le contrôle à effectuer</h2></div>
+      <div class="panel-body">
+        <form id="analysis-form" method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <div class="field">
+            <label>Type de contrôle</label>
+            <select name="mode">
+              <option value="duplicate">Doublon — TDR / objet d'étude</option>
+              <option value="plagiarism">Plagiat — rapport d'étude</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Document à contrôler (.docx)</label>
+            <input id="document-input" type="file" name="document" accept=".docx" required>
+          </div>
+          <button id="submit-button" class="btn btn-primary" type="submit">Lancer la vérification</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="loading" class="proc" aria-live="polite" style="max-width:640px">
+      <div class="proc-head"><strong>Analyse en cours</strong><span class="pct" id="loading-percent">0 %</span></div>
+      <div class="proc-track"><span id="progress-bar"></span></div>
+      <div class="proc-steps">
+        <div class="proc-step current" id="step1"><span class="mark">›</span><span id="loading-text">Lecture du document et préparation du contrôle.</span></div>
+      </div>
+    </section>
+  </div>
+</main>
+</div>
 <script>
 const form=document.getElementById('analysis-form');const loading=document.getElementById('loading');const button=document.getElementById('submit-button');const input=document.getElementById('document-input');const bar=document.getElementById('progress-bar');const percent=document.getElementById('loading-percent');const text=document.getElementById('loading-text');
-form.addEventListener('submit',()=>{if(!input.files.length)return;loading.classList.add('visible');button.disabled=true;button.textContent='Traitement en cours…';input.disabled=true;let p=0;let stage=0;const steps=[document.getElementById('step1'),document.getElementById('step2'),document.getElementById('step3'),document.getElementById('step4')];const messages=['Lecture du document et extraction du texte.','Calcul de la similarité lexicale avec le corpus.','Analyse du sens et recherche des TDR proches.','Calcul du score hybride et prise de décision.'];const timer=setInterval(()=>{p=Math.min(p+(stage<2?4:2),94);bar.style.width=p+'%';percent.textContent=p+' %';if(p>=25&&stage<1)stage=1;if(p>=48&&stage<2)stage=2;if(p>=76&&stage<3)stage=3;steps.forEach((s,i)=>s.classList.toggle('current',i===stage));text.textContent=messages[stage];},450);window.addEventListener('pagehide',()=>clearInterval(timer));});
+form.addEventListener('submit',()=>{if(!input.files.length)return;loading.classList.add('visible');button.disabled=true;button.textContent='Traitement en cours…';input.disabled=true;let p=0;let stage=0;const messages=['Lecture du document et extraction du texte.','Calcul de la similarité lexicale avec le corpus.','Analyse du sens et recherche des documents proches.','Calcul du score hybride et prise de décision.'];const timer=setInterval(()=>{p=Math.min(p+(stage<2?4:2),94);bar.style.width=p+'%';percent.textContent=p+' %';if(p>=25&&stage<1)stage=1;if(p>=48&&stage<2)stage=2;if(p>=76&&stage<3)stage=3;text.textContent=messages[stage];},450);window.addEventListener('pagehide',()=>clearInterval(timer));});
 </script>
 </body></html>
