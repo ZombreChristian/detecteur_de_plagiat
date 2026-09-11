@@ -24,35 +24,22 @@
     <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
   </div>
 </aside>
-
 <main class="main">
-  <div class="ctxbar">
-    <div>
-      <h1>Vérification du TDR</h1>
-      <div class="lede">Doublon à la programmation, puis réception du rapport associé</div>
-    </div>
-  </div>
-
+  <div class="ctxbar"><div><h1>Vérification du TDR</h1><div class="lede">Doublon à la programmation, puis réception du rapport associé</div></div></div>
   <div class="page-pad">
     {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
-
     <div class="engines" id="workflow-content">
       <section class="panel">
         <div class="panel-head"><h2>Étape 1 — Vérifier le TDR</h2><span class="muted mono" style="font-size:12px">doublon</span></div>
         <div class="panel-body">
           <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Déposez le nouveau TDR. Il est comparé au registre des TDR déjà présents par similarité sémantique.</p>
           <form id="tdr-form" method="post" enctype="multipart/form-data">
-            {% csrf_token %}
-            <input type="hidden" name="mode" value="tdr">
-            <div class="field">
-              <label>Document TDR (.docx)</label>
-              <input id="tdr-file" type="file" name="document" accept=".docx" required>
-            </div>
+            {% csrf_token %}<input type="hidden" name="mode" value="tdr">
+            <div class="field"><label>Document TDR (.docx)</label><input id="tdr-file" type="file" name="document" accept=".docx" required></div>
             <button id="tdr-button" class="btn btn-primary" type="submit">Vérifier le TDR</button>
           </form>
         </div>
       </section>
-
       <section class="panel" style="{% if not request.session.validated_tdr_name %}opacity:.6{% endif %}">
         <div class="panel-head"><h2>Étape 2 — Réceptionner le rapport</h2><span class="muted mono" style="font-size:12px">plagiat</span></div>
         <div class="panel-body">
@@ -60,12 +47,8 @@
             <p style="margin:0 0 4px;font-size:13.5px">TDR validé : <strong>{{ request.session.validated_tdr_name }}</strong></p>
             <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Le rapport associé peut maintenant être soumis au contrôle de plagiat.</p>
             <form method="post" enctype="multipart/form-data">
-              {% csrf_token %}
-              <input type="hidden" name="mode" value="report">
-              <div class="field">
-                <label>Rapport d'étude (.docx)</label>
-                <input type="file" name="document" accept=".docx" required>
-              </div>
+              {% csrf_token %}<input type="hidden" name="mode" value="report">
+              <div class="field"><label>Rapport d'étude (.docx)</label><input type="file" name="document" accept=".docx" required></div>
               <button class="btn btn-primary" type="submit">Contrôler le rapport</button>
             </form>
           {% else %}
@@ -74,19 +57,16 @@
         </div>
       </section>
     </div>
-
     <section id="processing" class="proc" aria-live="polite">
       <div class="proc-head"><strong>Analyse du TDR en cours</strong><span class="pct" id="progress-percent">0 %</span></div>
       <div class="proc-track"><span id="progress-fill"></span></div>
-      <div class="proc-steps">
-        <div class="proc-step current" id="ps1"><span class="mark">›</span><span id="process-text">Lecture du document et extraction du contenu.</span></div>
-      </div>
+      <div class="proc-steps"><div class="proc-step current" id="ps1"><span class="mark">›</span><span id="process-text">Lecture du document et extraction du contenu.</span></div></div>
     </section>
   </div>
 </main>
 </div>
 <script>
 const form=document.getElementById('tdr-form');const processing=document.getElementById('processing');const button=document.getElementById('tdr-button');const file=document.getElementById('tdr-file');const fill=document.getElementById('progress-fill');const pct=document.getElementById('progress-percent');const txt=document.getElementById('process-text');
-if(form){form.addEventListener('submit',function(){if(!file.files.length)return;processing.classList.add('show');button.disabled=true;button.textContent='Analyse en cours…';file.disabled=true;let p=0;let stage=0;const messages=['Lecture du document et extraction du contenu.','Calcul de la similarité lexicale (TF-IDF).','Analyse sémantique du contenu du TDR.','Calcul du score hybride et décision.'];const timer=setInterval(function(){p=Math.min(p+3+Math.floor(Math.random()*5),96);fill.style.width=p+'%';pct.textContent=p+' %';let next=p<25?0:p<52?1:p<80?2:3;if(next!==stage){stage=next;txt.textContent=messages[stage];}},450);window.addEventListener('pagehide',()=>clearInterval(timer));});}
+if(form){form.addEventListener('submit',function(){if(!file.files.length)return;processing.classList.add('show');button.disabled=true;button.textContent='Analyse en cours…';let p=0;let stage=0;const messages=['Lecture du document et extraction du contenu.','Calcul de la similarité lexicale (TF-IDF).','Analyse sémantique du contenu du TDR.','Calcul du score hybride et décision.'];const timer=setInterval(function(){p=Math.min(p+3+Math.floor(Math.random()*5),96);fill.style.width=p+'%';pct.textContent=p+' %';let next=p<25?0:p<52?1:p<80?2:3;if(next!==stage){stage=next;txt.textContent=messages[stage];}},450);window.addEventListener('pagehide',()=>clearInterval(timer));});}
 </script>
 </body></html>
