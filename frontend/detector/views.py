@@ -5,8 +5,10 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.db.models import Q
 from django.http import HttpResponse
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from openpyxl import Workbook
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -32,18 +34,11 @@ def logout_view(request):
 
 
 def _get_uploaded_docx(request):
-    """Récupère le DOCX même si le template utilise un nom de champ différent.
-
-    Le frontend a évolué plusieurs fois. On accepte donc les noms historiques
-    document / tdr_document / report_document / file, sans modifier le design.
-    """
     candidates = ("document", "tdr_document", "report_document", "file")
     for field_name in candidates:
         uploaded = request.FILES.get(field_name)
         if uploaded and uploaded.name:
             return uploaded
-
-    # Dernier filet de sécurité : prendre le premier fichier réellement envoyé.
     for uploaded in request.FILES.values():
         if uploaded and uploaded.name:
             return uploaded
@@ -51,18 +46,26 @@ def _get_uploaded_docx(request):
 
 
 def _validate_docx(uploaded):
-    """Valide un fichier DOCX sans dépendre du content-type du navigateur."""
     if not uploaded or not uploaded.name:
         return False
-    name = uploaded.name.strip().lower()
-    if not name.endswith(".docx"):
-        return False
-    return True
+    return uploaded.name.strip().lower().endswith(".docx")
 
 
 @login_required
 def dashboard(request):
-    recent = Analysis.objects.filter(user=request.user).order_by("-created_at")[:8]
+    base = Analysis.objects.filter(user=request.user).order_by("-created_at")
+    q = request.GET.get("q", "").strip()
+    decision = request.GET.get("decision", "all")
+    mode = request.GET.get("mode", "all")
+    if q:
+        base = base.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
+    if decision in ("SIMILAIRE", "DIFFERENT", "A EXAMINER"):
+        base = base.filter(decision=decision)
+    if mode in ("duplicate", "plagiarism"):
+        base = base.filter(mode=mode)
+    paginator = Paginator(base, 10)
+    page_obj = paginator.get_page(request.GET.get("page", 1))
+
     total = Analysis.objects.filter(user=request.user).count()
     similar = Analysis.objects.filter(user=request.user, decision="SIMILAIRE").count()
     different = Analysis.objects.filter(user=request.user, decision="DIFFERENT").count()
@@ -73,25 +76,32 @@ def dashboard(request):
     registry_tdr = StudyDocument.objects.filter(document_type="TDR").count()
     registry_rapport = StudyDocument.objects.filter(document_type="RAPPORT").count()
     return render(request, "dashboard.html", {
-        "recent": recent, "total": total, "similar": similar, "different": different,
-        "to_review": to_review, "tdr_checks": tdr_checks, "report_checks": report_checks,
+        "recent": page_obj.object_list, "page_obj": page_obj, "total_filtered": paginator.count,
+        "q": q, "selected_decision": decision, "selected_mode": mode,
+        "total": total, "similar": similar, "different": different, "to_review": to_review,
+        "tdr_checks": tdr_checks, "report_checks": report_checks,
         "registry_total": registry_total, "registry_tdr": registry_tdr, "registry_rapport": registry_rapport,
     })
 
 
 @login_required
+def analysis_detail(request, pk):
+    analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
+    result = analysis.result_json or {}
+    return render(request, "analysis_detail.html", {"analysis": analysis, "result": result})
+
+
+@login_required
 def reception(request):
-    """Parcours métier : vérifier le TDR, puis autoriser la réception du rapport associé."""
     if request.method == "GET":
         return render(request, "reception.html")
-
     mode = request.POST.get("mode", "tdr")
     uploaded = _get_uploaded_docx(request)
     if not _validate_docx(uploaded):
         messages.error(request, "Veuillez sélectionner un document DOCX valide.")
         return redirect("detector:reception")
-
     endpoint = "/api/detect/duplicate" if mode == "tdr" else "/api/detect/plagiarism"
+    start = time.perf_counter()
     try:
         response = requests.post(
             f"{settings.FASTAPI_URL}{endpoint}",
@@ -100,17 +110,14 @@ def reception(request):
         )
         response.raise_for_status()
         result = response.json()
+        duration = round((time.perf_counter() - start) * 1000)
+        result["duration_ms"] = duration
         analysis = Analysis.objects.create(
-            user=request.user,
-            document_name=uploaded.name,
+            user=request.user, document_name=uploaded.name,
             mode="duplicate" if mode == "tdr" else "plagiarism",
-            decision=result.get("decision", ""),
-            hybrid_score=result.get("hybrid_score"),
-            semantic_score=result.get("semantic_score"),
-            tfidf_score=result.get("tfidf_score"),
-            novelty_score=result.get("novelty_score"),
-            result_json=result,
-            duration_ms=result.get("duration_ms"),
+            decision=result.get("decision", ""), hybrid_score=result.get("hybrid_score"),
+            semantic_score=result.get("semantic_score"), tfidf_score=result.get("tfidf_score"),
+            novelty_score=result.get("novelty_score"), result_json=result, duration_ms=duration,
         )
         request.session["last_result"] = result
         request.session["last_analysis_id"] = analysis.id
@@ -133,7 +140,6 @@ def reception(request):
 def analyser(request):
     if request.method != "POST":
         return render(request, "analyser.html")
-
     uploaded = _get_uploaded_docx(request)
     mode = request.POST.get("mode", "plagiarism")
     if mode not in ("plagiarism", "duplicate"):
@@ -142,7 +148,6 @@ def analyser(request):
     if not _validate_docx(uploaded):
         messages.error(request, "Veuillez sélectionner un document DOCX valide.")
         return redirect("detector:analyser")
-
     endpoint = "/api/detect/duplicate" if mode == "duplicate" else "/api/detect/plagiarism"
     start = time.perf_counter()
     try:
@@ -155,19 +160,14 @@ def analyser(request):
         result = response.json()
         duration = round((time.perf_counter() - start) * 1000)
         result["duration_ms"] = duration
-        Analysis.objects.create(
-            user=request.user,
-            document_name=uploaded.name,
-            mode=mode,
-            decision=result.get("decision", ""),
-            hybrid_score=result.get("hybrid_score"),
-            semantic_score=result.get("semantic_score"),
-            tfidf_score=result.get("tfidf_score"),
-            novelty_score=result.get("novelty_score"),
-            result_json=result,
-            duration_ms=duration,
+        analysis = Analysis.objects.create(
+            user=request.user, document_name=uploaded.name, mode=mode,
+            decision=result.get("decision", ""), hybrid_score=result.get("hybrid_score"),
+            semantic_score=result.get("semantic_score"), tfidf_score=result.get("tfidf_score"),
+            novelty_score=result.get("novelty_score"), result_json=result, duration_ms=duration,
         )
         request.session["last_result"] = result
+        request.session["last_analysis_id"] = analysis.id
         request.session["last_document_name"] = uploaded.name
         return redirect("detector:resultats")
     except requests.RequestException as exc:
