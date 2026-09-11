@@ -9,10 +9,7 @@
 <body>
 <div class="console">
 <aside class="rail">
-  <div class="rail-brand">
-    <div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div>
-    <div class="brand-tag">Registre national des études — PTBA</div>
-  </div>
+  <div class="rail-brand"><div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div><div class="brand-tag">Registre national des études — PTBA</div></div>
   <nav class="rail-nav">
     <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">#</span><span>Tableau de bord</span></a>
     <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">↳</span><span>Vérifier un TDR</span></a>
@@ -20,56 +17,68 @@
     <a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico">≡</span><span>Historique</span></a>
     <a class="rail-link" href="/admin/"><span class="ico">*</span><span>Administration</span></a>
   </nav>
-  <div class="rail-foot">
-    <div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div>
-    <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
-  </div>
+  <div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div>
 </aside>
-
 <main class="main">
-  <div class="ctxbar">
-    <div>
-      <h1>Nouvelle analyse</h1>
-      <div class="lede">Contrôle libre d'un document, hors parcours de réception guidé</div>
-    </div>
-  </div>
-
+  <div class="ctxbar"><div><h1>Nouvelle analyse</h1><div class="lede">Contrôle libre d'un document, hors parcours de réception guidé</div></div></div>
   <div class="page-pad">
     {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
-
     <section class="panel" id="form-card" style="max-width:640px">
       <div class="panel-head"><h2>Choisir le contrôle à effectuer</h2></div>
       <div class="panel-body">
         <form id="analysis-form" method="post" enctype="multipart/form-data">
           {% csrf_token %}
-          <div class="field">
-            <label>Type de contrôle</label>
-            <select name="mode">
-              <option value="duplicate">Doublon — TDR / objet d'étude</option>
-              <option value="plagiarism">Plagiat — rapport d'étude</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Document à contrôler (.docx)</label>
-            <input id="document-input" type="file" name="document" accept=".docx" required>
-          </div>
+          <div class="field"><label>Type de contrôle</label><select id="analysis-mode" name="mode"><option value="duplicate">Doublon — TDR / objet d'étude</option><option value="plagiarism">Plagiat — rapport d'étude</option></select></div>
+          <div class="field"><label>Document à contrôler (.docx)</label><input id="document-input" type="file" name="document" accept=".docx" required></div>
           <button id="submit-button" class="btn btn-primary" type="submit">Lancer la vérification</button>
         </form>
       </div>
     </section>
-
     <section id="loading" class="proc" aria-live="polite" style="max-width:640px">
-      <div class="proc-head"><strong>Analyse en cours</strong><span class="pct" id="loading-percent">0 %</span></div>
+      <div class="proc-head"><strong id="loading-title">Analyse en cours</strong><span class="pct" id="loading-percent">0 %</span></div>
       <div class="proc-track"><span id="progress-bar"></span></div>
-      <div class="proc-steps">
-        <div class="proc-step current" id="step1"><span class="mark">›</span><span id="loading-text">Lecture du document et préparation du contrôle.</span></div>
-      </div>
+      <div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span id="loading-text">Lecture du document et préparation du contrôle.</span></div></div>
     </section>
   </div>
 </main>
 </div>
 <script>
-const form=document.getElementById('analysis-form');const loading=document.getElementById('loading');const button=document.getElementById('submit-button');const input=document.getElementById('document-input');const bar=document.getElementById('progress-bar');const percent=document.getElementById('loading-percent');const text=document.getElementById('loading-text');
-form.addEventListener('submit',()=>{if(!input.files.length)return;loading.classList.add('visible');button.disabled=true;button.textContent='Traitement en cours…';input.disabled=true;let p=0;let stage=0;const messages=['Lecture du document et extraction du texte.','Calcul de la similarité lexicale avec le corpus.','Analyse du sens et recherche des documents proches.','Calcul du score hybride et prise de décision.'];const timer=setInterval(()=>{p=Math.min(p+(stage<2?4:2),94);bar.style.width=p+'%';percent.textContent=p+' %';if(p>=25&&stage<1)stage=1;if(p>=48&&stage<2)stage=2;if(p>=76&&stage<3)stage=3;text.textContent=messages[stage];},450);window.addEventListener('pagehide',()=>clearInterval(timer));});
+const form=document.getElementById('analysis-form');
+const loading=document.getElementById('loading');
+const button=document.getElementById('submit-button');
+const input=document.getElementById('document-input');
+const mode=document.getElementById('analysis-mode');
+const bar=document.getElementById('progress-bar');
+const percent=document.getElementById('loading-percent');
+const text=document.getElementById('loading-text');
+const title=document.getElementById('loading-title');
+form.addEventListener('submit',function(){
+  if(!input.files.length)return;
+  const isDuplicate=mode.value==='duplicate';
+  title.textContent=isDuplicate?'Vérification du TDR en cours':'Contrôle du rapport en cours';
+  const stages=isDuplicate?[
+    'Lecture du document et extraction du contenu.',
+    'Calcul de la similarité lexicale (TF-IDF).',
+    'Analyse sémantique et recherche des TDR proches.',
+    'Calcul du score hybride et prise de décision.'
+  ]:[
+    'Lecture du rapport et extraction du contenu.',
+    'Recherche de recouvrements textuels.',
+    'Analyse sémantique et recherche de paraphrases.',
+    'Calcul du score et identification des passages proches.'
+  ];
+  loading.classList.add('visible');
+  button.disabled=true;
+  button.textContent='Traitement en cours…';
+  // Ne surtout pas désactiver input : un input file disabled est exclu du multipart POST.
+  let p=0;let stage=0;
+  const timer=setInterval(function(){
+    p=Math.min(p+(stage<2?4:2),94);
+    bar.style.width=p+'%';percent.textContent=p+' %';
+    const next=p<25?0:p<50?1:p<76?2:3;
+    if(next!==stage){stage=next;text.textContent=stages[stage];}
+  },450);
+  window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
+});
 </script>
 </body></html>
