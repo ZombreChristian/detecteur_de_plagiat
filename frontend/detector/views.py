@@ -1,6 +1,8 @@
 import io
 import time
 import requests
+from pathlib import Path
+from docx import Document as DocxDocument
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -84,11 +86,36 @@ def dashboard(request):
     })
 
 
+def _read_document_from_corpus(filename, mode):
+    """Recherche le document analysé dans le corpus et retourne son texte complet."""
+    root = Path(settings.BASE_DIR).resolve().parent
+    folder = root / "donnees" / ("TDR" if mode == "duplicate" else "Rapport d'etude")
+    if not folder.exists():
+        return ""
+    target = Path(filename).name.strip().lower()
+    for path in folder.rglob("*.docx"):
+        if path.name.strip().lower() == target:
+            doc = DocxDocument(path)
+            parts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+            for table in doc.tables:
+                for row in table.rows:
+                    cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                    if cells:
+                        parts.append(" | ".join(cells))
+            return "\\n\\n".join(parts)
+    return ""
+
+
 @login_required
 def analysis_detail(request, pk):
     analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
     result = analysis.result_json or {}
-    return render(request, "analysis_detail.html", {"analysis": analysis, "result": result})
+    document_text = _read_document_from_corpus(analysis.document_name, analysis.mode)
+    return render(request, "analysis_detail.html", {
+        "analysis": analysis,
+        "result": result,
+        "document_text": document_text,
+    })
 
 
 @login_required
