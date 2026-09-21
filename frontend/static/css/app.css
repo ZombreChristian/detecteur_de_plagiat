@@ -471,3 +471,146 @@ html[data-theme="light"] .status-neutral{background:#eef1f5}
   .theme-settings{right:10px;top:10px}
   .theme-settings-button span{display:none}
 }
+
+/* =========================================================================
+   IDENTITÉ INSTITUTIONNELLE PTBA·IA — palette Burkina, usage sobre
+   ========================================================================= */
+:root{
+  --ptba-green:#08783e;
+  --ptba-green-dark:#075b31;
+  --ptba-green-soft:rgba(8,120,62,.10);
+  --ptba-red:#b4232d;
+  --ptba-red-soft:rgba(180,35,45,.10);
+  --ptba-yellow:#e6b800;
+  --ptba-yellow-soft:rgba(230,184,0,.12);
+}
+html[data-theme="light"] body{
+  --bg:#f5f7f6;
+  --panel:#ffffff;
+  --panel-raised:#f1f4f2;
+  --hairline:#d8e0db;
+  --hairline-soft:#e8edea;
+  --text:#17211b;
+  --text-dim:#5d6b63;
+  --text-faint:#7b8881;
+  --gold:var(--ptba-green);
+  --gold-soft:var(--ptba-green-dark);
+  --gold-wash:var(--ptba-green-soft);
+}
+html[data-theme="light"]{color-scheme:light}
+body::before{
+  content:"";
+  position:fixed;
+  left:0;right:0;top:0;height:3px;
+  background:linear-gradient(90deg,var(--ptba-red) 0 33.33%,var(--ptba-yellow) 33.33% 66.66%,var(--ptba-green) 66.66% 100%);
+  z-index:9999;
+  pointer-events:none;
+}
+.rail-brand,.auth-aside{
+  position:relative;
+}
+.rail-brand::after{
+  content:"";
+  display:block;
+  height:3px;
+  margin-top:14px;
+  background:linear-gradient(90deg,var(--ptba-red) 0 33.33%,var(--ptba-yellow) 33.33% 66.66%,var(--ptba-green) 66.66% 100%);
+}
+.rail-link.active{
+  border-left-color:var(--ptba-green);
+  background:var(--ptba-green-soft);
+}
+.rail-link.active .ico{color:var(--ptba-green)}
+.btn-primary{
+  background:var(--ptba-green);
+  border-color:var(--ptba-green);
+  color:#fff;
+}
+.btn-primary:hover{background:var(--ptba-green-dark);border-color:var(--ptba-green-dark)}
+.btn-primary:focus-visible{outline-color:var(--ptba-green)}
+.engine.doublon{border-top-color:var(--ptba-green)}
+.engine.plagiat{border-top-color:var(--ptba-red)}
+.proc-track span{background:var(--ptba-green)}
+.proc-head .pct{color:var(--ptba-green)}
+.proc-step.current .mark{color:var(--ptba-green)}
+select:focus,input:focus{border-color:var(--ptba-green)}
+.brand-mark b{color:var(--ptba-green)}
+.auth-facts b{color:var(--ptba-green)}
+.theme-settings-button:hover{border-color:var(--ptba-green)}
+
+.ptba-identity{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:22px;
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.ptba-identity .dot{
+  width:9px;height:9px;border-radius:50%;
+  background:var(--ptba-green);
+  box-shadow:0 0 0 4px var(--ptba-green-soft);
+}
+.ptba-orbit{
+  width:180px;height:180px;
+  margin:0 0 34px;
+  border:1px solid rgba(8,120,62,.25);
+  border-radius:50%;
+  position:relative;
+  display:grid;
+  place-items:center;
+  background:radial-gradient(circle,rgba(8,120,62,.09),transparent 62%);
+}
+.ptba-orbit::before,.ptba-orbit::after{
+  content:"";position:absolute;border-radius:50%;
+  border:1px solid rgba(230,184,0,.45);
+}
+.ptba-orbit::before{inset:23px;border-top-color:var(--ptba-red)}
+.ptba-orbit::after{inset:46px;border-right-color:var(--ptba-green)}
+.ptba-ai{
+  width:74px;height:74px;border-radius:50%;
+  display:grid;place-items:center;
+  background:var(--ptba-green);
+  color:#fff;font-weight:800;font-size:20px;
+  box-shadow:0 12px 28px rgba(8,120,62,.22);
+}
+.ptba-node{
+  position:absolute;width:10px;height:10px;border-radius:50%;
+}
+.ptba-node.red{background:var(--ptba-red);top:14px;left:82px}
+.ptba-node.yellow{background:var(--ptba-yellow);right:17px;bottom:50px}
+.ptba-node.green{background:var(--ptba-green);left:18px;bottom:43px}
+
+.auth-shell .auth-aside{
+  overflow:hidden;
+  background:linear-gradient(145deg,#f8faf9 0%,#eef4f0 100%);
+}
+.auth-panel{
+  background:var(--panel);
+}
+.auth-panel-inner{
+  border:1px solid var(--hairline);
+  padding:30px;
+  border-radius:var(--radius-m);
+  box-shadow:0 16px 40px rgba(18,42,29,.07);
+}
+.auth-panel .btn-primary{
+  min-height:46px;
+  box-shadow:0 7px 16px rgba(8,120,62,.16);
+}
+.auth-trust{
+  margin-top:18px;
+  padding-top:14px;
+  border-top:1px solid var(--hairline-soft);
+  color:var(--text-faint);
+  font-size:11px;
+  line-height:1.5;
+}
+@media(max-width:760px){
+  .auth-panel-inner{border:0;box-shadow:none;padding:0}
+  .ptba-orbit{width:140px;height:140px;margin-bottom:24px}
+  .ptba-ai{width:62px;height:62px;font-size:17px}
+}
+
