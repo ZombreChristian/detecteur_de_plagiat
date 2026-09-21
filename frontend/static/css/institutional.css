@@ -39,8 +39,12 @@ html[data-theme="light"] body{
 }
 
 body{
-  background:var(--ui-bg);
+  background:
+    radial-gradient(circle at 8% 18%, rgba(8,120,62,.055), transparent 280px),
+    radial-gradient(circle at 92% 82%, rgba(230,184,0,.045), transparent 260px),
+    linear-gradient(135deg,#f3f8f5 0%,#ffffff 52%,#f5f7f6 100%);
   color:var(--ui-text);
+  min-height:100vh;
 }
 
 body::before{
@@ -500,4 +504,35 @@ html[data-theme="dark"] .theme-settings-panel{
   margin:5px 8px 2px;
   color:var(--ui-muted);
   font-size:10px;
+}
+
+
+/* ---------- cohérence du fond avec l'écran de connexion ---------- */
+html[data-theme="light"] .main{
+  background:
+    radial-gradient(circle at 8% 18%, rgba(8,120,62,.055), transparent 280px),
+    radial-gradient(circle at 92% 82%, rgba(230,184,0,.045), transparent 260px),
+    linear-gradient(135deg,#f3f8f5 0%,#ffffff 52%,#f5f7f6 100%) !important;
+}
+html[data-theme="light"] .ctxbar{
+  background:rgba(255,255,255,.88) !important;
+}
+html[data-theme="light"] .page-pad{
+  position:relative;
+}
+html[data-theme="light"] .page-pad::before{
+  content:"";
+  position:absolute;
+  top:-8px;
+  left:22px;
+  width:72px;
+  height:3px;
+  border-radius:2px;
+  background:linear-gradient(90deg,var(--ui-red) 0 33.33%,var(--ui-yellow) 33.33% 66.66%,var(--ui-green) 66.66% 100%);
+}
+html[data-theme="dark"] .main{
+  background:
+    radial-gradient(circle at 8% 18%, rgba(8,120,62,.10), transparent 280px),
+    radial-gradient(circle at 92% 82%, rgba(230,184,0,.055), transparent 260px),
+    linear-gradient(135deg,#0d1712 0%,#101a16 52%,#0f1720 100%) !important;
 }
