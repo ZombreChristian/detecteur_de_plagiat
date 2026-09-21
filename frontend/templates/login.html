@@ -1,39 +1,96 @@
 {% load static %}
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PTBA·IA — Connexion</title><link rel="stylesheet" href="{% static 'css/app.css' %}" /><link rel="stylesheet" href="{% static 'css/institutional.css' %}"><script src="{% static 'js/theme.js' %}"></script></head>
-<body>
-<div class="auth-shell">
-  <section class="auth-aside">
-    <div class="ptba-identity"><span class="dot"></span> PTBA · IA — Ministère de la Transition digitale</div><div class="ptba-orbit"><span class="ptba-node red"></span><span class="ptba-node yellow"></span><span class="ptba-node green"></span><span class="ptba-ai">IA</span></div>
-    <h1>Plateforme intelligente de détection des doublons et du plagiat des études</h1>
-    <p class="lede">Un socle commun à deux moteurs de détection : éviter de financer deux fois la même étude, et vérifier qu'un livrable reçu n'est pas recyclé d'un rapport existant. L'outil signale ; la décision reste toujours humaine.</p>
-    <div class="auth-facts">
-      <div><b>01</b><span>Doublon détecté à la programmation, par similarité sémantique entre TDR.</span></div>
-      <div><b>02</b><span>Plagiat détecté à la réception, avec localisation précise des passages en cause.</span></div>
-      <div><b>03</b><span>Chaque alerte est instruite et tranchée par un agent habilité, de façon tracée.</span></div>
-    </div>
-  </section>
-  <section class="auth-panel">
-    <div class="auth-panel-inner">
-      <div class="ptba-identity"><span class="dot"></span> ESPACE SÉCURISÉ</div>
-      <h2>Connexion</h2>
-      <p class="lede">Bienvenue. Connectez-vous pour accéder aux outils d’analyse documentaire du PTBA.</p>
-      <form method="post">
-        {% csrf_token %}
-        {% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}
-        <div class="field">
-          <label>{{ form.username.label }}</label>
-          {{ form.username }}
-          {% for error in form.username.errors %}<small class="error">{{ error }}</small>{% endfor %}
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PTBA·IA — Connexion</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="stylesheet" href="{% static 'css/institutional.css' %}">
+  <script src="{% static 'js/theme.js' %}"></script>
+</head>
+<body class="ptba-login">
+  <div class="login-header">
+    <div class="login-header-inner">
+      <div class="ministry-brand">
+        <div class="ministry-emblem" aria-hidden="true">
+          <span class="emblem-star">★</span>
+          <span class="emblem-line"></span>
         </div>
-        <div class="field">
-          <label>{{ form.password.label }}</label>
-          {{ form.password }}
-          {% for error in form.password.errors %}<small class="error">{{ error }}</small>{% endfor %}
+        <div>
+          <strong>Ministère de la Transition Digitale,<br>des Postes et des Communications Électroniques</strong>
+          <small>BURKINA FASO</small>
         </div>
-        <button class="btn btn-primary btn-block" type="submit">Se connecter</button>
-      </form><div class="auth-trust">Accès réservé · traitements tracés · décision humaine</div>
+      </div>
+      <div class="login-header-actions">
+        <button class="login-icon-btn" type="button" aria-label="Apparence">☼</button>
+        <div class="language-chip"><span class="bf-dot"></span> Français <span class="chevron">⌄</span></div>
+      </div>
     </div>
-  </section>
-</div>
-</body></html>
+  </div>
+
+  <main class="auth-shell">
+    <section class="auth-aside">
+      <div class="login-hero">
+        <div class="ptba-brand-lockup">
+          <div class="ptba-logo-mark" aria-hidden="true">
+            <span class="doc-back"></span><span class="doc-front"></span><span class="search-ring"></span>
+          </div>
+          <div>
+            <div class="ptba-name"><span>PTBA</span><b>·</b><strong>IA</strong></div>
+            <div class="ptba-subtitle">PLATEFORME DE DÉTECTION DE PLAGIAT<br>ET DE DOUBLON D’ÉTUDES (PTBA)</div>
+            <div class="ptba-tricolor"></div>
+          </div>
+        </div>
+
+        <h1>Le contrôle intelligent<br>des études<span>.</span></h1>
+        <p class="lede">Une plateforme pour détecter les doublons et contrôler la similarité des livrables PTBA.</p>
+
+        <div class="hero-visual" aria-hidden="true">
+          <div class="building">
+            <div class="building-roof"></div>
+            <div class="building-columns"><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="building-base"></div>
+          </div>
+          <div class="hero-wave"></div>
+          <div class="hero-wave hero-wave-red"></div>
+          <div class="hero-wave hero-wave-yellow"></div>
+          <div class="hero-flag"><span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="auth-panel">
+      <div class="auth-panel-inner">
+        <div class="secure-heading">
+          <div class="secure-icon">⌑</div>
+          <div><strong>ESPACE SÉCURISÉ</strong><span></span></div>
+        </div>
+        <h2>Connexion</h2>
+        <p class="lede">Accédez à votre espace de travail</p>
+
+        <form method="post">
+          {% csrf_token %}
+          {% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}
+          <div class="field">
+            <label>{{ form.username.label }}</label>
+            {{ form.username }}
+            {% for error in form.username.errors %}<small class="error">{{ error }}</small>{% endfor %}
+          </div>
+          <div class="field">
+            <label>{{ form.password.label }}</label>
+            {{ form.password }}
+            {% for error in form.password.errors %}<small class="error">{{ error }}</small>{% endfor %}
+          </div>
+          <button class="btn btn-primary btn-block login-submit" type="submit">Se connecter <span>→</span></button>
+        </form>
+
+        <div class="auth-trust">
+          <span class="trust-icon">✓</span>
+          <span>Accès réservé aux agents habilités</span>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
