@@ -87,6 +87,32 @@ def dashboard(request):
     })
 
 
+
+def _save_uploaded_document(uploaded):
+    """Enregistre le DOCX reçu afin de pouvoir le consulter depuis l'historique."""
+    media_root = Path(settings.BASE_DIR) / "media" / "documents"
+    media_root.mkdir(parents=True, exist_ok=True)
+    storage = FileSystemStorage(location=str(media_root))
+    uploaded.seek(0)
+    return str(media_root / storage.save(uploaded.name, uploaded))
+
+
+def _read_saved_document(path):
+    """Lit un document DOCX précédemment enregistré et retourne son contenu."""
+    if not path:
+        return ""
+    file_path = Path(path)
+    if not file_path.exists() or file_path.suffix.lower() != ".docx":
+        return ""
+    doc = DocxDocument(file_path)
+    parts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                parts.append(" | ".join(cells))
+    return "\\n\\n".join(parts)
+
 def _read_document_from_corpus(filename, mode):
     """Recherche le document analysé dans le corpus et retourne son texte complet."""
     root = Path(settings.BASE_DIR).resolve().parent
