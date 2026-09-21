@@ -2,6 +2,7 @@ import io
 import time
 import requests
 from pathlib import Path
+from django.core.files.storage import FileSystemStorage
 from docx import Document as DocxDocument
 from django.conf import settings
 from django.contrib import messages
@@ -110,7 +111,7 @@ def _read_document_from_corpus(filename, mode):
 def analysis_detail(request, pk):
     analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
     result = analysis.result_json or {}
-    document_text = _read_document_from_corpus(analysis.document_name, analysis.mode)
+    document_text = _read_saved_document((analysis.result_json or {}).get("uploaded_path")) or _read_document_from_corpus(analysis.document_name, analysis.mode)
     return render(request, "analysis_detail.html", {
         "analysis": analysis,
         "result": result,
@@ -162,6 +163,45 @@ def reception(request):
         messages.error(request, f"Le moteur d'analyse est indisponible : {exc}")
     return redirect("detector:reception")
 
+
+
+@login_required
+def upload_report_for_tdr(request, pk):
+    tdr = get_object_or_404(Analysis, pk=pk, user=request.user, mode="duplicate", decision="DIFFERENT")
+    if request.method == "GET":
+        return render(request, "report_upload.html", {"tdr": tdr})
+    uploaded = _get_uploaded_docx(request)
+    if not _validate_docx(uploaded):
+        messages.error(request, "Veuillez sélectionner un rapport DOCX valide.")
+        return redirect("detector:upload_report_for_tdr", pk=tdr.pk)
+    start = time.perf_counter()
+    try:
+        response = requests.post(
+            f"{settings.FASTAPI_URL}/api/detect/plagiarism",
+            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            timeout=600,
+        )
+        response.raise_for_status()
+        result = response.json()
+        result["uploaded_path"] = _save_uploaded_document(uploaded)
+        result["linked_tdr_analysis_id"] = tdr.id
+        result["linked_tdr_name"] = tdr.document_name
+        duration = round((time.perf_counter() - start) * 1000)
+        result["duration_ms"] = duration
+        analysis = Analysis.objects.create(
+            user=request.user, document_name=uploaded.name, mode="plagiarism",
+            decision=result.get("decision", ""), hybrid_score=result.get("hybrid_score"),
+            semantic_score=result.get("semantic_score"), tfidf_score=result.get("tfidf_score"),
+            novelty_score=result.get("novelty_score"), result_json=result, duration_ms=duration,
+        )
+        request.session["last_result"] = result
+        request.session["last_analysis_id"] = analysis.id
+        request.session["last_document_name"] = uploaded.name
+        messages.success(request, "Rapport associé au TDR et analysé avec succès.")
+        return redirect("detector:resultats")
+    except requests.RequestException as exc:
+        messages.error(request, f"Le moteur d'analyse est indisponible : {exc}")
+        return redirect("detector:upload_report_for_tdr", pk=tdr.pk)
 
 @login_required
 def analyser(request):
