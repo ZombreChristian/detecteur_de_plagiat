@@ -35,5 +35,6 @@
 <p class="muted">Le contenu intégral de ce document n'est pas disponible dans le corpus local associé à cette analyse.</p>
 {% endif %}
 </div>
+{% if analysis.mode == "duplicate" and analysis.decision == "DIFFERENT" %}<section class="panel"><div class="panel-head"><h2>Étape suivante</h2></div><div class="panel-body"><p class="muted">Ce TDR a été jugé différent. Vous pouvez maintenant déposer le rapport d’étude correspondant afin de lancer son contrôle de plagiat.</p><a class="btn btn-primary" href="{% url 'detector:upload_report_for_tdr' analysis.id %}">Déposer le rapport lié à ce TDR</a></div></section>{% endif %}
 </section>
 </div></main></div></body></html>
