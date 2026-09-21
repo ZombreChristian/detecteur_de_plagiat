@@ -1,28 +1,31 @@
 (() => {
-  const KEY = "docsec-theme";
+  const KEY = "ptba-theme";
   const saved = localStorage.getItem(KEY);
-  if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+  const initial = saved === "dark" || saved === "light" ? saved : "light";
+  document.documentElement.dataset.theme = initial;
 
   function apply(theme) {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(KEY, theme);
-    const label = document.getElementById("docsec-theme-label");
+    const label = document.getElementById("ptba-theme-label");
     if (label) label.textContent = theme === "dark" ? "Mode sombre" : "Mode clair";
   }
 
   function init() {
-    if (document.getElementById("docsec-settings")) return;
+    if (document.getElementById("ptba-settings")) return;
     const wrap = document.createElement("div");
-    wrap.id = "docsec-settings";
+    wrap.id = "ptba-settings";
     wrap.className = "theme-settings";
-    wrap.innerHTML = '<button class="theme-settings-button" type="button" aria-expanded="false" aria-controls="docsec-theme-panel">⚙ <span>Paramètres</span></button>' +
-      '<div id="docsec-theme-panel" class="theme-settings-panel" hidden>' +
+    wrap.innerHTML =
+      '<button class="theme-settings-button" type="button" aria-expanded="false" aria-controls="ptba-theme-panel">⚙ <span>Paramètres</span></button>' +
+      '<div id="ptba-theme-panel" class="theme-settings-panel" hidden>' +
       '<strong>Apparence</strong>' +
       '<button type="button" data-theme-choice="light">☀ Mode clair</button>' +
       '<button type="button" data-theme-choice="dark">☾ Mode sombre</button>' +
-      '<div id="docsec-theme-label" class="theme-current"></div>' +
+      '<div id="ptba-theme-label" class="theme-current"></div>' +
       '</div>';
     document.body.appendChild(wrap);
+
     const button = wrap.querySelector(".theme-settings-button");
     const panel = wrap.querySelector(".theme-settings-panel");
     button.addEventListener("click", () => {
@@ -37,8 +40,9 @@
         button.setAttribute("aria-expanded", "false");
       });
     });
-    apply(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+    apply(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
   }
+
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();
