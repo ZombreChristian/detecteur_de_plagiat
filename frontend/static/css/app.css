@@ -377,3 +377,97 @@ input[type=file]{padding:9px 10px}
   .auth-aside{display:none}
   .auth-panel{padding:32px 20px}
 }
+
+
+/* =========================================================================
+   THÈMES ET PARAMÈTRES D'APPARENCE
+   ========================================================================= */
+html[data-theme="light"]{
+  color-scheme:light;
+}
+html[data-theme="light"] body{
+  --bg:#f4f6f8;
+  --panel:#ffffff;
+  --panel-raised:#eef1f5;
+  --hairline:#d7dde6;
+  --hairline-soft:#e7ebf0;
+  --text:#18202b;
+  --text-dim:#586474;
+  --text-faint:#7b8796;
+  --gold:#8a691d;
+  --gold-soft:#a0802d;
+  --gold-wash:rgba(138,105,29,.10);
+}
+html[data-theme="light"] .evidence-quote.source{background:#f4f6f8}
+html[data-theme="light"] .status-neutral{background:#eef1f5}
+
+.document-content{
+  max-height:900px;
+  overflow:auto;
+  padding:24px;
+  background:var(--panel-raised);
+  color:var(--text);
+  border:1px solid var(--hairline);
+  border-radius:var(--radius-m);
+  white-space:pre-wrap;
+  line-height:1.8;
+  font-size:14px;
+  text-align:left;
+  overflow-wrap:anywhere;
+}
+.theme-settings{
+  position:fixed;
+  right:20px;
+  top:18px;
+  z-index:100;
+  font-family:var(--font-sans);
+}
+.theme-settings-button{
+  border:1px solid var(--hairline);
+  background:var(--panel);
+  color:var(--text);
+  padding:9px 13px;
+  border-radius:var(--radius-s);
+  font:600 12.5px var(--font-sans);
+  cursor:pointer;
+  box-shadow:0 4px 14px rgba(0,0,0,.16);
+}
+.theme-settings-button:hover{border-color:var(--gold)}
+.theme-settings-panel{
+  margin-top:7px;
+  min-width:180px;
+  padding:10px;
+  border:1px solid var(--hairline);
+  border-radius:var(--radius-m);
+  background:var(--panel);
+  box-shadow:0 10px 28px rgba(0,0,0,.22);
+}
+.theme-settings-panel strong{
+  display:block;
+  padding:4px 7px 8px;
+  font-size:12px;
+  color:var(--text-dim);
+}
+.theme-settings-panel button{
+  width:100%;
+  border:0;
+  background:transparent;
+  color:var(--text);
+  text-align:left;
+  padding:8px 7px;
+  border-radius:var(--radius-s);
+  font:500 13px var(--font-sans);
+  cursor:pointer;
+}
+.theme-settings-panel button:hover{background:var(--panel-raised)}
+.theme-current{
+  border-top:1px solid var(--hairline-soft);
+  margin-top:6px;
+  padding:8px 7px 2px;
+  font-size:11px;
+  color:var(--text-faint);
+}
+@media(max-width:760px){
+  .theme-settings{right:10px;top:10px}
+  .theme-settings-button span{display:none}
+}
