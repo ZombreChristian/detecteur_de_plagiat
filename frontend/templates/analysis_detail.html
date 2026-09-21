@@ -5,7 +5,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DOCSEC — Détail de l'analyse</title>
 <link rel="stylesheet" href="{% static 'css/app.css' %}">
-</head>
+<script src="{% static 'js/theme.js' %}"></script></head>
 <body>
 <div class="console">
 <aside class="rail"><div class="rail-brand"><div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div><div class="brand-tag">Registre national des études — PTBA</div></div>
@@ -30,7 +30,7 @@
 <div class="panel-head"><h2>Document intégral</h2></div>
 <div class="panel-body">
 {% if document_text %}
-<div style="max-height:900px;overflow:auto;padding:22px;background:#f8fafc;border:1px solid rgba(0,0,0,.08);border-radius:10px;white-space:pre-wrap;line-height:1.75;font-size:14px;font-family:inherit">{{ document_text }}</div>
+<div class="document-content">{{ document_text }}</div>
 {% else %}
 <p class="muted">Le contenu intégral de ce document n'est pas disponible dans le corpus local associé à cette analyse.</p>
 {% endif %}
