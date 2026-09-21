@@ -1,39 +1,110 @@
 {% load static %}
-<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PTBA·IA — Connexion</title><link rel="stylesheet" href="{% static 'css/app.css' %}" /><link rel="stylesheet" href="{% static 'css/institutional.css' %}"><script src="{% static 'js/theme.js' %}"></script></head>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PTBA · IA — Connexion</title>
+  <link rel="stylesheet" href="{% static 'css/login-ptba.css' %}">
+</head>
 <body>
-<div class="auth-shell">
-  <section class="auth-aside">
-    <div class="ptba-identity"><span class="dot"></span> PTBA · IA — Ministère de la Transition digitale</div><div class="ptba-orbit"><span class="ptba-node red"></span><span class="ptba-node yellow"></span><span class="ptba-node green"></span><span class="ptba-ai">IA</span></div>
-    <h1>Plateforme intelligente de détection des doublons et du plagiat des études</h1>
-    <p class="lede">Un socle commun à deux moteurs de détection : éviter de financer deux fois la même étude, et vérifier qu'un livrable reçu n'est pas recyclé d'un rapport existant. L'outil signale ; la décision reste toujours humaine.</p>
-    <div class="auth-facts">
-      <div><b>01</b><span>Doublon détecté à la programmation, par similarité sémantique entre TDR.</span></div>
-      <div><b>02</b><span>Plagiat détecté à la réception, avec localisation précise des passages en cause.</span></div>
-      <div><b>03</b><span>Chaque alerte est instruite et tranchée par un agent habilité, de façon tracée.</span></div>
-    </div>
-  </section>
-  <section class="auth-panel">
-    <div class="auth-panel-inner">
-      <div class="ptba-identity"><span class="dot"></span> ESPACE SÉCURISÉ</div>
-      <h2>Connexion</h2>
-      <p class="lede">Bienvenue. Connectez-vous pour accéder aux outils d’analyse documentaire du PTBA.</p>
-      <form method="post">
-        {% csrf_token %}
-        {% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}
-        <div class="field">
-          <label>{{ form.username.label }}</label>
-          {{ form.username }}
-          {% for error in form.username.errors %}<small class="error">{{ error }}</small>{% endfor %}
+  <!-- Bandeau tricolore -->
+  <div class="top-stripe"></div>
+
+  <!-- Header institutionnel -->
+  <header class="top-header">
+    <div class="header-left">
+      <div class="logo-ministry">
+        <!-- Remplace par le vrai logo si tu l’as -->
+        <div class="coat-of-arms">BF</div>
+        <div class="ministry-text">
+          <strong>Ministère de la Transition Digitale,<br>des Postes et des Communications Électroniques</strong>
+          <span>BURKINA FASO</span>
         </div>
-        <div class="field">
-          <label>{{ form.password.label }}</label>
-          {{ form.password }}
-          {% for error in form.password.errors %}<small class="error">{{ error }}</small>{% endfor %}
-        </div>
-        <button class="btn btn-primary btn-block" type="submit">Se connecter</button>
-      </form><div class="auth-trust">Accès réservé · traitements tracés · décision humaine</div>
+      </div>
     </div>
-  </section>
-</div>
-</body></html>
+    <div class="header-right">
+      <button class="theme-btn" title="Thème">☀</button>
+      <div class="lang-selector">
+        <span class="flag">🇧🇫</span> Français ▾
+      </div>
+    </div>
+  </header>
+
+  <main class="login-layout">
+    <!-- Partie gauche (branding) -->
+    <section class="login-left">
+      <div class="brand-block">
+        <div class="brand-logo">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+            <rect x="8" y="12" width="36" height="44" rx="4" stroke="#0B6E3E" stroke-width="3"/>
+            <path d="M20 28h20M20 36h16M20 44h12" stroke="#0B6E3E" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="42" cy="42" r="14" stroke="#0B6E3E" stroke-width="3"/>
+            <path d="M50 50l8 8" stroke="#0B6E3E" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">PTBA<span>·</span><span class="ia">IA</span></h1>
+          <p class="brand-subtitle">PLATEFORME DE DÉTECTION DE PLAGIAT<br>ET DE DOUBLON D’ÉTUDES (PTBA)</p>
+          <div class="brand-line"></div>
+        </div>
+      </div>
+
+      <h2 class="hero-title">Le contrôle intelligent<br>des études.</h2>
+      <p class="hero-desc">
+        Une plateforme pour détecter les doublons et<br>
+        contrôler la similarité des livrables PTBA.
+      </p>
+    </section>
+
+    <!-- Partie droite (formulaire) -->
+    <section class="login-right">
+      <div class="login-card">
+        <div class="secure-badge">
+          <span class="shield">🔒</span>
+          <span>ESPACE SÉCURISÉ</span>
+        </div>
+
+        <h2>Connexion</h2>
+        <p class="login-lede">Accédez à votre espace de travail</p>
+
+        <form method="post">
+          {% csrf_token %}
+          {% if form.non_field_errors %}
+            <div class="alert">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="field">
+            <label>Nom d’utilisateur</label>
+            <div class="input-wrap">
+              <span class="icon">👤</span>
+              {{ form.username }}
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Mot de passe</label>
+            <div class="input-wrap">
+              <span class="icon">🔒</span>
+              {{ form.password }}
+            </div>
+          </div>
+
+          <button type="submit" class="btn-login">
+            Se connecter →
+          </button>
+        </form>
+
+        <div class="divider"><span>ou</span></div>
+
+        <div class="access-note">
+          🛡 Accès réservé aux agents habilités
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Vague tricolore en bas -->
+  <div class="bottom-wave"></div>
+</body>
+</html>
