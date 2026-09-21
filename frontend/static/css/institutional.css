@@ -1,8 +1,8 @@
 /* ==========================================================================
    DOCSEC / PTBA — Surcouche institutionnelle
-   Interface claire, sobre et adaptée à un service numérique public burkinabè.
+   Interface claire, sobre et adaptée à un service numérique public burkinabè, sans surcharge chromatique.
    Les couleurs nationales sont utilisées comme accents, sans surcharger
-   l'interface : rouge / vert / jaune pour les repères institutionnels.
+   l'interface : rouge / jaune en accents, avec une base bleu ardoise et gris clair.
    ========================================================================== */
 
 :root{
@@ -13,15 +13,15 @@
   --ui-border-strong:#c8d4cd;
   --ui-text:#17211c;
   --ui-muted:#65736b;
-  --ui-green:#08783e;
-  --ui-green-dark:#075b31;
-  --ui-green-soft:#e8f4ed;
+  --ui-green:#2f4357;
+  --ui-green-dark:#1f2f40;
+  --ui-green-soft:#edf2f6;
   --ui-red:#b4232d;
   --ui-red-soft:#faecee;
   --ui-yellow:#e6b800;
   --ui-yellow-soft:#fff8d9;
-  --ui-shadow:0 10px 28px rgba(22,48,35,.07);
-  --ui-shadow-soft:0 4px 14px rgba(22,48,35,.05);
+  --ui-shadow:0 10px 28px rgba(31,47,64,.07);
+  --ui-shadow-soft:0 4px 14px rgba(31,47,64,.05);
 }
 
 html[data-theme="light"] body{
@@ -94,7 +94,7 @@ body::before{
   transition:background .15s ease,color .15s ease,border-color .15s ease;
 }
 .rail-link:hover{
-  background:var(--ui-green-soft) !important;
+  background:#edf2f6 !important;
   color:var(--ui-green-dark) !important;
 }
 .rail-link.active{
@@ -113,7 +113,7 @@ body::before{
 /* ---------- contenu ---------- */
 .main{
   background:
-    radial-gradient(circle at 92% 0%, rgba(8,120,62,.055), transparent 330px),
+    radial-gradient(circle at 92% 0%, rgba(47,67,87,.045), transparent 330px),
     var(--ui-bg);
 }
 .ctxbar{
@@ -148,7 +148,7 @@ body::before{
   background:var(--ui-green) !important;
   border-color:var(--ui-green) !important;
   color:#fff !important;
-  box-shadow:0 5px 14px rgba(8,120,62,.18);
+  box-shadow:0 5px 14px rgba(47,67,87,.16);
 }
 .btn-primary:hover{
   background:var(--ui-green-dark) !important;
@@ -219,7 +219,7 @@ select,input[type=text],input[type=password],input[type=file],input[type=search]
 }
 select:focus,input:focus{
   border-color:var(--ui-green) !important;
-  box-shadow:0 0 0 3px rgba(8,120,62,.10);
+  box-shadow:0 0 0 3px rgba(47,67,87,.08);
   outline:0;
 }
 input[type=file]{background:var(--ui-surface-soft) !important}
@@ -277,7 +277,7 @@ table.ledger .doc-name strong{color:var(--ui-text)}
 .auth-shell{
   min-height:100vh;
   background:
-    radial-gradient(circle at 12% 20%, rgba(8,120,62,.10), transparent 280px),
+    radial-gradient(circle at 12% 20%, rgba(47,67,87,.08), transparent 280px),
     linear-gradient(135deg,#f4f8f5 0%,#fff 55%,#f5f7f6 100%);
   padding-top:4px;
 }
@@ -286,7 +286,7 @@ table.ledger .doc-name strong{color:var(--ui-text)}
   overflow:hidden;
   background:
     linear-gradient(145deg,rgba(8,120,62,.97),rgba(5,91,49,.98)),
-    #08783e !important;
+    #2f4357 !important;
   border-right:0 !important;
   color:#fff;
   padding:64px 68px !important;
@@ -337,7 +337,7 @@ table.ledger .doc-name strong{color:var(--ui-text)}
   padding:36px !important;
   border:1px solid var(--ui-border);
   border-radius:14px;
-  box-shadow:0 18px 50px rgba(22,48,35,.09);
+  box-shadow:0 18px 50px rgba(31,47,64,.09);
 }
 .auth-panel .brand-mark{font-size:22px}
 .auth-panel h2{font-size:25px !important}
@@ -400,7 +400,7 @@ html[data-theme="dark"] .pulse{
   color:#edf3ef;
 }
 html[data-theme="dark"] .main{
-  background:radial-gradient(circle at 92% 0%,rgba(8,120,62,.12),transparent 330px),#0d1410;
+  background:radial-gradient(circle at 92% 0%,rgba(47,67,87,.10),transparent 330px),#0d1410;
 }
 html[data-theme="dark"] .panel-head{
   background:#151e18 !important;
@@ -421,7 +421,7 @@ html[data-theme="dark"] .button{
   border-color:#35443a !important;
 }
 html[data-theme="dark"] .btn-primary{
-  background:#08783e !important;
+  background:#2f4357 !important;
   color:#fff !important;
 }
 html[data-theme="dark"] table.ledger tbody tr:hover td{
