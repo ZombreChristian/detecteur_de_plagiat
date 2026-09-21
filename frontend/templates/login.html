@@ -1,11 +1,11 @@
 {% load static %}
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DOCSEC — Connexion</title><link rel="stylesheet" href="{% static 'css/app.css' %}" /><link rel="stylesheet" href="{% static 'css/institutional.css' %}"><script src="{% static 'js/theme.js' %}"></script></head>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PTBA·IA — Connexion</title><link rel="stylesheet" href="{% static 'css/app.css' %}" /><link rel="stylesheet" href="{% static 'css/institutional.css' %}"><script src="{% static 'js/theme.js' %}"></script></head>
 <body>
 <div class="auth-shell">
   <section class="auth-aside">
-    <div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div>
-    <h1>Registre national des études du PTBA</h1>
+    <div class="ptba-identity"><span class="dot"></span> PTBA · IA — Ministère de la Transition digitale</div><div class="ptba-orbit"><span class="ptba-node red"></span><span class="ptba-node yellow"></span><span class="ptba-node green"></span><span class="ptba-ai">IA</span></div>
+    <h1>Plateforme intelligente de détection des doublons et du plagiat des études</h1>
     <p class="lede">Un socle commun à deux moteurs de détection : éviter de financer deux fois la même étude, et vérifier qu'un livrable reçu n'est pas recyclé d'un rapport existant. L'outil signale ; la décision reste toujours humaine.</p>
     <div class="auth-facts">
       <div><b>01</b><span>Doublon détecté à la programmation, par similarité sémantique entre TDR.</span></div>
@@ -15,9 +15,9 @@
   </section>
   <section class="auth-panel">
     <div class="auth-panel-inner">
-      <div class="brand" style="margin-bottom:28px"><span class="brand-mark">DOC<b>SEC</b></span></div>
+      <div class="ptba-identity"><span class="dot"></span> ESPACE SÉCURISÉ</div>
       <h2>Connexion</h2>
-      <p class="lede">Accès réservé aux agents habilités.</p>
+      <p class="lede">Bienvenue. Connectez-vous pour accéder aux outils d’analyse documentaire du PTBA.</p>
       <form method="post">
         {% csrf_token %}
         {% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}
@@ -32,7 +32,7 @@
           {% for error in form.password.errors %}<small class="error">{{ error }}</small>{% endfor %}
         </div>
         <button class="btn btn-primary btn-block" type="submit">Se connecter</button>
-      </form>
+      </form><div class="auth-trust">Accès réservé · traitements tracés · décision humaine</div>
     </div>
   </section>
 </div>
