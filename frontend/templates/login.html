@@ -32,11 +32,11 @@
       <p class="desc">Une plateforme pour détecter les doublons et contrôler la similarité des livrables PTBA.</p>
     </div>
 
-    <div class="login-right">
-      <div class="card">
-        <div class="secure-badge"><span class="shield">⌑</span> ESPACE SÉCURISÉ</div>
+    <!-- Partie droite (formulaire) -->
+    <section class="login-right">
+      <div class="login-card">
         <h2>Connexion</h2>
-        <p class="lede">Accédez à votre espace de travail</p>
+        <p class="login-lede">Accédez à votre espace de travail</p>
 
         <form method="post">
           {% csrf_token %}
@@ -45,30 +45,32 @@
           {% endif %}
 
           <div class="field">
-            <label>{{ form.username.label }}</label>
+            <label>Nom d’utilisateur</label>
             <div class="input-wrap">
               <span class="icon">👤</span>
               {{ form.username }}
             </div>
-            {% for error in form.username.errors %}<small class="error">{{ error }}</small>{% endfor %}
           </div>
 
           <div class="field">
-            <label>{{ form.password.label }}</label>
+            <label>Mot de passe</label>
             <div class="input-wrap">
               <span class="icon">🔒</span>
               {{ form.password }}
             </div>
-            {% for error in form.password.errors %}<small class="error">{{ error }}</small>{% endfor %}
           </div>
 
-          <button type="submit" class="btn-login">Se connecter →</button>
+          <button type="submit" class="btn-login">
+            Se connecter →
+          </button>
         </form>
 
-        <div class="divider"><span>Accès sécurisé</span></div>
-        <p class="access-note">Accès réservé aux agents habilités · traitements tracés · décision humaine</p>
+        <p class="create-account">
+          Vous n’avez pas de compte ? 
+          <a href="#">Créer un compte</a>
+        </p>
       </div>
-    </div>
+    </section>
   </div>
 
   <div class="bottom-wave" aria-hidden="true"></div>
