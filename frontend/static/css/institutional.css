@@ -1,0 +1,375 @@
+/* ==========================================================================
+   DOCSEC / PTBA — Surcouche institutionnelle
+   Interface claire, sobre et adaptée à un service numérique public burkinabè.
+   Les couleurs nationales sont utilisées comme accents, sans surcharger
+   l'interface : rouge / vert / jaune pour les repères institutionnels.
+   ========================================================================== */
+
+:root{
+  --ui-bg:#f5f7f6;
+  --ui-surface:#ffffff;
+  --ui-surface-soft:#f0f4f1;
+  --ui-border:#dce4df;
+  --ui-border-strong:#c8d4cd;
+  --ui-text:#17211c;
+  --ui-muted:#65736b;
+  --ui-green:#08783e;
+  --ui-green-dark:#075b31;
+  --ui-green-soft:#e8f4ed;
+  --ui-red:#b4232d;
+  --ui-red-soft:#faecee;
+  --ui-yellow:#e6b800;
+  --ui-yellow-soft:#fff8d9;
+  --ui-shadow:0 10px 28px rgba(22,48,35,.07);
+  --ui-shadow-soft:0 4px 14px rgba(22,48,35,.05);
+}
+
+html[data-theme="light"] body{
+  --bg:var(--ui-bg);
+  --panel:var(--ui-surface);
+  --panel-raised:var(--ui-surface-soft);
+  --hairline:var(--ui-border);
+  --hairline-soft:#e8eeea;
+  --text:var(--ui-text);
+  --text-dim:var(--ui-muted);
+  --text-faint:#87938d;
+  --gold:var(--ui-green);
+  --gold-soft:var(--ui-green-dark);
+  --gold-wash:var(--ui-green-soft);
+}
+
+body{
+  background:var(--ui-bg);
+  color:var(--ui-text);
+}
+
+body::before{
+  content:"";
+  position:fixed;
+  top:0;left:0;right:0;
+  height:4px;
+  z-index:1000;
+  background:linear-gradient(90deg,
+    var(--ui-red) 0 33.33%,
+    var(--ui-yellow) 33.33% 66.66%,
+    var(--ui-green) 66.66% 100%);
+}
+
+/* ---------- identité ---------- */
+.brand-mark{
+  color:var(--ui-green) !important;
+  font-weight:800;
+  letter-spacing:-.02em;
+}
+.brand-mark b{color:var(--ui-red) !important}
+.brand-tag{
+  color:var(--ui-muted) !important;
+}
+.rail-brand{
+  position:relative;
+  padding-top:8px !important;
+}
+.rail-brand::after{
+  content:"SERVICE NUMÉRIQUE PUBLIC";
+  display:block;
+  margin-top:9px;
+  color:var(--ui-green);
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.12em;
+}
+
+/* ---------- navigation ---------- */
+.rail{
+  background:var(--ui-surface) !important;
+  border-right:1px solid var(--ui-border) !important;
+  box-shadow:4px 0 18px rgba(20,50,35,.035);
+}
+.rail-nav{gap:4px !important}
+.rail-link{
+  border-left:3px solid transparent !important;
+  border-radius:0 8px 8px 0 !important;
+  color:#59675f !important;
+  padding:11px 12px !important;
+  transition:background .15s ease,color .15s ease,border-color .15s ease;
+}
+.rail-link:hover{
+  background:var(--ui-green-soft) !important;
+  color:var(--ui-green-dark) !important;
+}
+.rail-link.active{
+  background:var(--ui-green-soft) !important;
+  color:var(--ui-green-dark) !important;
+  border-left-color:var(--ui-green) !important;
+  font-weight:700;
+}
+.rail-link.active .ico,
+.rail-link:hover .ico{color:var(--ui-green) !important}
+.rail-foot{
+  border-top:1px solid var(--ui-border) !important;
+}
+.rail-logout{color:var(--ui-red) !important}
+
+/* ---------- contenu ---------- */
+.main{
+  background:
+    radial-gradient(circle at 92% 0%, rgba(8,120,62,.055), transparent 330px),
+    var(--ui-bg);
+}
+.ctxbar{
+  background:rgba(255,255,255,.92);
+  border-bottom:1px solid var(--ui-border) !important;
+  box-shadow:0 1px 0 rgba(255,255,255,.8);
+  padding-top:26px !important;
+}
+.ctxbar h1{
+  color:var(--ui-text);
+  font-size:24px !important;
+  font-weight:750 !important;
+}
+.ctxbar .lede{color:var(--ui-muted) !important}
+
+.page-pad{max-width:1440px}
+
+/* ---------- boutons ---------- */
+.btn,.button{
+  border-color:var(--ui-border-strong) !important;
+  background:var(--ui-surface) !important;
+  color:var(--ui-text) !important;
+  border-radius:7px !important;
+  box-shadow:var(--ui-shadow-soft);
+}
+.btn:hover,.button:hover{
+  border-color:var(--ui-green) !important;
+  color:var(--ui-green-dark) !important;
+  background:#fbfdfc !important;
+}
+.btn-primary{
+  background:var(--ui-green) !important;
+  border-color:var(--ui-green) !important;
+  color:#fff !important;
+  box-shadow:0 5px 14px rgba(8,120,62,.18);
+}
+.btn-primary:hover{
+  background:var(--ui-green-dark) !important;
+  border-color:var(--ui-green-dark) !important;
+  color:#fff !important;
+}
+
+/* ---------- cartes ---------- */
+.panel,.card,.engine,.proc{
+  background:var(--ui-surface) !important;
+  border-color:var(--ui-border) !important;
+  border-radius:10px !important;
+  box-shadow:var(--ui-shadow-soft);
+}
+.panel-head{
+  padding:17px 20px !important;
+  background:linear-gradient(180deg,#fff,#fbfcfb);
+}
+.panel-head h2{font-size:15px !important;color:var(--ui-text)}
+.panel-body{padding:20px !important}
+
+.engine{
+  padding:23px !important;
+  transition:transform .15s ease,box-shadow .15s ease;
+}
+.engine:hover{
+  transform:translateY(-2px);
+  box-shadow:var(--ui-shadow);
+}
+.engine.doublon{
+  border-top:3px solid var(--ui-green) !important;
+}
+.engine.plagiat{
+  border-top:3px solid var(--ui-yellow) !important;
+}
+.engine-kicker{
+  color:var(--ui-green) !important;
+  font-weight:700;
+  font-size:11px !important;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.engine h2{font-size:19px !important}
+.engine p{color:var(--ui-muted) !important}
+
+/* ---------- indicateurs ---------- */
+.pulse{
+  background:var(--ui-surface) !important;
+  border-color:var(--ui-border) !important;
+  box-shadow:var(--ui-shadow-soft);
+}
+.pulse-cell{
+  border-color:var(--ui-border) !important;
+}
+.pulse-cell b{
+  color:var(--ui-green-dark);
+  font-size:25px !important;
+}
+.pulse-cell span{color:var(--ui-muted) !important}
+
+/* ---------- formulaires ---------- */
+.field label{color:var(--ui-text) !important}
+select,input[type=text],input[type=password],input[type=file],input[type=search]{
+  background:#fff !important;
+  color:var(--ui-text) !important;
+  border-color:var(--ui-border-strong) !important;
+  border-radius:7px !important;
+}
+select:focus,input:focus{
+  border-color:var(--ui-green) !important;
+  box-shadow:0 0 0 3px rgba(8,120,62,.10);
+  outline:0;
+}
+input[type=file]{background:var(--ui-surface-soft) !important}
+.alert{
+  background:var(--ui-red-soft) !important;
+  border-color:#edc4c9 !important;
+}
+.error{color:var(--ui-red) !important}
+
+/* ---------- tableaux ---------- */
+table.ledger th{color:#718078 !important}
+table.ledger td{border-color:#edf1ee !important}
+table.ledger tbody tr:hover td{background:#f8fbf9}
+table.ledger .doc-name strong{color:var(--ui-text)}
+.status-ok{
+  background:var(--ui-green-soft) !important;
+  color:var(--ui-green-dark) !important;
+  border-color:#b8ddc7 !important;
+}
+.status-alert{
+  background:var(--ui-red-soft) !important;
+  color:var(--ui-red) !important;
+  border-color:#e7b8be !important;
+}
+.status-neutral{
+  background:#f0f3f1 !important;
+  color:#637068 !important;
+}
+
+/* ---------- résultats ---------- */
+.verdict.v-alert{color:var(--ui-red) !important}
+.verdict.v-ok{color:var(--ui-green) !important}
+.score-cell.emph{
+  background:var(--ui-green-soft) !important;
+}
+.score-cell strong{color:var(--ui-text)}
+.verdict-note.v-alert{
+  background:var(--ui-red-soft) !important;
+  border-color:#e7b8be !important;
+}
+.verdict-note.v-ok{
+  background:var(--ui-green-soft) !important;
+  border-color:#b8ddc7 !important;
+}
+.evidence-quote.candidate{
+  background:var(--ui-yellow-soft) !important;
+  border-color:#ead98b !important;
+}
+.evidence-quote.candidate .tag{color:#947400 !important}
+.evidence-quote.source{
+  background:#f7f9f8 !important;
+}
+
+/* ---------- authentification ---------- */
+.auth-shell{
+  min-height:100vh;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(8,120,62,.10), transparent 280px),
+    linear-gradient(135deg,#f4f8f5 0%,#fff 55%,#f5f7f6 100%);
+  padding-top:4px;
+}
+.auth-aside{
+  position:relative;
+  overflow:hidden;
+  background:
+    linear-gradient(145deg,rgba(8,120,62,.97),rgba(5,91,49,.98)),
+    #08783e !important;
+  border-right:0 !important;
+  color:#fff;
+  padding:64px 68px !important;
+}
+.auth-aside::before{
+  content:"";
+  position:absolute;
+  width:420px;height:420px;
+  right:-190px;bottom:-190px;
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:50%;
+  box-shadow:0 0 0 70px rgba(255,255,255,.035),0 0 0 140px rgba(255,255,255,.025);
+}
+.auth-aside::after{
+  content:"";
+  position:absolute;
+  left:0;right:0;bottom:0;height:6px;
+  background:linear-gradient(90deg,var(--ui-red) 0 33.33%,var(--ui-yellow) 33.33% 66.66%,#fff 66.66% 100%);
+}
+.auth-aside .brand-mark,
+.auth-aside .brand-mark b{
+  color:#fff !important;
+}
+.auth-aside .brand-tag,
+.auth-aside p.lede,
+.auth-aside .auth-facts span{
+  color:rgba(255,255,255,.82) !important;
+}
+.auth-aside h1{
+  font-size:34px !important;
+  max-width:520px !important;
+  line-height:1.18 !important;
+}
+.auth-facts{
+  border-top-color:rgba(255,255,255,.22) !important;
+  max-width:560px;
+}
+.auth-facts div{
+  border-bottom-color:rgba(255,255,255,.16) !important;
+}
+.auth-facts b{color:#ffe16b !important}
+.auth-panel{
+  background:#fff;
+  padding:52px !important;
+}
+.auth-panel-inner{
+  max-width:390px !important;
+  padding:36px !important;
+  border:1px solid var(--ui-border);
+  border-radius:14px;
+  box-shadow:0 18px 50px rgba(22,48,35,.09);
+}
+.auth-panel .brand-mark{font-size:22px}
+.auth-panel h2{font-size:25px !important}
+.auth-panel .lede{color:var(--ui-muted) !important}
+.auth-panel .btn-primary{
+  min-height:46px;
+  font-size:14px;
+}
+.auth-panel::before{
+  content:"PTBA · IA";
+  display:block;
+  position:absolute;
+  top:28px;right:34px;
+  color:var(--ui-green);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.12em;
+}
+
+/* ---------- détails / progression ---------- */
+.proc-track{background:#e4ebe6 !important}
+.proc-track span{background:var(--ui-green) !important}
+.proc-head .pct{color:var(--ui-green) !important}
+.proc-step.current .mark{color:var(--ui-green) !important}
+.proc-step.done .mark{color:var(--ui-green) !important}
+
+/* ---------- responsive ---------- */
+@media(max-width:760px){
+  .ctxbar{background:#fff !important}
+  .auth-aside{display:flex !important;min-height:270px;padding:38px 28px !important}
+  .auth-aside h1{font-size:25px !important}
+  .auth-aside .auth-facts{display:none}
+  .auth-panel{padding:28px 16px !important}
+  .auth-panel-inner{padding:24px !important}
+}
