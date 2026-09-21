@@ -316,3 +316,20 @@ body {
     font-size: 30px;
   }
 }
+
+.create-account {
+  margin-top: 28px;
+  text-align: center;
+  font-size: 14px;
+  color: #5C6B64;
+}
+
+.create-account a {
+  color: #0B6E3E;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.create-account a:hover {
+  text-decoration: underline;
+}
