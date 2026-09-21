@@ -536,3 +536,222 @@ html[data-theme="dark"] .main{
     radial-gradient(circle at 92% 82%, rgba(230,184,0,.055), transparent 260px),
     linear-gradient(135deg,#0d1712 0%,#101a16 52%,#0f1720 100%) !important;
 }
+
+
+/* ==========================================================================
+   PTBA·IA — écran de connexion institutionnel
+   Inspiré de la composition de référence : en-tête institutionnel,
+   espace éditorial à gauche et connexion sécurisée à droite.
+   ========================================================================== */
+.ptba-login{
+  background:#f7fafb !important;
+  color:#14231c;
+}
+.ptba-login .auth-shell{
+  min-height:calc(100vh - 104px);
+  grid-template-columns:60% 40%;
+  background:
+    radial-gradient(circle at 8% 32%,rgba(8,120,62,.055),transparent 330px),
+    linear-gradient(135deg,#eef7f3 0%,#fff 54%,#f7fafb 100%);
+  padding-top:0;
+}
+.login-header{
+  height:104px;
+  background:#fff;
+  border-bottom:1px solid #e3e9e6;
+  position:relative;
+  z-index:10;
+}
+.login-header::before{
+  content:"";
+  position:absolute;left:0;right:0;top:0;height:4px;
+  background:linear-gradient(90deg,#08783e 0 41%,#b4232d 41% 70%,#e6b800 70% 100%);
+}
+.login-header-inner{
+  height:100%;
+  max-width:1500px;
+  margin:0 auto;
+  padding:0 42px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.ministry-brand{display:flex;align-items:center;gap:16px}
+.ministry-brand strong{
+  display:block;font-size:14px;line-height:1.35;color:#18241f;font-weight:750;
+}
+.ministry-brand small{
+  display:block;margin-top:5px;font-size:10px;letter-spacing:.16em;color:#68766f;font-weight:700;
+}
+.ministry-emblem{
+  width:82px;height:70px;position:relative;display:grid;place-items:center;
+  border-right:2px solid #08783e;padding-right:16px;
+}
+.emblem-star{
+  width:31px;height:31px;border-radius:50%;
+  display:grid;place-items:center;background:#08783e;color:#e6b800;
+  font-size:16px;
+}
+.emblem-line{
+  position:absolute;left:20px;right:16px;bottom:12px;height:3px;
+  background:linear-gradient(90deg,#08783e 0 33%,#b4232d 33% 66%,#e6b800 66%);
+}
+.login-header-actions{display:flex;align-items:center;gap:20px}
+.login-icon-btn{
+  border:0;background:transparent;color:#2d4a3c;font-size:27px;cursor:pointer;
+}
+.language-chip{
+  display:flex;align-items:center;gap:9px;padding:12px 17px;
+  border:1px solid #dfe7e3;border-radius:9px;background:#fff;
+  color:#24332c;font-size:14px;font-weight:600;
+}
+.bf-dot{width:20px;height:20px;border-radius:50%;background:linear-gradient(#b4232d 0 50%,#08783e 50%);position:relative}
+.bf-dot::after{content:"★";position:absolute;inset:0;display:grid;place-items:center;color:#e6b800;font-size:9px}
+.chevron{color:#65746c;font-size:18px;margin-left:3px}
+.ptba-login .auth-aside{
+  padding:0 !important;
+  border-right:1px solid #dce6e1 !important;
+  background:transparent !important;
+  color:#14231c;
+  overflow:hidden;
+  justify-content:flex-start;
+}
+.login-hero{
+  width:100%;height:100%;min-height:calc(100vh - 104px);
+  padding:72px 8% 0;
+  position:relative;overflow:hidden;
+}
+.ptba-brand-lockup{display:flex;align-items:center;gap:20px;position:relative;z-index:2}
+.ptba-logo-mark{width:86px;height:86px;position:relative;flex:none}
+.ptba-logo-mark .doc-back,.ptba-logo-mark .doc-front{
+  position:absolute;width:54px;height:68px;border:5px solid #08783e;border-radius:11px;
+}
+.ptba-logo-mark .doc-back{left:7px;top:2px}
+.ptba-logo-mark .doc-front{left:24px;top:17px;border-color:#08783e}
+.ptba-logo-mark .search-ring{
+  position:absolute;width:34px;height:34px;border:5px solid #08783e;border-radius:50%;
+  right:0;bottom:3px;background:#fff;
+}
+.ptba-logo-mark .search-ring::after{
+  content:"";position:absolute;width:22px;height:5px;background:#08783e;right:-15px;bottom:-7px;transform:rotate(48deg);border-radius:3px;
+}
+.ptba-name{font-size:52px;line-height:1;font-weight:850;letter-spacing:-.04em;color:#08783e}
+.ptba-name b{color:#e6b800;margin:0 3px}.ptba-name strong{color:#b4232d}
+.ptba-subtitle{margin-top:10px;font-size:14px;line-height:1.35;color:#586b62;font-weight:650;letter-spacing:.025em}
+.ptba-tricolor{width:170px;height:4px;border-radius:3px;margin-top:20px;background:linear-gradient(90deg,#08783e 0 33%,#b4232d 33% 66%,#e6b800 66%)}
+.login-hero h1{
+  margin:42px 0 16px;font-size:43px;line-height:1.16;letter-spacing:-.035em;
+  color:#10231b;font-weight:780;position:relative;z-index:2;
+}
+.login-hero h1 span{color:#e6b800}
+.login-hero > .lede{
+  max-width:570px;margin:0;color:#667870;font-size:18px;line-height:1.55;position:relative;z-index:2;
+}
+.hero-visual{
+  position:absolute;left:0;right:0;bottom:0;height:40%;min-height:250px;
+  overflow:hidden;pointer-events:none;
+}
+.building{
+  position:absolute;left:-20px;bottom:64px;width:58%;height:190px;
+  background:linear-gradient(180deg,#dfe9e4,#c9d8d1);
+  clip-path:polygon(0 22%,82% 22%,100% 42%,100% 100%,0 100%);
+  filter:drop-shadow(0 8px 14px rgba(22,58,42,.12));
+}
+.building-roof{position:absolute;left:0;right:18%;top:0;height:15px;background:#c2d0ca}
+.building-columns{
+  position:absolute;left:19%;right:4%;top:32px;bottom:0;
+  display:flex;gap:16px;align-items:stretch;padding:0 12px;
+}
+.building-columns i{
+  flex:1;border-left:6px solid rgba(255,255,255,.72);
+  border-right:6px solid rgba(100,130,115,.18);
+  background:linear-gradient(90deg,rgba(8,120,62,.08),rgba(255,255,255,.48));
+}
+.building-base{position:absolute;left:0;right:0;bottom:0;height:22px;background:#b8c9c0}
+.hero-wave{
+  position:absolute;left:-7%;bottom:-125px;width:112%;height:245px;
+  background:#08783e;border-radius:50% 50% 0 0/38% 38% 0 0;
+  transform:rotate(4deg);
+}
+.hero-wave-red{bottom:-112px;height:235px;background:#b4232d;transform:rotate(4.5deg)}
+.hero-wave-yellow{bottom:-104px;height:225px;background:#e6b800;transform:rotate(5deg)}
+.hero-wave:not(.hero-wave-red):not(.hero-wave-yellow){z-index:3}
+.hero-wave-yellow{z-index:1}.hero-wave-red{z-index:2}
+.hero-wave{box-shadow:inset 0 12px 0 rgba(255,255,255,.18)}
+.hero-flag{
+  position:absolute;left:13%;bottom:138px;width:4px;height:120px;background:#58645f;z-index:4;
+}
+.hero-flag span{
+  position:absolute;left:3px;top:0;width:78px;height:48px;
+  background:linear-gradient(#b4232d 0 50%,#08783e 50%);
+  clip-path:polygon(0 0,100% 10%,84% 100%,0 82%);
+}
+.hero-flag span::after{content:"★";position:absolute;inset:0;display:grid;place-items:center;color:#e6b800;font-size:14px}
+.ptba-login .auth-panel{
+  padding:56px 7% !important;
+  background:rgba(255,255,255,.82) !important;
+  justify-content:center;
+}
+.ptba-login .auth-panel-inner{
+  max-width:560px !important;
+  padding:42px 44px !important;
+  border:1px solid #e3ebe7;
+  border-radius:14px;
+  background:rgba(255,255,255,.95);
+  box-shadow:0 20px 55px rgba(25,65,46,.10);
+}
+.secure-heading{display:flex;align-items:center;gap:14px;margin-bottom:25px}
+.secure-icon{
+  width:50px;height:50px;border-radius:12px;background:#08783e;color:#fff;
+  display:grid;place-items:center;font-size:28px;font-weight:700;
+  box-shadow:0 8px 20px rgba(8,120,62,.16);
+}
+.secure-heading strong{display:block;color:#08783e;font-size:14px;letter-spacing:.02em}
+.secure-heading span{
+  display:block;width:82px;height:3px;margin-top:12px;
+  background:linear-gradient(90deg,#08783e 0 45%,#b4232d 45% 70%,#e6b800 70%);
+}
+.ptba-login .auth-panel h2{font-size:38px !important;color:#172820;margin-bottom:4px}
+.ptba-login .auth-panel .lede{font-size:16px;color:#7a8982 !important;margin-bottom:38px}
+.ptba-login .field{margin-bottom:25px}
+.ptba-login .field label{font-size:14px;color:#1d2c25 !important}
+.ptba-login .field input{
+  min-height:57px !important;padding:14px 16px !important;border:1px solid #cfdad5 !important;
+  border-radius:9px !important;background:#fff !important;box-shadow:none !important;font-size:15px !important;
+}
+.ptba-login .field input:focus{
+  border-color:#08783e !important;box-shadow:0 0 0 3px rgba(8,120,62,.10) !important;
+}
+.ptba-login .login-submit{
+  min-height:58px !important;border-radius:9px !important;font-size:16px !important;
+  justify-content:center;box-shadow:0 10px 20px rgba(8,120,62,.18) !important;
+}
+.login-submit span{font-size:24px;margin-left:16px;font-weight:400}
+.ptba-login .auth-trust{
+  margin-top:25px;padding:15px 17px;border:0;border-radius:8px;
+  background:#eef8f3;color:#4f7a69;font-size:13px;display:flex;align-items:center;gap:11px;
+}
+.trust-icon{
+  width:23px;height:23px;border:2px solid #08783e;border-radius:6px;
+  display:grid;place-items:center;color:#08783e;font-weight:800;
+}
+@media(max-width:900px){
+  .login-header-inner{padding:0 22px}.ministry-brand strong{font-size:12px}.ministry-emblem{width:64px}
+  .ptba-login .auth-shell{grid-template-columns:1fr}
+  .login-hero{min-height:560px;padding:55px 8% 0}
+  .ptba-login .auth-panel{padding:45px 8% !important}
+  .hero-visual{height:36%}
+}
+@media(max-width:600px){
+  .login-header{height:86px}.login-header-actions{gap:8px}.login-icon-btn{display:none}
+  .ministry-brand small{font-size:8px}.ministry-brand strong{font-size:10px}.ministry-emblem{display:none}
+  .language-chip{padding:9px 11px;font-size:12px}
+  .login-hero{min-height:500px;padding:42px 24px 0}
+  .ptba-name{font-size:39px}.ptba-logo-mark{width:65px;height:65px;transform:scale(.78);transform-origin:left center}
+  .ptba-subtitle{font-size:11px}.login-hero h1{font-size:31px;margin-top:34px}
+  .login-hero > .lede{font-size:15px}
+  .building{width:78%}.hero-flag{left:7%}
+  .ptba-login .auth-panel{padding:32px 18px !important}
+  .ptba-login .auth-panel-inner{padding:28px 22px !important}
+  .ptba-login .auth-panel h2{font-size:30px !important}
+}
