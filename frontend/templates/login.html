@@ -1,96 +1,76 @@
 {% load static %}
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>PTBA·IA — Connexion</title>
-  <link rel="stylesheet" href="{% static 'css/app.css' %}">
-  <link rel="stylesheet" href="{% static 'css/institutional.css' %}">
-  <script src="{% static 'js/theme.js' %}"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PTBA · IA — Connexion</title>
+  <link rel="stylesheet" href="{% static 'css/login-ptba.css' %}">
 </head>
-<body class="ptba-login">
-  <div class="login-header">
-    <div class="login-header-inner">
-      <div class="ministry-brand">
-        <div class="ministry-emblem" aria-hidden="true">
-          <span class="emblem-star">★</span>
-          <span class="emblem-line"></span>
+<body>
+  <div class="top-stripe"></div>
+
+  <div class="login-wrapper">
+    <div class="login-left">
+      <div class="brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="48" height="48" viewBox="0 0 64 64" fill="none">
+            <rect x="8" y="12" width="36" height="44" rx="4" stroke="#0B6E3E" stroke-width="3"/>
+            <path d="M20 28h20M20 36h16M20 44h12" stroke="#0B6E3E" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="42" cy="42" r="14" stroke="#0B6E3E" stroke-width="3"/>
+            <path d="M50 50l8 8" stroke="#0B6E3E" stroke-width="3" stroke-linecap="round"/>
+          </svg>
         </div>
         <div>
-          <strong>Ministère de la Transition Digitale,<br>des Postes et des Communications Électroniques</strong>
-          <small>BURKINA FASO</small>
+          <h1>PTBA<span class="dot">·</span><span class="ia">IA</span></h1>
+          <p class="subtitle">Plateforme de détection de plagiat<br>et de doublon d’études</p>
+          <div class="line"></div>
         </div>
       </div>
-      <div class="login-header-actions">
-        <button class="login-icon-btn" type="button" aria-label="Apparence">☼</button>
-        <div class="language-chip"><span class="bf-dot"></span> Français <span class="chevron">⌄</span></div>
-      </div>
+
+      <h2 class="hero">Le contrôle intelligent<br>des études.</h2>
+      <p class="desc">Une plateforme pour détecter les doublons et contrôler la similarité des livrables PTBA.</p>
     </div>
-  </div>
 
-  <main class="auth-shell">
-    <section class="auth-aside">
-      <div class="login-hero">
-        <div class="ptba-brand-lockup">
-          <div class="ptba-logo-mark" aria-hidden="true">
-            <span class="doc-back"></span><span class="doc-front"></span><span class="search-ring"></span>
-          </div>
-          <div>
-            <div class="ptba-name"><span>PTBA</span><b>·</b><strong>IA</strong></div>
-            <div class="ptba-subtitle">PLATEFORME DE DÉTECTION DE PLAGIAT<br>ET DE DOUBLON D’ÉTUDES (PTBA)</div>
-            <div class="ptba-tricolor"></div>
-          </div>
-        </div>
-
-        <h1>Le contrôle intelligent<br>des études<span>.</span></h1>
-        <p class="lede">Une plateforme pour détecter les doublons et contrôler la similarité des livrables PTBA.</p>
-
-        <div class="hero-visual" aria-hidden="true">
-          <div class="building">
-            <div class="building-roof"></div>
-            <div class="building-columns"><i></i><i></i><i></i><i></i><i></i></div>
-            <div class="building-base"></div>
-          </div>
-          <div class="hero-wave"></div>
-          <div class="hero-wave hero-wave-red"></div>
-          <div class="hero-wave hero-wave-yellow"></div>
-          <div class="hero-flag"><span></span></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="auth-panel">
-      <div class="auth-panel-inner">
-        <div class="secure-heading">
-          <div class="secure-icon">⌑</div>
-          <div><strong>ESPACE SÉCURISÉ</strong><span></span></div>
-        </div>
+    <div class="login-right">
+      <div class="card">
+        <div class="secure-badge"><span class="shield">⌑</span> ESPACE SÉCURISÉ</div>
         <h2>Connexion</h2>
         <p class="lede">Accédez à votre espace de travail</p>
 
         <form method="post">
           {% csrf_token %}
-          {% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}
+          {% if form.non_field_errors %}
+            <div class="alert">{{ form.non_field_errors }}</div>
+          {% endif %}
+
           <div class="field">
             <label>{{ form.username.label }}</label>
-            {{ form.username }}
+            <div class="input-wrap">
+              <span class="icon">👤</span>
+              {{ form.username }}
+            </div>
             {% for error in form.username.errors %}<small class="error">{{ error }}</small>{% endfor %}
           </div>
+
           <div class="field">
             <label>{{ form.password.label }}</label>
-            {{ form.password }}
+            <div class="input-wrap">
+              <span class="icon">🔒</span>
+              {{ form.password }}
+            </div>
             {% for error in form.password.errors %}<small class="error">{{ error }}</small>{% endfor %}
           </div>
-          <button class="btn btn-primary btn-block login-submit" type="submit">Se connecter <span>→</span></button>
+
+          <button type="submit" class="btn-login">Se connecter →</button>
         </form>
 
-        <div class="auth-trust">
-          <span class="trust-icon">✓</span>
-          <span>Accès réservé aux agents habilités</span>
-        </div>
+        <div class="divider"><span>Accès sécurisé</span></div>
+        <p class="access-note">Accès réservé aux agents habilités · traitements tracés · décision humaine</p>
       </div>
-    </section>
-  </main>
+    </div>
+  </div>
+
+  <div class="bottom-wave" aria-hidden="true"></div>
 </body>
 </html>
