@@ -6,7 +6,7 @@ from django.core.files.storage import FileSystemStorage
 from docx import Document as DocxDocument
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q
@@ -17,7 +17,13 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from .forms import LoginForm
+from .forms import (
+    LoginForm,
+    SignUpForm,
+    AdminUserCreateForm,
+    AdminUserUpdateForm,
+    AdminSetPasswordForm,
+)
 from .models import Analysis, StudyDocument
 
 
@@ -30,6 +36,64 @@ def login_view(request):
         return redirect("detector:dashboard")
     return render(request, "login.html", {"form": form})
 
+
+
+def password_reset_request(request):
+    from django.contrib.auth.forms import PasswordResetForm
+    from django.template.loader import render_to_string
+    from django.core.mail import send_mail
+    from django.utils.http import urlsafe_base64_encode
+    from django.utils.encoding import force_bytes
+    from django.contrib.auth.tokens import default_token_generator
+
+    if request.user.is_authenticated:
+        return redirect("detector:dashboard")
+
+    form = PasswordResetForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        form.save(
+            request=request,
+            use_https=request.is_secure(),
+            email_template_name="password_reset_email.txt",
+            subject_template_name="password_reset_subject.txt",
+            html_email_template_name=None,
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+        )
+        return redirect("detector:password_reset_done")
+    return render(request, "password_reset.html", {"form": form})
+
+
+def password_reset_done(request):
+    return render(request, "password_reset_done.html")
+
+
+def password_reset_confirm(request, uidb64, token):
+    from django.contrib.auth.views import PasswordResetConfirmView
+    view = PasswordResetConfirmView.as_view(
+        template_name="password_reset_confirm.html",
+        success_url="/mot-de-passe-reinitialise/",
+    )
+    return view(request, uidb64=uidb64, token=token)
+
+
+def password_reset_complete(request):
+    return render(request, "password_reset_complete.html")
+
+
+
+def signup_view(request):
+    if request.user.is_authenticated:
+        return redirect("detector:dashboard")
+    form = SignUpForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.save()
+        messages.success(request, "Votre compte a été créé. Vous pouvez maintenant vous connecter.")
+        return redirect("detector:login")
+    return render(request, "signup.html", {"form": form})
+
+
+class _PasswordResetView:
+    pass
 
 def logout_view(request):
     logout(request)
@@ -319,64 +383,109 @@ def export_pdf(request):
 
 
 
+
 @login_required
 def administration(request):
-    """Console d'administration métier TDRDOC-SCAN, indépendante de Django Admin."""
     if not request.user.is_staff:
         messages.error(request, "Accès réservé aux administrateurs.")
         return redirect("detector:dashboard")
 
-    from django.contrib.auth import get_user_model
-    from .models import WhitelistedPassage
-    from .forms import StudyDocumentForm, WhitelistedPassageForm
-
-    document_form = StudyDocumentForm()
-    whitelist_form = WhitelistedPassageForm()
+    User = get_user_model()
+    users = User.objects.order_by("-is_active", "username")
 
     if request.method == "POST":
         action = request.POST.get("action", "")
-        if action == "create_document":
-            document_form = StudyDocumentForm(request.POST)
-            if document_form.is_valid():
-                document_form.save()
-                messages.success(request, "Document ajouté au registre.")
+
+        if action == "create_user":
+            form = AdminUserCreateForm(request.POST)
+            if form.is_valid():
+                user = form.save()
+                messages.success(request, f"Le compte « {user.username} » a été créé.")
                 return redirect("detector:administration")
-        elif action == "delete_document":
-            document = get_object_or_404(StudyDocument, pk=request.POST.get("document_id"))
-            document.delete()
-            messages.success(request, "Document retiré du registre.")
-            return redirect("detector:administration")
-        elif action == "create_whitelist":
-            whitelist_form = WhitelistedPassageForm(request.POST)
-            if whitelist_form.is_valid():
-                whitelist_form.save()
-                messages.success(request, "Passage autorisé enregistré.")
-                return redirect("detector:administration")
-        elif action == "toggle_whitelist":
-            passage = get_object_or_404(WhitelistedPassage, pk=request.POST.get("passage_id"))
-            passage.active = not passage.active
-            passage.save(update_fields=["active"])
-            messages.success(request, "État du passage autorisé mis à jour.")
-            return redirect("detector:administration")
-        elif action == "delete_whitelist":
-            passage = get_object_or_404(WhitelistedPassage, pk=request.POST.get("passage_id"))
-            passage.delete()
-            messages.success(request, "Passage autorisé supprimé.")
+            return render(request, "administration.html", {
+                "create_user_form": form,
+                "users": users,
+                "stats": _admin_user_stats(User),
+                "current_section": "users",
+            })
+
+        if action == "toggle_user":
+            user = get_object_or_404(User, pk=request.POST.get("user_id"))
+            if user.pk == request.user.pk:
+                messages.error(request, "Vous ne pouvez pas désactiver votre propre compte depuis cette page.")
+            else:
+                user.is_active = not user.is_active
+                user.save(update_fields=["is_active"])
+                messages.success(request, f"Le compte « {user.username} » est maintenant {'actif' if user.is_active else 'inactif'}.")
             return redirect("detector:administration")
 
-    User = get_user_model()
+        if action == "delete_user":
+            user = get_object_or_404(User, pk=request.POST.get("user_id"))
+            if user.pk == request.user.pk:
+                messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
+            else:
+                username = user.username
+                user.delete()
+                messages.success(request, f"Le compte « {username} » a été supprimé.")
+            return redirect("detector:administration")
+
     context = {
-        "document_form": document_form,
-        "whitelist_form": whitelist_form,
-        "documents": StudyDocument.objects.order_by("-updated_at")[:20],
-        "analyses": Analysis.objects.select_related("user").order_by("-created_at")[:20],
-        "passages": WhitelistedPassage.objects.order_by("-created_at")[:20],
-        "users": User.objects.order_by("username")[:30],
-        "stats": {
-            "users": User.objects.count(),
-            "documents": StudyDocument.objects.count(),
-            "analyses": Analysis.objects.count(),
-            "whitelisted": WhitelistedPassage.objects.filter(active=True).count(),
-        },
+        "create_user_form": AdminUserCreateForm(),
+        "users": users,
+        "stats": _admin_user_stats(User),
+        "current_section": "users",
     }
     return render(request, "administration.html", context)
+
+
+@login_required
+def administration_utilisateur(request, pk):
+    if not request.user.is_staff:
+        messages.error(request, "Accès réservé aux administrateurs.")
+        return redirect("detector:dashboard")
+
+    User = get_user_model()
+    target = get_object_or_404(User, pk=pk)
+    profile_form = AdminUserUpdateForm(request.POST or None, instance=target)
+    password_form = AdminSetPasswordForm(target, request.POST or None)
+
+    action = request.POST.get("action", "")
+    if request.method == "POST":
+        if action == "update_profile":
+            profile_form = AdminUserUpdateForm(request.POST, instance=target)
+            if profile_form.is_valid():
+                profile_form.save()
+                messages.success(request, f"Le compte « {target.username} » a été mis à jour.")
+                return redirect("detector:administration_utilisateur", pk=target.pk)
+
+        elif action == "reset_password":
+            password_form = AdminSetPasswordForm(target, request.POST)
+            if password_form.is_valid():
+                password_form.save()
+                messages.success(request, f"Le mot de passe de « {target.username} » a été réinitialisé.")
+                return redirect("detector:administration_utilisateur", pk=target.pk)
+
+        elif action == "delete_user":
+            if target.pk == request.user.pk:
+                messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
+                return redirect("detector:administration_utilisateur", pk=target.pk)
+            username = target.username
+            target.delete()
+            messages.success(request, f"Le compte « {username} » a été supprimé.")
+            return redirect("detector:administration")
+
+    return render(request, "administration_utilisateur.html", {
+        "target_user": target,
+        "profile_form": profile_form,
+        "password_form": password_form,
+    })
+
+
+def _admin_user_stats(User):
+    return {
+        "users": User.objects.count(),
+        "active": User.objects.filter(is_active=True).count(),
+        "inactive": User.objects.filter(is_active=False).count(),
+        "admins": User.objects.filter(is_staff=True).count(),
+        "regular": User.objects.filter(is_staff=False).count(),
+    }
