@@ -9,39 +9,45 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body { width: 100%; height: 100%; overflow: hidden; }
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   color: var(--text);
-  background: #f8faf9;
+  background: #0a0d12;
 }
 
-/* En-tête compact : tout doit rester visible sur une seule page */
+/* En-tête compact */
 .institution-header {
   height: 92px;
   width: 100%;
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 10px 2.5%;
+  padding: 8px 2.5%;
   background: #fff;
   border-top: 5px solid var(--green);
   border-bottom: 1px solid #e7e9e8;
 }
 
 .header-logo {
-  width: 68px;
-  height: 76px;
-  flex: 0 0 68px;
+  width: 72px;
+  height: 78px;
+  flex: 0 0 72px;
   display: grid;
   place-items: center;
+  overflow: hidden;
 }
 
-.header-logo svg {
+.header-logo img {
   width: 58px;
-  height: 72px;
-  filter: drop-shadow(0 2px 2px rgba(0,0,0,.10));
+  height: 70px;
+  object-fit: contain;
+  display: block;
 }
 
 .institution-title {
@@ -61,38 +67,7 @@ body {
 .institution-title h1 strong { font-weight: 800; }
 .institution-title h1 span { font-weight: 400; }
 
-.flag-burkina {
-  position: relative;
-  width: 38px;
-  height: 56px;
-  margin-right: 1%;
-  flex: 0 0 38px;
-  transform: rotate(2deg);
-  filter: drop-shadow(0 2px 2px rgba(0,0,0,.14));
-}
-
-.flag-green, .flag-red {
-  position: absolute;
-  left: 8px;
-  width: 23px;
-  height: 20px;
-  transform: skewY(-9deg);
-}
-
-.flag-green { top: 6px; background: var(--green); border-radius: 2px 2px 0 0; }
-.flag-red { top: 26px; background: var(--red); border-radius: 0 0 2px 2px; }
-
-.flag-star {
-  position: absolute;
-  left: 15px;
-  top: 18px;
-  z-index: 2;
-  color: var(--yellow);
-  font-size: 10px;
-  line-height: 1;
-}
-
-/* Bloc principal compact, hauteur fixe : pas de défilement */
+/* Zone de connexion */
 .login-page {
   width: min(1120px, 94%);
   height: calc(100vh - 108px);
@@ -103,7 +78,7 @@ body {
   overflow: hidden;
   border-radius: 22px;
   background: #fff;
-  box-shadow: 0 8px 30px rgba(0,0,0,.08);
+  box-shadow: 0 8px 30px rgba(0,0,0,.24);
 }
 
 .login-panel {
@@ -156,34 +131,15 @@ body {
   font-size: clamp(22px, 2.15vw, 34px);
   line-height: 1.25;
   font-weight: 500;
-  margin-bottom: clamp(28px, 4vh, 44px);
 }
 
-.back-button {
-  appearance: none;
-  min-width: 125px;
-  padding: 11px 25px;
-  border: 1.5px solid #fff;
-  border-radius: 26px;
-  color: #fff;
-  background: transparent;
-  font-size: 15px;
-  cursor: pointer;
-  transition: .2s ease;
-}
-
-.back-button:hover { background: #fff; color: var(--green); }
-
-/* Formulaire */
 .login-form-area {
   min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px 7%;
-  background:
-    radial-gradient(circle at 100% 0, rgba(22,130,58,.06), transparent 210px),
-    #fff;
+  background: #fff;
 }
 
 .login-card {
@@ -357,7 +313,6 @@ body {
   font-size: 11px;
 }
 
-/* Petites tailles : adaptation sans casser le formulaire */
 @media (max-width: 900px) {
   html, body { overflow: auto; }
 
@@ -373,10 +328,12 @@ body {
     flex-basis: 50px;
   }
 
-  .header-logo svg { width: 45px; height: 56px; }
+  .header-logo img {
+    width: 43px;
+    height: 54px;
+  }
 
   .institution-title h1 { font-size: 17px; }
-  .flag-burkina { transform: scale(.75); margin-right: 0; }
 
   .login-page {
     height: auto;
@@ -393,7 +350,7 @@ body {
 }
 
 @media (max-width: 600px) {
-  .header-logo, .flag-burkina { display: none; }
+  .header-logo { display: none; }
   .institution-title h1 { font-size: 16px; }
 
   .login-page {
