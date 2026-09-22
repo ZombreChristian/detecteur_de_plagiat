@@ -53,10 +53,24 @@ body::before{
   top:0;left:0;right:0;
   height:4px;
   z-index:1000;
-  background:linear-gradient(90deg,
-    var(--ui-red) 0 33.33%,
-    var(--ui-yellow) 33.33% 66.66%,
-    var(--ui-green) 66.66% 100%);
+  background:linear-gradient(90deg,var(--ui-red) 0 50%,#16823a 50% 100%);
+}
+body::after{
+  content:"★";
+  position:fixed;
+  top:-2px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:1001;
+  width:18px;
+  height:18px;
+  display:grid;
+  place-items:center;
+  color:var(--ui-yellow);
+  background:#fff;
+  border-radius:50%;
+  font-size:10px;
+  line-height:1;
 }
 
 /* ---------- identité ---------- */
@@ -73,15 +87,7 @@ body::before{
   position:relative;
   padding-top:8px !important;
 }
-.rail-brand::after{
-  content:"SERVICE NUMÉRIQUE PUBLIC";
-  display:block;
-  margin-top:9px;
-  color:var(--ui-green);
-  font-size:9px;
-  font-weight:800;
-  letter-spacing:.12em;
-}
+.rail-brand::after{display:none !important;}
 
 /* ---------- navigation ---------- */
 .rail{
@@ -528,7 +534,22 @@ html[data-theme="light"] .page-pad::before{
   width:72px;
   height:3px;
   border-radius:2px;
-  background:linear-gradient(90deg,var(--ui-red) 0 33.33%,var(--ui-yellow) 33.33% 66.66%,var(--ui-green) 66.66% 100%);
+  background:linear-gradient(90deg,var(--ui-red) 0 50%,#16823a 50% 100%);
+}
+html[data-theme="light"] .page-pad::after{
+  content:"★";
+  position:absolute;
+  top:-14px;
+  left:58px;
+  width:14px;
+  height:14px;
+  display:grid;
+  place-items:center;
+  color:var(--ui-yellow);
+  background:#fff;
+  border-radius:50%;
+  font-size:8px;
+  line-height:1;
 }
 html[data-theme="dark"] .main{
   background:
