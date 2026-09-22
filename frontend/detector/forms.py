@@ -1,6 +1,9 @@
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth import get_user_model
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm, SetPasswordForm
 from .models import StudyDocument, WhitelistedPassage
+
+User = get_user_model()
 
 
 class LoginForm(AuthenticationForm):
@@ -24,6 +27,78 @@ class ReceptionForm(forms.Form):
             ("report", "Réceptionner le rapport associé à un TDR"),
         ],
     )
+
+
+class SignUpForm(UserCreationForm):
+    email = forms.EmailField(label="Adresse e-mail", required=True)
+    first_name = forms.CharField(label="Prénom", required=False)
+    last_name = forms.CharField(label="Nom", required=False)
+
+    class Meta:
+        model = User
+        fields = ("username", "first_name", "last_name", "email", "password1", "password2")
+
+
+class AdminUserCreateForm(UserCreationForm):
+    ROLE_CHOICES = (
+        ("user", "Utilisateur"),
+        ("admin", "Administrateur"),
+    )
+    first_name = forms.CharField(label="Prénom", required=False)
+    last_name = forms.CharField(label="Nom", required=False)
+    email = forms.EmailField(label="Adresse e-mail", required=False)
+    role = forms.ChoiceField(label="Rôle", choices=ROLE_CHOICES, initial="user")
+    is_active = forms.BooleanField(label="Compte actif", required=False, initial=True)
+
+    class Meta:
+        model = User
+        fields = (
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "role",
+            "is_active",
+            "password1",
+            "password2",
+        )
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.is_staff = self.cleaned_data["role"] == "admin"
+        user.is_active = self.cleaned_data["is_active"]
+        if commit:
+            user.save()
+        return user
+
+
+class AdminUserUpdateForm(forms.ModelForm):
+    ROLE_CHOICES = (
+        ("user", "Utilisateur"),
+        ("admin", "Administrateur"),
+    )
+    role = forms.ChoiceField(label="Rôle", choices=ROLE_CHOICES)
+    is_active = forms.BooleanField(label="Compte actif", required=False)
+
+    class Meta:
+        model = User
+        fields = ("username", "first_name", "last_name", "email", "role", "is_active")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.initial["role"] = "admin" if self.instance.is_staff else "user"
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.is_staff = self.cleaned_data["role"] == "admin"
+        user.is_active = self.cleaned_data["is_active"]
+        if commit:
+            user.save()
+        return user
+
+
+class AdminSetPasswordForm(SetPasswordForm):
+    pass
 
 
 class StudyDocumentForm(forms.ModelForm):
