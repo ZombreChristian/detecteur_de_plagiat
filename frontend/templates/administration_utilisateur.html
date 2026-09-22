@@ -50,17 +50,6 @@
           </div>
         </section>
 
-        <section class="panel admin-section">
-          <div class="panel-head"><div><h2>Mot de passe</h2><div class="muted admin-help">Définir un nouveau mot de passe pour cet utilisateur.</div></div></div>
-          <div class="panel-body">
-            <form method="post" class="admin-form">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="reset_password">
-              {{ password_form.as_p }}
-              <button class="btn" type="submit">Réinitialiser le mot de passe</button>
-            </form>
-          </div>
-        </section>
       </div>
 
       <section class="panel admin-section admin-danger-zone">
@@ -69,11 +58,7 @@
           {% if target_user.id == request.user.id %}
             <div class="muted">Votre propre compte ne peut pas être supprimé depuis cette console.</div>
           {% else %}
-            <form method="post" onsubmit="return confirm('Supprimer définitivement ce compte ?');">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="delete_user">
-              <button class="btn admin-danger" type="submit">Supprimer définitivement le compte</button>
-            </form>
+            <a class="btn admin-danger" href="{% url 'detector:administration_utilisateur_supprimer' target_user.id %}">Supprimer définitivement le compte</a>
           {% endif %}
         </div>
       </section>
