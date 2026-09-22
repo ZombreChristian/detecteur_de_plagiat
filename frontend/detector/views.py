@@ -139,12 +139,14 @@ def dashboard(request):
     registry_total = StudyDocument.objects.count()
     registry_tdr = StudyDocument.objects.filter(document_type="TDR").count()
     registry_rapport = StudyDocument.objects.filter(document_type="RAPPORT").count()
+    has_admin = get_user_model().objects.filter(is_staff=True, is_active=True).exists()
     return render(request, "dashboard.html", {
         "recent": page_obj.object_list, "page_obj": page_obj, "total_filtered": paginator.count,
         "q": q, "selected_decision": decision, "selected_mode": mode,
         "total": total, "similar": similar, "different": different, "to_review": to_review,
         "tdr_checks": tdr_checks, "report_checks": report_checks,
         "registry_total": registry_total, "registry_tdr": registry_tdr, "registry_rapport": registry_rapport,
+        "has_admin": has_admin,
     })
 
 
@@ -381,9 +383,45 @@ def export_pdf(request):
 
 
 
+
+@login_required
+def administration_recovery(request):
+    """Récupération contrôlée de l'accès administrateur lorsqu'il n'existe plus aucun administrateur actif."""
+    User = get_user_model()
+    active_admin_exists = User.objects.filter(is_staff=True, is_active=True).exists()
+    if active_admin_exists:
+        return redirect("detector:administration")
+
+    if not settings.DEBUG and not getattr(settings, "ALLOW_ADMIN_BOOTSTRAP", False):
+        messages.error(
+            request,
+            "Aucun administrateur actif n'est configuré. Le mode de récupération est désactivé sur cette installation.",
+        )
+        return redirect("detector:dashboard")
+
+    if request.method == "POST":
+        user = User.objects.get(pk=request.user.pk)
+        user.is_staff = True
+        user.is_active = True
+        user.save(update_fields=["is_staff", "is_active"])
+        messages.success(
+            request,
+            "Votre compte a retrouvé le rôle Administrateur. Vous pouvez maintenant accéder à la console.",
+        )
+        return redirect("detector:administration")
+
+    return render(request, "administration_recovery.html", {
+        "username": request.user.get_username(),
+    })
+
 @login_required
 def administration(request):
+    User = get_user_model()
     if not request.user.is_staff:
+        if not User.objects.filter(is_staff=True, is_active=True).exists() and (
+            settings.DEBUG or getattr(settings, "ALLOW_ADMIN_BOOTSTRAP", False)
+        ):
+            return redirect("detector:administration_recovery")
         messages.error(request, "Accès réservé aux administrateurs.")
         return redirect("detector:dashboard")
 
