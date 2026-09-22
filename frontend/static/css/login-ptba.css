@@ -493,7 +493,8 @@ body.auth-page{
   background:#f2f5f3;
   border-color:#9fa9a4;
 }
-\n.simple-auth-page{
+
+.simple-auth-page{
   min-height:calc(100vh - 108px);
   display:flex;
   align-items:center;
