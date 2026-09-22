@@ -3,12 +3,12 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DOCSEC — Détail de l'analyse</title>
+<title>TDRDOC-SCAN — Détail de l'analyse</title>
 <link rel="stylesheet" href="{% static 'css/app.css' %}" /><link rel="stylesheet" href="{% static 'css/institutional.css' %}">
 <script src="{% static 'js/theme.js' %}"></script></head>
 <body>
 <div class="console">
-<aside class="rail"><div class="rail-brand"><div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div><div class="brand-tag">Registre national des études — PTBA</div></div>
+<aside class="rail"><div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
 <nav class="rail-nav">
 <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">#</span><span>Tableau de bord</span></a>
 <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">↳</span><span>Vérifier un TDR</span></a>
@@ -18,7 +18,7 @@
 </nav>
 <div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div></aside>
 <main class="main">
-<div class="ctxbar"><div><h1>Détail de l'analyse</h1><div class="lede">Résultat enregistré dans l'historique DOCSEC</div></div><div class="actions"><a class="btn" href="{% url 'detector:dashboard' %}">← Tableau de bord</a></div></div>
+<div class="ctxbar"><div><h1>Détail de l'analyse</h1><div class="lede">Résultat enregistré dans l'historique TDRDOC-SCAN</div></div><div class="actions"><a class="btn" href="{% url 'detector:dashboard' %}">← Tableau de bord</a></div></div>
 <div class="page-pad">
 <section class="panel"><div class="panel-head"><div><h2>{{ analysis.document_name }}</h2><div class="muted" style="font-size:12px;margin-top:5px">{{ analysis.created_at|date:'d/m/Y H:i:s' }}</div></div><div>{% if analysis.decision == 'SIMILAIRE' %}<span class="status status-alert">SIMILAIRE</span>{% elif analysis.decision == 'DIFFERENT' %}<span class="status status-ok">DIFFERENT</span>{% else %}<span class="status status-neutral">{{ analysis.decision|default:'—' }}</span>{% endif %}</div></div>
 <div class="panel-body"><div class="engines" style="margin:0"><div class="engine"><div class="engine-kicker muted">Type de contrôle</div><h3>{{ analysis.get_mode_display }}</h3><p>{% if analysis.mode == 'duplicate' %}Vérification de doublon d'un TDR par rapport au registre existant.{% else %}Contrôle de plagiat d'un rapport par rapport au corpus existant.{% endif %}</p></div><div class="engine"><div class="engine-kicker muted">Seuil de décision</div><h3>{{ result.threshold|floatformat:3|default:'—' }}</h3><p>La décision SIMILAIRE est retenue lorsque le score hybride atteint le seuil configuré.</p></div></div></div></section>
