@@ -18,7 +18,7 @@ function applySidebar(state){
   document.documentElement.dataset.sidebar=state;
   localStorage.setItem(SIDEBAR_KEY,state);
   const collapsed=state==="collapsed";
-  document.querySelectorAll(".rail-collapse,.tdr-topbar-toggle").forEach(btn=>{
+  document.querySelectorAll(".rail-collapse").forEach(btn=>{
     btn.setAttribute("aria-expanded",String(!collapsed));
     btn.setAttribute("aria-label",collapsed?"Déployer la barre latérale":"Réduire la barre latérale");
     btn.setAttribute("title",collapsed?"Déployer la barre latérale":"Réduire la barre latérale");
@@ -57,8 +57,6 @@ function initTopbar(){
 
   const ctxTitle=main.querySelector(".ctxbar h1");
   const pageTitle=ctxTitle ? ctxTitle.textContent.trim() : "Espace de travail";
-  const userNode=document.querySelector(".rail-user strong");
-  const user=userNode ? userNode.textContent.trim() : "";
 
   const bar=document.createElement("div");
   bar.id="tdr-topbar";
@@ -66,43 +64,35 @@ function initTopbar(){
 
   const left=document.createElement("div");
   left.className="tdr-topbar-left";
-  const toggle=document.createElement("button");
-  toggle.className="tdr-topbar-toggle";
-  toggle.type="button";
-  toggle.setAttribute("aria-expanded","true");
-  toggle.setAttribute("aria-label","Réduire la barre latérale");
-  toggle.setAttribute("title","Réduire la barre latérale");
-  toggle.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5l-7 7 7 7"></path></svg>';
+
   const brand=document.createElement("span");
   brand.className="tdr-topbar-brand";
   brand.textContent="TDRDOC-SCAN";
+
   const separator=document.createElement("span");
   separator.className="tdr-topbar-separator";
+
   const page=document.createElement("span");
   page.className="tdr-topbar-page";
   page.textContent=pageTitle;
 
-  left.append(toggle,brand,separator,page);
+  left.append(brand,separator,page);
 
   const right=document.createElement("div");
   right.className="tdr-topbar-right";
-  const accent=document.createElement("span");
-  accent.className="tdr-topbar-accent";
-  accent.setAttribute("aria-hidden","true");
+
   const status=document.createElement("span");
   status.className="tdr-topbar-status";
   status.textContent="Session active";
+
+  const userNode=document.querySelector(".rail-user strong");
   const userEl=document.createElement("span");
   userEl.className="tdr-topbar-user";
-  userEl.textContent=user;
+  userEl.textContent=userNode ? userNode.textContent.trim() : "";
 
-  right.append(accent,status,userEl);
+  right.append(status,userEl);
   bar.append(left,right);
   main.insertBefore(bar,main.firstChild);
-
-  toggle.addEventListener("click",()=>{
-    applySidebar(document.documentElement.dataset.sidebar==="collapsed"?"expanded":"collapsed");
-  });
 }
 
 function initThemeSettings(){
