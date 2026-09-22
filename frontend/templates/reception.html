@@ -23,7 +23,7 @@
   <div class="page-pad">
     {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
     <div class="engines" id="workflow-content">
-      <section class="panel">
+      <section class="panel national-bar-red">
         <div class="panel-head"><h2>Étape 1 — Vérifier le TDR</h2><span class="muted mono" style="font-size:12px">doublon</span></div>
         <div class="panel-body">
           <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Déposez le nouveau TDR. Il est comparé au registre des TDR déjà présents par similarité sémantique.</p>
@@ -34,7 +34,7 @@
           </form>
         </div>
       </section>
-      <section class="panel" style="{% if not request.session.validated_tdr_name %}opacity:.6{% endif %}">
+      <section class="panel national-bar-green" style="{% if not request.session.validated_tdr_name %}opacity:.6{% endif %}">
         <div class="panel-head"><h2>Étape 2 — Réceptionner le rapport</h2><span class="muted mono" style="font-size:12px">plagiat</span></div>
         <div class="panel-body">
           {% if request.session.validated_tdr_name %}
@@ -51,7 +51,7 @@
         </div>
       </section>
     </div>
-    <section id="processing" class="proc" aria-live="polite">
+    <section id="processing" class="proc national-bar-red" aria-live="polite">
       <div class="proc-head"><strong id="processing-title">Analyse en cours</strong><span class="pct" id="progress-percent">0 %</span></div>
       <div class="proc-track"><span id="progress-fill"></span></div>
       <div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span id="process-text">Lecture du document et préparation du contrôle.</span></div></div>
