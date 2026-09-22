@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm, PasswordChangeForm
 from .models import StudyDocument, WhitelistedPassage
 
 User = get_user_model()
@@ -37,6 +37,21 @@ class SignUpForm(UserCreationForm):
     class Meta:
         model = User
         fields = ("username", "first_name", "last_name", "email", "password1", "password2")
+
+
+class UserPasswordChangeForm(PasswordChangeForm):
+    old_password = forms.CharField(
+        label="Ancien mot de passe",
+        widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
+    )
+    new_password1 = forms.CharField(
+        label="Nouveau mot de passe",
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+    )
+    new_password2 = forms.CharField(
+        label="Confirmer le nouveau mot de passe",
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
+    )
 
 
 class PasswordRecoveryForm(forms.Form):
