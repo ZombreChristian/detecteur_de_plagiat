@@ -316,3 +316,67 @@ def export_pdf(request):
     table = Table(data, colWidths=[150, 350]); table.setStyle(TableStyle([("BACKGROUND", (0,0), (0,-1), colors.HexColor("#eef2f7")), ("GRID", (0,0), (-1,-1), .5, colors.grey), ("VALIGN", (0,0), (-1,-1), "TOP"), ("PADDING", (0,0), (-1,-1), 7)])); story.append(table); story.append(Spacer(1, 18)); story.append(Paragraph("Sources proches", styles["Heading2"]))
     for source in result.get("sources", [])[:10]: story.extend([Paragraph(f"{source.get('source','')} — score {source.get('hybrid_score','')}", styles["BodyText"]), Spacer(1, 5)])
     doc.build(story); response = HttpResponse(buffer.getvalue(), content_type="application/pdf"); response["Content-Disposition"] = 'attachment; filename="rapport_analyse.pdf"'; return response
+
+
+
+@login_required
+def administration(request):
+    """Console d'administration métier TDRDOC-SCAN, indépendante de Django Admin."""
+    if not request.user.is_staff:
+        messages.error(request, "Accès réservé aux administrateurs.")
+        return redirect("detector:dashboard")
+
+    from django.contrib.auth import get_user_model
+    from .models import WhitelistedPassage
+    from .forms import StudyDocumentForm, WhitelistedPassageForm
+
+    document_form = StudyDocumentForm()
+    whitelist_form = WhitelistedPassageForm()
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        if action == "create_document":
+            document_form = StudyDocumentForm(request.POST)
+            if document_form.is_valid():
+                document_form.save()
+                messages.success(request, "Document ajouté au registre.")
+                return redirect("detector:administration")
+        elif action == "delete_document":
+            document = get_object_or_404(StudyDocument, pk=request.POST.get("document_id"))
+            document.delete()
+            messages.success(request, "Document retiré du registre.")
+            return redirect("detector:administration")
+        elif action == "create_whitelist":
+            whitelist_form = WhitelistedPassageForm(request.POST)
+            if whitelist_form.is_valid():
+                whitelist_form.save()
+                messages.success(request, "Passage autorisé enregistré.")
+                return redirect("detector:administration")
+        elif action == "toggle_whitelist":
+            passage = get_object_or_404(WhitelistedPassage, pk=request.POST.get("passage_id"))
+            passage.active = not passage.active
+            passage.save(update_fields=["active"])
+            messages.success(request, "État du passage autorisé mis à jour.")
+            return redirect("detector:administration")
+        elif action == "delete_whitelist":
+            passage = get_object_or_404(WhitelistedPassage, pk=request.POST.get("passage_id"))
+            passage.delete()
+            messages.success(request, "Passage autorisé supprimé.")
+            return redirect("detector:administration")
+
+    User = get_user_model()
+    context = {
+        "document_form": document_form,
+        "whitelist_form": whitelist_form,
+        "documents": StudyDocument.objects.order_by("-updated_at")[:20],
+        "analyses": Analysis.objects.select_related("user").order_by("-created_at")[:20],
+        "passages": WhitelistedPassage.objects.order_by("-created_at")[:20],
+        "users": User.objects.order_by("username")[:30],
+        "stats": {
+            "users": User.objects.count(),
+            "documents": StudyDocument.objects.count(),
+            "analyses": Analysis.objects.count(),
+            "whitelisted": WhitelistedPassage.objects.filter(active=True).count(),
+        },
+    }
+    return render(request, "administration.html", context)
