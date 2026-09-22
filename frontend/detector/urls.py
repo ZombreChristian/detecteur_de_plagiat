@@ -14,6 +14,7 @@ urlpatterns = [
     path("analyser/", views.analyser, name="analyser"),
     path("resultats/", views.resultats, name="resultats"),
     path("administration/", views.administration, name="administration"),
+    path("administration/recuperation/", views.administration_recovery, name="administration_recovery"),
     path("administration/utilisateur/<int:pk>/", views.administration_utilisateur, name="administration_utilisateur"),
     path("inscription/", views.signup_view, name="signup"),
     path("analyse/<int:pk>/", views.analysis_detail, name="analysis_detail"),
