@@ -119,12 +119,7 @@
                         <button class="btn" type="submit">{% if user.is_active %}Désactiver{% else %}Activer{% endif %}</button>
                       </form>
                       {% if user.id != request.user.id %}
-                      <form method="post" onsubmit="return confirm('Supprimer définitivement ce compte ?');">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="delete_user">
-                        <input type="hidden" name="user_id" value="{{ user.id }}">
-                        <button class="btn admin-danger" type="submit">Supprimer</button>
-                      </form>
+                      <a class="btn admin-danger" href="{% url 'detector:administration_utilisateur_supprimer' user.id %}">Supprimer</a>
                       {% endif %}
                     </div>
                   </td>
@@ -149,7 +144,7 @@
           <div class="admin-role-grid">
             <div class="admin-role-card"><strong>Créer</strong><span>Créer de nouveaux comptes et définir leur rôle.</span></div>
             <div class="admin-role-card"><strong>Modifier</strong><span>Corriger l'identité, l'e-mail, l'état ou le rôle d'un compte.</span></div>
-            <div class="admin-role-card"><strong>Sécuriser</strong><span>Réinitialiser le mot de passe d'un utilisateur.</span></div>
+            <div class="admin-role-card"><strong>Sécuriser</strong><span>L'utilisateur gère lui-même la récupération et le changement de son mot de passe.</span></div>
             <div class="admin-role-card"><strong>Contrôler</strong><span>Activer ou désactiver l'accès à l'application.</span></div>
             <div class="admin-role-card"><strong>Supprimer</strong><span>Retirer un compte qui ne doit plus accéder au système.</span></div>
           </div>
