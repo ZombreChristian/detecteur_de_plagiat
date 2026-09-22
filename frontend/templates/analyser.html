@@ -23,7 +23,7 @@
   <div class="ctxbar"><div><h1>Nouvelle analyse</h1><div class="lede">Contrôle libre d'un document, hors parcours de réception guidé</div></div></div>
   <div class="page-pad">
     {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
-    <section class="panel" id="form-card" style="max-width:640px">
+    <section class="panel national-bar-red" id="form-card" style="max-width:640px">
       <div class="panel-head"><h2>Choisir le contrôle à effectuer</h2></div>
       <div class="panel-body">
         <form id="analysis-form" method="post" enctype="multipart/form-data">
@@ -34,7 +34,7 @@
         </form>
       </div>
     </section>
-    <section id="loading" class="proc" aria-live="polite" style="max-width:640px">
+    <section id="loading" class="proc national-bar-green" aria-live="polite" style="max-width:640px">
       <div class="proc-head"><strong id="loading-title">Analyse en cours</strong><span class="pct" id="loading-percent">0 %</span></div>
       <div class="proc-track"><span id="progress-bar"></span></div>
       <div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span id="loading-text">Lecture du document et préparation du contrôle.</span></div></div>
