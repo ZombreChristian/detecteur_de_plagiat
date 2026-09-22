@@ -92,9 +92,6 @@ def signup_view(request):
     return render(request, "signup.html", {"form": form})
 
 
-class _PasswordResetView:
-    pass
-
 def logout_view(request):
     logout(request)
     return redirect("detector:login")
@@ -391,7 +388,15 @@ def administration(request):
         return redirect("detector:dashboard")
 
     User = get_user_model()
+    q = request.GET.get("q", "").strip()
     users = User.objects.order_by("-is_active", "username")
+    if q:
+        users = users.filter(
+            Q(username__icontains=q)
+            | Q(first_name__icontains=q)
+            | Q(last_name__icontains=q)
+            | Q(email__icontains=q)
+        )
 
     if request.method == "POST":
         action = request.POST.get("action", "")
@@ -432,6 +437,7 @@ def administration(request):
     context = {
         "create_user_form": AdminUserCreateForm(),
         "users": users,
+        "q": q,
         "stats": _admin_user_stats(User),
         "current_section": "users",
     }
