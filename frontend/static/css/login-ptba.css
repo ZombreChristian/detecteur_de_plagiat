@@ -364,6 +364,29 @@ body::after {
 }
 
 .create-account a:hover { text-decoration: underline; }
+.create-account-action{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  min-height:48px;
+  margin:7px auto 0;
+  padding:10px 16px;
+  border:1.5px solid var(--green);
+  border-radius:24px;
+  background:#fff;
+  color:var(--green);
+  font-weight:700;
+  text-decoration:none;
+  transition:.2s ease;
+}
+.create-account-action:hover,
+.create-account-action:focus-visible{
+  background:var(--green);
+  color:#fff;
+  box-shadow:0 7px 18px rgba(22,130,58,.16);
+}
+
 
 .alert {
   margin-bottom: 14px;
