@@ -493,11 +493,8 @@ def administration(request):
             user = get_object_or_404(User, pk=request.POST.get("user_id"))
             if user.pk == request.user.pk:
                 messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
-            else:
-                username = user.username
-                user.delete()
-                messages.success(request, f"Le compte « {username} » a été supprimé.")
-            return redirect("detector:administration")
+                return redirect("detector:administration")
+            return redirect("detector:administration_utilisateur_supprimer", pk=user.pk)
 
     context = {
         "create_user_form": AdminUserCreateForm(),
