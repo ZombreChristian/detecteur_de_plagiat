@@ -179,14 +179,7 @@ body::after {
 }
 
 .login-panel::before {
-  content: "";
-  position: absolute;
-  right: 8%;
-  bottom: -155px;
-  width: 520px;
-  height: 300px;
-  border: 2px solid rgba(255,255,255,.10);
-  border-radius: 50%;
+  content: none;
 }
 
 .login-panel-content {
