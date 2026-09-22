@@ -130,7 +130,7 @@ function initProfileMenu(){
   const userNode=foot.querySelector(".rail-user");
   const logoutLink=foot.querySelector(".rail-logout");
   const accountLink=[...document.querySelectorAll('a[href*="/mon-compte/"]')][0];
-  if(!userNode || !logoutLink || !accountLink) return;
+  if(!userNode) return;
 
   const nameNode=userNode.querySelector("strong");
   const statusNode=userNode.querySelector("small");
@@ -176,13 +176,13 @@ function initProfileMenu(){
     '<a class="tdr-profile-menu-item tdr-profile-logout" data-profile-logout href="#"></a>';
   menu.querySelector(".tdr-profile-menu-head strong").textContent=name;
   menu.querySelector("[data-profile-account]").textContent="Modifier mon mot de passe";
-  menu.querySelector("[data-profile-account]").href=accountLink.href;
+  menu.querySelector("[data-profile-account]").href=accountLink?.href || "/mon-compte/";
   menu.querySelector("[data-profile-logout]").textContent="Se déconnecter";
-  menu.querySelector("[data-profile-logout]").href=logoutLink.href;
+  menu.querySelector("[data-profile-logout]").href=logoutLink?.href || "/deconnexion/";
 
   wrap.append(trigger,menu);
   foot.replaceChild(wrap,userNode);
-  logoutLink.remove();
+  if(logoutLink) logoutLink.remove();
 
   const close=()=>{
     menu.hidden=true;
