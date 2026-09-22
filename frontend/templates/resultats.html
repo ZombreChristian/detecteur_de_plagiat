@@ -2,132 +2,162 @@
 <!doctype html>
 <html lang="fr">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TDRDOC-SCAN — Dossier d'analyse</title><link rel="stylesheet" href="{% static 'css/app.css' %}" /><link rel="stylesheet" href="{% static 'css/institutional.css' %}">
-<script src="{% static 'js/theme.js' %}"></script></head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TDRDOC-SCAN — Historique complet</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}">
+<link rel="stylesheet" href="{% static 'css/institutional.css' %}">
+<script src="{% static 'js/theme.js' %}"></script>
+</head>
 <body>
 <div class="console">
-<aside class="rail">
-  <div class="rail-brand">
-    <div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div>
-    
-  </div>
-  <nav class="rail-nav">
-    <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span><span>Tableau de bord</span></a>
-    <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="m10 15 2 2 4-4"></path></svg></span><span>Vérifier un TDR</span></a>
-    <a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M8 12h8"></path></svg></span><span>Nouvelle analyse</span></a>
-    <a class="rail-link active" href="{% url 'detector:resultats' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span><span>Historique</span></a>
-    <a class="rail-link" href="/admin/"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span><span>Administration</span></a>
-  </nav>
-  <div class="rail-foot">
-    <div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div>
-    <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
-  </div>
-</aside>
-
-<main class="main">
-  <div class="ctxbar">
-    <div>
-      <h1>Dossier d'analyse</h1>
-      <div class="lede">Résultat détaillé, sources et passages en cause</div>
+  <aside class="rail">
+    <div class="rail-brand">
+      <div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div>
     </div>
-    <div class="actions"><a class="btn" href="{% url 'detector:reception' %}">Vérifier un autre document</a></div>
-  </div>
 
-  {% if result %}
-  <div class="dossier-head">
-    <div>
-      <div class="id mono">{{ result.mode|default:"analyse"|upper }}{% if result.duration_ms %} · {{ result.duration_ms }} ms{% endif %}</div>
-      <h1>{{ document_name }}</h1>
-      <div class="meta">Seuil appliqué : <span class="mono">{{ result.threshold|floatformat:2 }}</span></div>
+    <nav class="rail-nav">
+      <a class="rail-link" href="{% url 'detector:dashboard' %}">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span>
+        <span>Tableau de bord</span>
+      </a>
+      <a class="rail-link" href="{% url 'detector:reception' %}">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="m10 15 2 2 4-4"></path></svg></span>
+        <span>Vérifier un TDR</span>
+      </a>
+      <a class="rail-link" href="{% url 'detector:analyser' %}">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M8 12h8"></path></svg></span>
+        <span>Nouvelle analyse</span>
+      </a>
+      <a class="rail-link active" href="{% url 'detector:resultats' %}">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span>
+        <span>Historique</span>
+      </a>
+      <a class="rail-link" href="/admin/">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span>
+        <span>Administration</span>
+      </a>
+    </nav>
+
+    <div class="rail-foot">
+      <div class="rail-user">
+        <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+        <small>Session active</small>
+      </div>
+      <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
     </div>
-    <div class="verdict {% if result.decision == 'SIMILAIRE' %}v-alert{% else %}v-ok{% endif %}">
-      <small>Décision</small>
-      <strong>{{ result.decision }}</strong>
+  </aside>
+
+  <main class="main">
+    <div class="ctxbar">
+      <div>
+        <h1>Historique complet</h1>
+        <div class="lede">Toutes les vérifications enregistrées dans TDRDOC-SCAN</div>
+      </div>
+      <div class="actions">
+        <a class="btn" href="{% url 'detector:dashboard' %}">Tableau de bord</a>
+        <a class="btn btn-primary" href="{% url 'detector:reception' %}">Nouvelle vérification</a>
+      </div>
     </div>
-  </div>
 
-  <div class="score-rail">
-    <div class="score-cell"><small>Analyse lexicale</small><strong>{{ result.tfidf_score|floatformat:3 }}</strong><span>TF-IDF</span></div>
-    <div class="score-cell"><small>Analyse sémantique</small><strong>{{ result.semantic_score|floatformat:3 }}</strong><span>Embeddings</span></div>
-    <div class="score-cell emph"><small>Score hybride</small><strong>{{ result.hybrid_score|floatformat:3 }}</strong><span>Base de la décision</span></div>
-    {% if result.novelty_score %}<div class="score-cell"><small>Nouveauté</small><strong>{{ result.novelty_score|floatformat:3 }}</strong><span>Distance au plus proche voisin</span></div>{% endif %}
-  </div>
-
-  {% if result.decision == 'SIMILAIRE' %}
-    <div class="verdict-note v-alert">Ce document présente une similarité suffisante avec un document déjà enregistré au registre. L'alerte doit être instruite et tranchée par un agent habilité — l'outil ne rejette rien seul.</div>
-  {% else %}
-    <div class="verdict-note v-ok">Aucun document existant ne présente une similarité suffisante avec le corpus comparé.</div>
-  {% endif %}
-
-  <div class="section-title">
-    <h2>Sources les plus proches</h2>
-    <p>Classement par score hybride (35 % lexical, 65 % sémantique)</p>
-  </div>
-  <section class="panel sources-table">
-    {% if result.sources %}
-    <table class="ledger">
-      <thead><tr><th>Source</th><th style="text-align:right">TF-IDF</th><th style="text-align:right">Sémantique</th><th style="text-align:right">Hybride</th></tr></thead>
-      <tbody>
-      {% for source in result.sources %}
-        <tr>
-          <td class="doc-name">{{ source.source }}</td>
-          <td class="num">{{ source.tfidf_score|floatformat:3 }}</td>
-          <td class="num">{{ source.semantic_score|floatformat:3 }}</td>
-          <td class="num">{{ source.hybrid_score|floatformat:3 }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-      <div class="ledger-empty">Aucune source trouvée dans le corpus comparé.</div>
-    {% endif %}
-  </section>
-
-  {% if result.matches %}
-    <div class="section-title">
-      <h2>Passages en cause</h2>
-      <p>Explicabilité : le motif exact du rapprochement, pas seulement un score</p>
-    </div>
-    <section class="evidence">
-      {% for group in result.matches %}
-        <div class="evidence-source">
-          <div class="evidence-source-head">
-            <span class="name">{{ group.source }}</span>
-            <span class="cov">couverture {{ group.coverage|floatformat:2 }} · {{ group.matches|length }} passage{{ group.matches|length|pluralize }}</span>
-          </div>
-          {% for match in group.matches %}
-            <div class="evidence-match">
-              <div class="evidence-match-score">score {{ match.score|floatformat:3 }} · lexical {{ match.tfidf_score|floatformat:3 }} · sémantique {{ match.semantic_score|floatformat:3 }}</div>
-              <div class="evidence-quote candidate"><span class="tag">Document contrôlé</span>{{ match.candidate_passage }}</div>
-              <div class="evidence-quote source"><span class="tag">Source — {{ group.source }}</span>{{ match.source_passage }}</div>
-            </div>
-          {% endfor %}
-        </div>
-      {% endfor %}
-    </section>
-  {% endif %}
-
-  <div class="actions-row">
-    <a class="btn" href="{% url 'detector:export_pdf' %}">Exporter en PDF</a>
-    <a class="btn" href="{% url 'detector:export_excel' %}">Exporter en Excel</a>
-  </div>
-  {% else %}
     <div class="page-pad">
-      <section class="panel"><div class="panel-body">Aucun résultat récent. Lancez une vérification depuis « Vérifier un TDR » ou « Nouvelle analyse ».</div></section>
-    </div>
-  {% endif %}
-</main>
-</div>
-</body></html>
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Registre des vérifications</h2>
+            <div class="muted" style="font-size:12px;margin-top:4px">
+              {{ total_filtered }} résultat{{ total_filtered|pluralize }}
+            </div>
+          </div>
+        </div>
 
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TDRDOC-SCAN — Historique complet</title><link rel="stylesheet" href="{% static 'css/app.css' %}"><script src="{% static 'js/theme.js' %}"></script></head>
-<body><div class="console"><aside class="rail"><div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
-<nav class="rail-nav"><a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span><span>Tableau de bord</span></a><a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="m10 15 2 2 4-4"></path></svg></span><span>Vérifier un TDR</span></a><a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M8 12h8"></path></svg></span><span>Nouvelle analyse</span></a><a class="rail-link active" href="{% url 'detector:resultats' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span><span>Historique</span></a><a class="rail-link" href="/admin/"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span><span>Administration</span></a></nav>
-<div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div></aside>
-<main class="main"><div class="ctxbar"><div><h1>Historique complet</h1><div class="lede">Toutes les vérifications enregistrées dans TDRDOC-SCAN</div></div><div class="actions"><a class="btn" href="{% url 'detector:dashboard' %}">Tableau de bord</a><a class="btn btn-primary" href="{% url 'detector:reception' %}">Nouvelle vérification</a></div></div>
-<div class="page-pad"><section class="panel"><div class="panel-head"><div><h2>Registre des vérifications</h2><div class="muted" style="font-size:12px;margin-top:4px">{{ total_filtered }} résultat{{ total_filtered|pluralize }}</div></div></div>
-<div class="panel-body"><form method="get" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end"><div class="field" style="margin:0;min-width:220px;flex:1"><label>Rechercher</label><input type="search" name="q" value="{{ q }}" placeholder="Nom du document ou source"></div><div class="field" style="margin:0"><label>Décision</label><select name="decision"><option value="all" {% if selected_decision == 'all' %}selected{% endif %}>Toutes</option><option value="SIMILAIRE" {% if selected_decision == 'SIMILAIRE' %}selected{% endif %}>SIMILAIRE</option><option value="DIFFERENT" {% if selected_decision == 'DIFFERENT' %}selected{% endif %}>DIFFERENT</option><option value="A EXAMINER" {% if selected_decision == 'A EXAMINER' %}selected{% endif %}>À EXAMINER</option></select></div><div class="field" style="margin:0"><label>Type</label><select name="mode"><option value="all" {% if selected_mode == 'all' %}selected{% endif %}>Tous</option><option value="duplicate" {% if selected_mode == 'duplicate' %}selected{% endif %}>Doublon / TDR</option><option value="plagiarism" {% if selected_mode == 'plagiarism' %}selected{% endif %}>Plagiat / Rapport</option></select></div><button class="btn btn-primary" type="submit">Filtrer</button><a class="btn" href="{% url 'detector:resultats' %}">Réinitialiser</a></form></div>
-{% if analyses %}<div style="overflow-x:auto"><table class="ledger"><thead><tr><th>Document</th><th>Type</th><th>Décision</th><th style="text-align:right">Score hybride</th></tr></thead><tbody>{% for item in analyses %}<tr><td class="doc-name"><a href="{% url 'detector:analysis_detail' item.id %}" style="color:inherit;text-decoration:none"><strong>{{ item.document_name }}</strong></a><span class="doc-meta">{{ item.created_at|date:'d/m/Y H:i' }}</span></td><td class="muted">{{ item.get_mode_display }}</td><td>{% if item.decision == 'SIMILAIRE' %}<span class="status status-alert">SIMILAIRE</span>{% elif item.decision == 'DIFFERENT' %}<span class="status status-ok">DIFFERENT</span>{% else %}<span class="status status-neutral">{{ item.decision|default:'—' }}</span>{% endif %}</td><td class="num">{{ item.hybrid_score|floatformat:3 }}</td></tr>{% endfor %}</tbody></table></div>
-<div class="panel-body" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div class="muted" style="font-size:12px">Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }}</div><div style="display:flex;gap:6px">{% if page_obj.has_previous %}<a class="btn" href="?q={{ q|urlencode }}&decision={{ selected_decision }}&mode={{ selected_mode }}&page={{ page_obj.previous_page_number }}">← Précédent</a>{% endif %}{% if page_obj.has_next %}<a class="btn" href="?q={{ q|urlencode }}&decision={{ selected_decision }}&mode={{ selected_mode }}&page={{ page_obj.next_page_number }}">Suivant →</a>{% endif %}</div></div>
-{% else %}<div class="ledger-empty">Aucune vérification ne correspond aux filtres sélectionnés.</div>{% endif %}</section></div></main></div></body></html>
+        <div class="panel-body">
+          <form method="get" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+            <div class="field" style="margin:0;min-width:220px;flex:1">
+              <label>Rechercher</label>
+              <input type="search" name="q" value="{{ q }}" placeholder="Nom du document ou source">
+            </div>
+
+            <div class="field" style="margin:0">
+              <label>Décision</label>
+              <select name="decision">
+                <option value="all" {% if selected_decision == 'all' %}selected{% endif %}>Toutes</option>
+                <option value="SIMILAIRE" {% if selected_decision == 'SIMILAIRE' %}selected{% endif %}>SIMILAIRE</option>
+                <option value="DIFFERENT" {% if selected_decision == 'DIFFERENT' %}selected{% endif %}>DIFFERENT</option>
+                <option value="A EXAMINER" {% if selected_decision == 'A EXAMINER' %}selected{% endif %}>À EXAMINER</option>
+              </select>
+            </div>
+
+            <div class="field" style="margin:0">
+              <label>Type</label>
+              <select name="mode">
+                <option value="all" {% if selected_mode == 'all' %}selected{% endif %}>Tous</option>
+                <option value="duplicate" {% if selected_mode == 'duplicate' %}selected{% endif %}>Doublon / TDR</option>
+                <option value="plagiarism" {% if selected_mode == 'plagiarism' %}selected{% endif %}>Plagiat / Rapport</option>
+              </select>
+            </div>
+
+            <button class="btn btn-primary" type="submit">Filtrer</button>
+            <a class="btn" href="{% url 'detector:resultats' %}">Réinitialiser</a>
+          </form>
+        </div>
+
+        {% if analyses %}
+        <div style="overflow-x:auto">
+          <table class="ledger">
+            <thead>
+              <tr>
+                <th>Document</th>
+                <th>Type</th>
+                <th>Décision</th>
+                <th style="text-align:right">Score hybride</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in analyses %}
+              <tr>
+                <td class="doc-name">
+                  <a href="{% url 'detector:analysis_detail' item.id %}" style="color:inherit;text-decoration:none">
+                    <strong>{{ item.document_name }}</strong>
+                  </a>
+                  <span class="doc-meta">{{ item.created_at|date:'d/m/Y H:i' }}</span>
+                </td>
+                <td class="muted">{{ item.get_mode_display }}</td>
+                <td>
+                  {% if item.decision == 'SIMILAIRE' %}
+                    <span class="status status-alert">SIMILAIRE</span>
+                  {% elif item.decision == 'DIFFERENT' %}
+                    <span class="status status-ok">DIFFERENT</span>
+                  {% else %}
+                    <span class="status status-neutral">{{ item.decision|default:'—' }}</span>
+                  {% endif %}
+                </td>
+                <td class="num">{{ item.hybrid_score|floatformat:3 }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel-body" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <div class="muted" style="font-size:12px">
+            Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }}
+          </div>
+          <div style="display:flex;gap:6px">
+            {% if page_obj.has_previous %}
+              <a class="btn" href="?q={{ q|urlencode }}&decision={{ selected_decision }}&mode={{ selected_mode }}&page={{ page_obj.previous_page_number }}">← Précédent</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+              <a class="btn" href="?q={{ q|urlencode }}&decision={{ selected_decision }}&mode={{ selected_mode }}&page={{ page_obj.next_page_number }}">Suivant →</a>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+          <div class="ledger-empty">Aucune vérification ne correspond aux filtres sélectionnés.</div>
+        {% endif %}
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>
