@@ -1,0 +1,84 @@
+{% load static %}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TDRDOC-SCAN — Modifier utilisateur</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="stylesheet" href="{% static 'css/institutional.css' %}">
+  <script src="{% static 'js/theme.js' %}"></script>
+</head>
+<body>
+<div class="console">
+  <aside class="rail">
+    <div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
+    <nav class="rail-nav">
+      <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">▦</span><span>Tableau de bord</span></a>
+      <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">✓</span><span>Vérifier un TDR</span></a>
+      <a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico">＋</span><span>Nouvelle analyse</span></a>
+      <a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico">◷</span><span>Historique</span></a>
+      <a class="rail-link active" href="{% url 'detector:administration' %}"><span class="ico">◇</span><span>Administration</span></a>
+    </nav>
+    <div class="rail-foot">
+      <div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div>
+      <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="ctxbar">
+      <div>
+        <h1>Modifier le compte</h1>
+        <div class="lede">{{ target_user.username }}</div>
+      </div>
+      <div class="actions"><a class="btn" href="{% url 'detector:administration' %}">Retour aux utilisateurs</a></div>
+    </div>
+
+    <div class="page-pad admin-page">
+      {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
+
+      <div class="admin-grid">
+        <section class="panel admin-section">
+          <div class="panel-head"><div><h2>Informations du compte</h2><div class="muted admin-help">Identité, rôle et accès.</div></div></div>
+          <div class="panel-body">
+            <form method="post" class="admin-form">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="update_profile">
+              {{ profile_form.as_p }}
+              <button class="btn btn-primary" type="submit">Enregistrer les modifications</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel admin-section">
+          <div class="panel-head"><div><h2>Mot de passe</h2><div class="muted admin-help">Définir un nouveau mot de passe pour cet utilisateur.</div></div></div>
+          <div class="panel-body">
+            <form method="post" class="admin-form">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="reset_password">
+              {{ password_form.as_p }}
+              <button class="btn" type="submit">Réinitialiser le mot de passe</button>
+            </form>
+          </div>
+        </section>
+      </div>
+
+      <section class="panel admin-section admin-danger-zone">
+        <div class="panel-head"><h2>Zone sensible</h2></div>
+        <div class="panel-body">
+          {% if target_user.id == request.user.id %}
+            <div class="muted">Votre propre compte ne peut pas être supprimé depuis cette console.</div>
+          {% else %}
+            <form method="post" onsubmit="return confirm('Supprimer définitivement ce compte ?');">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="delete_user">
+              <button class="btn admin-danger" type="submit">Supprimer définitivement le compte</button>
+            </form>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>
