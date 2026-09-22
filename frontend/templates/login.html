@@ -72,8 +72,8 @@
           <button type="submit" class="btn-login">SE CONNECTER</button>
         </form>
 
-        <a class="forgot-link" href="#">Mot de passe oublié ?</a>
-        <p class="create-account">Vous n'avez pas de compte ? <a href="#">Créer un compte</a></p>
+        <a class="forgot-link" href="{% url 'detector:password_reset' %}">Mot de passe oublié ?</a>
+        <p class="create-account">Vous n'avez pas de compte ? <a href="{% url 'detector:signup' %}">Créer un compte</a></p>
       </div>
     </section>
   </main>
