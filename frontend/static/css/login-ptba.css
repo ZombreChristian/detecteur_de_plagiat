@@ -1,56 +1,46 @@
 :root {
   --green: #16823a;
   --green-dark: #0f6d2f;
-  --green-soft: #eef7f0;
   --red: #c8102e;
   --yellow: #f6c500;
   --text: #151515;
   --muted: #555d58;
-  --border: #d4d8d5;
-  --page: #f8faf9;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body { min-height: 100%; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   color: var(--text);
-  background:
-    linear-gradient(rgba(255,255,255,.92), rgba(255,255,255,.92)),
-    radial-gradient(circle at 10% 20%, rgba(22,130,58,.10), transparent 320px),
-    radial-gradient(circle at 90% 75%, rgba(22,130,58,.08), transparent 300px);
-  min-height: 100vh;
+  background: #f8faf9;
 }
 
-/* =========================
-   EN-TÊTE INSTITUTIONNEL
-   ========================= */
+/* En-tête compact : tout doit rester visible sur une seule page */
 .institution-header {
-  height: 190px;
+  height: 92px;
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 26px;
-  padding: 22px 3.2%;
+  gap: 20px;
+  padding: 10px 2.5%;
   background: #fff;
-  border-top: 6px solid var(--green);
+  border-top: 5px solid var(--green);
   border-bottom: 1px solid #e7e9e8;
-  box-shadow: 0 2px 8px rgba(0,0,0,.04);
 }
 
 .header-logo {
-  width: 112px;
-  height: 148px;
-  flex: 0 0 112px;
+  width: 68px;
+  height: 76px;
+  flex: 0 0 68px;
   display: grid;
   place-items: center;
 }
 
 .header-logo svg {
-  width: 92px;
-  height: 118px;
+  width: 58px;
+  height: 72px;
   filter: drop-shadow(0 2px 2px rgba(0,0,0,.10));
 }
 
@@ -61,77 +51,64 @@ body {
 }
 
 .institution-title h1 {
-  font-size: clamp(25px, 2.05vw, 35px);
-  line-height: 1.18;
-  font-weight: 500;
-  letter-spacing: -.025em;
+  font-size: clamp(18px, 1.75vw, 29px);
+  line-height: 1.15;
+  font-weight: 400;
+  letter-spacing: -.02em;
   color: #101010;
 }
 
-.institution-title h1 span {
-  white-space: nowrap;
-}
+.institution-title h1 strong { font-weight: 800; }
+.institution-title h1 span { font-weight: 400; }
 
 .flag-burkina {
   position: relative;
-  width: 50px;
-  height: 74px;
-  margin-right: 1.3%;
-  flex: 0 0 50px;
+  width: 38px;
+  height: 56px;
+  margin-right: 1%;
+  flex: 0 0 38px;
   transform: rotate(2deg);
-  filter: drop-shadow(0 3px 3px rgba(0,0,0,.16));
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,.14));
 }
 
-.flag-green,
-.flag-red {
+.flag-green, .flag-red {
   position: absolute;
-  left: 10px;
-  width: 30px;
-  height: 27px;
+  left: 8px;
+  width: 23px;
+  height: 20px;
   transform: skewY(-9deg);
 }
 
-.flag-green {
-  top: 8px;
-  background: var(--green);
-  border-radius: 2px 2px 0 0;
-}
-
-.flag-red {
-  top: 35px;
-  background: var(--red);
-  border-radius: 0 0 2px 2px;
-}
+.flag-green { top: 6px; background: var(--green); border-radius: 2px 2px 0 0; }
+.flag-red { top: 26px; background: var(--red); border-radius: 0 0 2px 2px; }
 
 .flag-star {
   position: absolute;
-  left: 19px;
-  top: 25px;
+  left: 15px;
+  top: 18px;
   z-index: 2;
   color: var(--yellow);
-  font-size: 13px;
+  font-size: 10px;
   line-height: 1;
-  text-shadow: 0 1px 1px rgba(0,0,0,.12);
 }
 
-/* =========================
-   ZONE DE CONNEXION
-   ========================= */
+/* Bloc principal compact, hauteur fixe : pas de défilement */
 .login-page {
-  width: min(1180px, 96%);
-  min-height: 550px;
-  margin: 16px auto 0;
+  width: min(1120px, 94%);
+  height: calc(100vh - 108px);
+  min-height: 520px;
+  margin: 8px auto;
   display: grid;
   grid-template-columns: 48% 52%;
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: 22px;
   background: #fff;
-  box-shadow: 0 12px 45px rgba(0,0,0,.08);
+  box-shadow: 0 8px 30px rgba(0,0,0,.08);
 }
 
 .login-panel {
   position: relative;
-  min-height: 550px;
+  min-height: 0;
   overflow: hidden;
   background: var(--green);
   color: #fff;
@@ -141,10 +118,10 @@ body {
   content: "";
   position: absolute;
   z-index: 0;
-  top: -10%;
-  right: -18%;
-  width: 45%;
-  height: 120%;
+  top: -5%;
+  right: -1px;
+  width: 25%;
+  height: 110%;
   background: #fff;
   clip-path: polygon(100% 0, 100% 100%, 0 100%);
 }
@@ -152,10 +129,10 @@ body {
 .login-panel::before {
   content: "";
   position: absolute;
-  right: 15%;
-  bottom: -120px;
-  width: 420px;
-  height: 260px;
+  right: 8%;
+  bottom: -155px;
+  width: 520px;
+  height: 300px;
   border: 2px solid rgba(255,255,255,.10);
   border-radius: 50%;
 }
@@ -163,115 +140,103 @@ body {
 .login-panel-content {
   position: relative;
   z-index: 2;
-  padding: 58px 42px;
-  max-width: 500px;
+  padding: clamp(34px, 5vh, 58px) 7%;
+  max-width: 650px;
 }
 
 .brand-mark {
-  font-size: 42px;
-  line-height: 1.05;
+  font-size: clamp(34px, 3.2vw, 48px);
+  line-height: 1;
   font-weight: 800;
-  margin-bottom: 30px;
+  margin-bottom: clamp(22px, 3vh, 34px);
   letter-spacing: -.035em;
 }
 
 .login-panel h2 {
-  font-size: clamp(25px, 2.5vw, 36px);
+  font-size: clamp(22px, 2.15vw, 34px);
   line-height: 1.25;
   font-weight: 500;
-  margin-bottom: 42px;
+  margin-bottom: clamp(28px, 4vh, 44px);
 }
 
 .back-button {
   appearance: none;
-  min-width: 145px;
-  padding: 13px 28px;
+  min-width: 125px;
+  padding: 11px 25px;
   border: 1.5px solid #fff;
-  border-radius: 28px;
+  border-radius: 26px;
   color: #fff;
   background: transparent;
-  font-size: 16px;
+  font-size: 15px;
   cursor: pointer;
   transition: .2s ease;
 }
 
-.back-button:hover {
-  background: #fff;
-  color: var(--green);
-}
+.back-button:hover { background: #fff; color: var(--green); }
 
-/* =========================
-   FORMULAIRE
-   ========================= */
+/* Formulaire */
 .login-form-area {
-  min-height: 550px;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 44px 7%;
+  padding: 20px 7%;
   background:
-    radial-gradient(circle at 100% 0, rgba(22,130,58,.07), transparent 230px),
+    radial-gradient(circle at 100% 0, rgba(22,130,58,.06), transparent 210px),
     #fff;
 }
 
 .login-card {
   position: relative;
   width: 100%;
-  max-width: 475px;
-  padding: 24px 22px 20px;
+  max-width: 520px;
+  padding: 10px 4px;
 }
 
 .card-accent {
-  width: 62px;
+  width: 60px;
   height: 4px;
-  margin-bottom: 22px;
+  margin-bottom: 18px;
   border-radius: 4px;
   background: linear-gradient(90deg, var(--green) 0 55%, var(--yellow) 55% 78%, var(--red) 78%);
 }
 
 .login-card h2 {
-  font-size: 38px;
-  line-height: 1.1;
+  font-size: clamp(30px, 3vw, 40px);
+  line-height: 1.05;
   font-weight: 700;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .lede {
-  margin-bottom: 30px;
+  margin-bottom: 25px;
   color: var(--muted);
-  font-size: 16px;
+  font-size: 15px;
 }
 
-.field {
-  margin-bottom: 23px;
-}
+.field { margin-bottom: 17px; }
 
 .field label {
   display: block;
-  margin-bottom: 9px;
-  font-size: 17px;
-  font-weight: 500;
+  margin-bottom: 7px;
+  font-size: 16px;
+  font-weight: 600;
 }
 
-.field label::after {
-  content: " *";
-  color: var(--red);
-}
+.field label::after { content: " *"; color: var(--red); }
 
-.input-wrap {
-  position: relative;
-}
+.input-wrap { position: relative; }
 
 .input-wrap input {
   width: 100%;
-  height: 54px;
-  padding: 0 48px 0 50px;
+  height: 50px;
+  padding: 0 46px 0 48px;
   border: 1px solid #cfd5d1;
-  border-radius: 28px;
+  border-radius: 26px;
   outline: none;
   background: #edf4fd;
   color: #111;
-  font-size: 17px;
+  font-size: 16px;
   transition: .18s ease;
 }
 
@@ -284,10 +249,10 @@ body {
 .input-wrap .field-icon {
   position: absolute;
   z-index: 2;
-  left: 18px;
+  left: 17px;
   top: 50%;
-  width: 21px;
-  height: 21px;
+  width: 20px;
+  height: 20px;
   transform: translateY(-50%);
   color: #6c746f;
 }
@@ -304,7 +269,7 @@ body {
 
 .password-toggle {
   position: absolute;
-  right: 14px;
+  right: 13px;
   top: 50%;
   width: 30px;
   height: 30px;
@@ -318,8 +283,8 @@ body {
 }
 
 .password-toggle svg {
-  width: 23px;
-  height: 23px;
+  width: 22px;
+  height: 22px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -329,13 +294,13 @@ body {
 
 .btn-login {
   width: 100%;
-  height: 56px;
+  height: 52px;
   margin-top: 3px;
   border: 1.5px solid var(--green);
-  border-radius: 28px;
+  border-radius: 27px;
   background: #fff;
   color: var(--green);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 500;
   letter-spacing: .08em;
   cursor: pointer;
@@ -352,147 +317,93 @@ body {
 .forgot-link {
   display: block;
   width: fit-content;
-  margin: 24px auto 0;
+  margin: 18px auto 0;
   color: var(--green);
-  font-size: 16px;
+  font-size: 15px;
   text-decoration: none;
 }
 
-.forgot-link:hover {
-  text-decoration: underline;
+.forgot-link:hover { text-decoration: underline; }
+
+.create-account {
+  margin-top: 11px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
 }
 
+.create-account a {
+  color: var(--green);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.create-account a:hover { text-decoration: underline; }
+
 .alert {
-  margin-bottom: 18px;
-  padding: 11px 14px;
-  border-radius: 10px;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  border-radius: 9px;
   color: #8b1e2d;
   background: #fdecee;
   border: 1px solid #f3c6cc;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .error {
   display: block;
-  margin-top: 6px;
+  margin-top: 5px;
   color: #b4232d;
-  font-size: 12px;
+  font-size: 11px;
 }
 
-.page-footer {
-  width: min(1180px, 96%);
-  margin: 0 auto;
-  padding: 17px 20px 24px;
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  color: #7a817d;
-  font-size: 12px;
-}
-
-/* =========================
-   RESPONSIVE
-   ========================= */
+/* Petites tailles : adaptation sans casser le formulaire */
 @media (max-width: 900px) {
+  html, body { overflow: auto; }
+
   .institution-header {
-    height: auto;
-    min-height: 150px;
-    padding: 18px 22px;
-    gap: 15px;
+    height: 76px;
+    padding: 8px 18px;
+    gap: 10px;
   }
 
   .header-logo {
-    width: 75px;
-    height: 105px;
-    flex-basis: 75px;
+    width: 50px;
+    height: 58px;
+    flex-basis: 50px;
   }
 
-  .header-logo svg {
-    width: 68px;
-    height: 90px;
-  }
+  .header-logo svg { width: 45px; height: 56px; }
 
-  .flag-burkina {
-    transform: scale(.82);
-    margin-right: 0;
-  }
+  .institution-title h1 { font-size: 17px; }
+  .flag-burkina { transform: scale(.75); margin-right: 0; }
 
   .login-page {
-    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
     width: 94%;
+    grid-template-columns: 1fr;
+    margin: 8px auto 20px;
   }
 
-  .login-panel {
-    min-height: 330px;
-  }
-
-  .login-panel::after {
-    display: none;
-  }
-
-  .login-panel-content {
-    padding: 42px 32px;
-  }
-
-  .login-panel h2 {
-    margin-bottom: 30px;
-  }
-
-  .login-form-area {
-    min-height: auto;
-    padding: 35px 7%;
-  }
+  .login-panel { min-height: 300px; }
+  .login-panel::after { display: none; }
+  .login-panel-content { padding: 34px 7%; }
+  .login-form-area { padding: 30px 7%; }
 }
 
 @media (max-width: 600px) {
-  .institution-header {
-    align-items: center;
-  }
-
-  .institution-title h1 {
-    font-size: 20px;
-  }
-
-  .header-logo {
-    display: none;
-  }
-
-  .flag-burkina {
-    display: none;
-  }
+  .header-logo, .flag-burkina { display: none; }
+  .institution-title h1 { font-size: 16px; }
 
   .login-page {
     width: 100%;
-    margin-top: 0;
+    margin: 0;
     border-radius: 0;
   }
 
-  .login-panel {
-    min-height: 290px;
-  }
-
-  .login-panel-content {
-    padding: 35px 25px;
-  }
-
-  .brand-mark {
-    font-size: 32px;
-    margin-bottom: 20px;
-  }
-
-  .login-panel h2 {
-    font-size: 25px;
-  }
-
-  .login-form-area {
-    padding: 30px 20px 42px;
-  }
-
-  .login-card h2 {
-    font-size: 31px;
-  }
-
-  .page-footer {
-    width: 100%;
-  }
+  .login-panel { min-height: 260px; }
+  .brand-mark { font-size: 32px; }
+  .login-panel h2 { font-size: 23px; }
+  .login-form-area { padding: 26px 20px 35px; }
 }
