@@ -47,31 +47,7 @@ body{
   min-height:100vh;
 }
 
-body::before{
-  content:"";
-  position:fixed;
-  top:0;left:0;right:0;
-  height:4px;
-  z-index:1000;
-  background:linear-gradient(90deg,var(--ui-red) 0 50%,#16823a 50% 100%);
-}
-body::after{
-  content:"★";
-  position:fixed;
-  top:-2px;
-  left:50%;
-  transform:translateX(-50%);
-  z-index:1001;
-  width:18px;
-  height:18px;
-  display:grid;
-  place-items:center;
-  color:var(--ui-yellow);
-  background:#fff;
-  border-radius:50%;
-  font-size:10px;
-  line-height:1;
-}
+/* Le bandeau national est placé dans l'en-tête de navigation latéral. */
 
 /* ---------- identité ---------- */
 .brand-mark{
@@ -87,7 +63,46 @@ body::after{
   position:relative;
   padding-top:8px !important;
 }
-.rail-brand::after{display:none !important;}
+.rail-brand{
+  position:relative;
+  padding:10px 20px 31px !important;
+  margin-bottom:14px;
+}
+.rail-brand .brand{
+  justify-content:center;
+  align-items:center;
+}
+.rail-brand::before{
+  content:"";
+  position:absolute;
+  left:50%;
+  bottom:14px;
+  transform:translateX(-50%);
+  width:110px;
+  height:4px;
+  border-radius:4px;
+  background:linear-gradient(90deg,var(--ui-red) 0 50%,#16823a 50% 100%);
+}
+.rail-brand::after{
+  content:"★";
+  position:absolute;
+  left:50%;
+  bottom:7px;
+  transform:translateX(-50%);
+  width:16px;
+  height:16px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background:#fff;
+  color:var(--ui-yellow);
+  font-size:9px;
+  line-height:1;
+  font-weight:800;
+}
+.rail-brand .brand-mark{
+  font-size:20px;
+}
 
 /* ---------- navigation ---------- */
 .rail{
@@ -112,6 +127,23 @@ body::after{
   color:var(--ui-green-dark) !important;
   border-left-color:var(--ui-green) !important;
   font-weight:700;
+}
+.rail-link .ico{
+  width:20px;
+  min-width:20px;
+  height:20px;
+  display:grid;
+  place-items:center;
+  color:#7b8982;
+}
+.rail-link .ico svg{
+  width:18px;
+  height:18px;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.7;
+  stroke-linecap:round;
+  stroke-linejoin:round;
 }
 .rail-link.active .ico,
 .rail-link:hover .ico{color:var(--ui-green) !important}
@@ -526,30 +558,9 @@ html[data-theme="light"] .ctxbar{
 html[data-theme="light"] .page-pad{
   position:relative;
 }
-html[data-theme="light"] .page-pad::before{
-  content:"";
-  position:absolute;
-  top:-8px;
-  left:22px;
-  width:72px;
-  height:3px;
-  border-radius:2px;
-  background:linear-gradient(90deg,var(--ui-red) 0 50%,#16823a 50% 100%);
-}
+html[data-theme="light"] .page-pad::before,
 html[data-theme="light"] .page-pad::after{
-  content:"★";
-  position:absolute;
-  top:-14px;
-  left:58px;
-  width:14px;
-  height:14px;
-  display:grid;
-  place-items:center;
-  color:var(--ui-yellow);
-  background:#fff;
-  border-radius:50%;
-  font-size:8px;
-  line-height:1;
+  display:none !important;
 }
 html[data-theme="dark"] .main{
   background:
