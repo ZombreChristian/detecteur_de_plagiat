@@ -400,10 +400,10 @@ html[data-theme="dark"] .tdr-profile-menu{
   box-shadow:var(--ui-shadow);
 }
 .engine.doublon{
-  border-top:3px solid var(--ui-green) !important;
+  border-top:3px solid var(--ui-red) !important;
 }
 .engine.plagiat{
-  border-top:3px solid var(--ui-yellow) !important;
+  border-top:3px solid #16823a !important;
 }
 .engine-kicker{
   color:var(--ui-green) !important;
