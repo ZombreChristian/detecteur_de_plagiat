@@ -4,75 +4,101 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PTBA · IA — Connexion</title>
+  <title>Connexion · Système ALIAS</title>
   <link rel="stylesheet" href="{% static 'css/login-ptba.css' %}">
 </head>
 <body>
-  <div class="top-stripe"></div>
-
-  <div class="login-wrapper">
-    <div class="login-left">
-      <div class="brand">
-        <div class="brand-icon" aria-hidden="true">
-          <svg width="48" height="48" viewBox="0 0 64 64" fill="none">
-            <rect x="8" y="12" width="36" height="44" rx="4" stroke="#0B6E3E" stroke-width="3"/>
-            <path d="M20 28h20M20 36h16M20 44h12" stroke="#0B6E3E" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="42" cy="42" r="14" stroke="#0B6E3E" stroke-width="3"/>
-            <path d="M50 50l8 8" stroke="#0B6E3E" stroke-width="3" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <div>
-          <h1>PTBA<span class="dot">·</span><span class="ia">IA</span></h1>
-          <p class="subtitle">Plateforme de détection de plagiat<br>et de doublon d’études</p>
-          <div class="line"></div>
-        </div>
-      </div>
-
-      <h2 class="hero">Le contrôle intelligent<br>des études.</h2>
-      <p class="desc">Une plateforme pour détecter les doublons et contrôler la similarité des livrables PTBA.</p>
+  <header class="institution-header">
+    <div class="header-logo crest" aria-hidden="true">
+      <svg viewBox="0 0 96 120" role="img">
+        <path d="M48 8 83 20v32c0 27-15 47-35 58C28 99 13 79 13 52V20L48 8Z" fill="#fff" stroke="#777" stroke-width="2"/>
+        <path d="M48 20 69 27v24c0 18-9 31-21 40-12-9-21-22-21-40V27l21-7Z" fill="#087a3b"/>
+        <path d="M48 28v48M32 43h32" stroke="#f6c500" stroke-width="4"/>
+        <circle cx="48" cy="57" r="11" fill="#c8102e" stroke="#f6c500" stroke-width="2"/>
+        <path d="M23 19 8 9M73 19 88 9" stroke="#777" stroke-width="3"/>
+        <path d="M20 82 8 98M76 82l12 16" stroke="#777" stroke-width="3"/>
+        <path d="M30 103h36" stroke="#777" stroke-width="3"/>
+      </svg>
     </div>
 
-    <!-- Partie droite (formulaire) -->
-    <section class="login-right">
-      <div class="card">
+    <div class="institution-title">
+      <h1>Système d'Accès en ligne aux Informations Administratives et Salariales <span>(ALIAS)</span></h1>
+    </div>
+
+    <div class="flag-burkina" aria-label="Drapeau du Burkina Faso">
+      <span class="flag-green"></span>
+      <span class="flag-red"></span>
+      <span class="flag-star">★</span>
+    </div>
+  </header>
+
+  <main class="login-page">
+    <section class="login-panel">
+      <div class="login-panel-content">
+        <div class="brand-mark">Système ALIAS</div>
+        <h2>Pour accéder à votre espace,<br>connectez-vous.</h2>
+
+        <button type="button" class="back-button" onclick="history.back()">Retour</button>
+      </div>
+    </section>
+
+    <section class="login-form-area" aria-label="Connexion">
+      <div class="login-card">
+        <div class="card-accent"></div>
         <h2>Connexion</h2>
         <p class="lede">Accédez à votre espace de travail</p>
 
-        <form method="post">
+        <form method="post" novalidate>
           {% csrf_token %}
           {% if form.non_field_errors %}
             <div class="alert">{{ form.non_field_errors }}</div>
           {% endif %}
 
           <div class="field">
-            <label>Nom d’utilisateur</label>
+            <label for="{{ form.username.id_for_label }}">Matricule</label>
             <div class="input-wrap">
-              <span class="icon">👤</span>
+              <span class="field-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0"/></svg>
+              </span>
               {{ form.username }}
             </div>
+            {% if form.username.errors %}<span class="error">{{ form.username.errors }}</span>{% endif %}
           </div>
 
           <div class="field">
-            <label>Mot de passe</label>
+            <label for="{{ form.password.id_for_label }}">Mot de passe</label>
             <div class="input-wrap">
-              <span class="icon">🔒</span>
+              <span class="field-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+              </span>
               {{ form.password }}
+              <button type="button" class="password-toggle" aria-label="Afficher ou masquer le mot de passe" onclick="togglePassword()">
+                <svg id="eye-icon" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+              </button>
             </div>
+            {% if form.password.errors %}<span class="error">{{ form.password.errors }}</span>{% endif %}
           </div>
 
-          <button type="submit" class="btn-login">
-            Se connecter →
-          </button>
+          <button type="submit" class="btn-login">SE CONNECTER</button>
         </form>
 
-        <p class="create-account">
-          Vous n’avez pas de compte ? 
-          <a href="#">Créer un compte</a>
-        </p>
+        <a class="forgot-link" href="#">Mot de passe oublié ?</a>
       </div>
     </section>
-  </div>
+  </main>
 
-  <div class="bottom-wave" aria-hidden="true"></div>
+  <footer class="page-footer">
+    <span>Accès sécurisé</span>
+    <span>•</span>
+    <span>Système ALIAS</span>
+  </footer>
+
+  <script>
+    function togglePassword() {
+      const input = document.getElementById('{{ form.password.id_for_label }}');
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+  </script>
 </body>
 </html>
