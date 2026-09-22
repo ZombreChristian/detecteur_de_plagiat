@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Connexion · Système ALIAS</title>
+  <title>Connexion · TDRDOC-SCAN</title>
   <link rel="stylesheet" href="{% static 'css/login-ptba.css' %}">
 </head>
 <body>
@@ -20,11 +20,9 @@
         <path d="M30 103h36" stroke="#777" stroke-width="3"/>
       </svg>
     </div>
-
     <div class="institution-title">
-      <h1>Système d'Accès en ligne aux Informations Administratives et Salariales <span>(ALIAS)</span></h1>
+      <h1><strong>TDRDOC-SCAN</strong> <span>Détecteur de plagiat et de doublon d'études</span></h1>
     </div>
-
     <div class="flag-burkina" aria-label="Drapeau du Burkina Faso">
       <span class="flag-green"></span>
       <span class="flag-red"></span>
@@ -35,9 +33,8 @@
   <main class="login-page">
     <section class="login-panel">
       <div class="login-panel-content">
-        <div class="brand-mark">Système ALIAS</div>
+        <div class="brand-mark">TDRDOC-SCAN</div>
         <h2>Pour accéder à votre espace,<br>connectez-vous.</h2>
-
         <button type="button" class="back-button" onclick="history.back()">Retour</button>
       </div>
     </section>
@@ -55,7 +52,7 @@
           {% endif %}
 
           <div class="field">
-            <label for="{{ form.username.id_for_label }}">Matricule</label>
+            <label for="{{ form.username.id_for_label }}">Nom d'utilisateur</label>
             <div class="input-wrap">
               <span class="field-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0"/></svg>
@@ -83,15 +80,10 @@
         </form>
 
         <a class="forgot-link" href="#">Mot de passe oublié ?</a>
+        <p class="create-account">Vous n'avez pas de compte ? <a href="#">Créer un compte</a></p>
       </div>
     </section>
   </main>
-
-  <footer class="page-footer">
-    <span>Accès sécurisé</span>
-    <span>•</span>
-    <span>Système ALIAS</span>
-  </footer>
 
   <script>
     function togglePassword() {
