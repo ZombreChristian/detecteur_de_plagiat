@@ -995,3 +995,74 @@ html[data-theme="dark"] #docsec-settings .theme-settings-panel{
     left:10px !important;
   }
 }
+
+
+/* Interaction uniforme : tous les boutons et contrôles s'assombrissent légèrement au survol/clic */
+.btn,
+.button,
+.rail-link,
+.rail-settings-trigger,
+.rail-collapse,
+.theme-settings-panel button {
+  transition:
+    background-color .15s ease,
+    border-color .15s ease,
+    color .15s ease,
+    box-shadow .15s ease,
+    transform .08s ease;
+}
+
+.btn:hover,
+.button:hover,
+.rail-settings-trigger:hover,
+.rail-collapse:hover,
+.theme-settings-panel button:hover {
+  background:#eef1f3 !important;
+  border-color:#b8c3cb !important;
+  color:#111 !important;
+}
+
+.btn:active,
+.button:active,
+.rail-settings-trigger:active,
+.rail-collapse:active,
+.theme-settings-panel button:active {
+  background:#e2e7ea !important;
+  border-color:#aebbc4 !important;
+  color:#111 !important;
+  transform:translateY(1px);
+}
+
+/* Les éléments de navigation actifs sont aussi légèrement plus foncés */
+.rail-link.active {
+  background:#e4ebf0 !important;
+}
+
+.rail-link.active:hover {
+  background:#dce5eb !important;
+}
+
+/* Boutons blancs du contenu : hover/clic sans revenir au vert */
+.btn-primary,
+.btn-primary:hover,
+.btn-primary:focus-visible,
+.btn-primary:active {
+  color:#111 !important;
+}
+
+.btn-primary:hover {
+  background:#eef1f3 !important;
+  border-color:#b8c3cb !important;
+}
+
+.btn-primary:active {
+  background:#e2e7ea !important;
+  border-color:#aebbc4 !important;
+}
+
+/* Les icônes suivent automatiquement l'état du contrôle */
+.rail-link:hover .ico,
+.rail-settings-trigger:hover .ico,
+.rail-link.active .ico {
+  color:var(--ui-green-dark) !important;
+}
