@@ -33,10 +33,10 @@
         <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span>
         <span>Historique</span>
       </a>
-      <a class="rail-link" href="{% url 'detector:administration' %}">
+      {% if request.user.is_staff %}<a class="rail-link" href="{% url 'detector:administration' %}">
         <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span>
         <span>Administration</span>
-      </a>
+      </a>{% endif %}
     </nav>
 
     <div class="rail-foot">
