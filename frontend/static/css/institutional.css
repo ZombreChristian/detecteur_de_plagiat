@@ -886,3 +886,35 @@ html[data-sidebar="collapsed"] .tdr-topbar-brand{display:none}
   .tdr-topbar{height:var(--topbar-height);gap:8px;padding:0 10px}
   .tdr-topbar-user{max-width:140px}
 }
+
+/* Correction finale sidebar : contrôle aligné sur le bord droit, en bas */
+.rail-collapse{
+  left:auto !important;
+  right:10px !important;
+  bottom:10px !important;
+  transform:none !important;
+}
+html[data-sidebar="collapsed"] .rail-collapse{
+  left:auto !important;
+  right:10px !important;
+  bottom:10px !important;
+  transform:none !important;
+}
+/* Même bandeau identitaire sur toutes les pages */
+.rail-brand::before{
+  width:110px !important;
+  height:4px !important;
+  bottom:14px !important;
+  left:50% !important;
+  transform:translateX(-50%) !important;
+  background:linear-gradient(90deg,var(--ui-red) 0 50%,#16823a 50% 100%) !important;
+}
+.rail-brand::after{
+  left:50% !important;
+  bottom:7px !important;
+  transform:translateX(-50%) !important;
+  width:16px !important;
+  height:16px !important;
+  color:var(--ui-yellow) !important;
+  background:#fff !important;
+}
