@@ -47,7 +47,35 @@ body{
   min-height:100vh;
 }
 
-/* Le bandeau national est placé dans l'en-tête de navigation latéral. */
+/* Bandeau national supérieur : rouge à gauche, vert à droite, étoile jaune au centre. */
+body::before{
+  content:"";
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  height:5px;
+  z-index:3000;
+  background:linear-gradient(90deg,#b4232d 0 50%,#16823a 50% 100%);
+}
+body::after{
+  content:"★";
+  position:fixed;
+  top:-1px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:3001;
+  width:18px;
+  height:18px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background:#fff;
+  color:#e6b800;
+  font-size:10px;
+  line-height:1;
+  font-weight:800;
+}
 
 /* ---------- identité ---------- */
 .brand-mark{
