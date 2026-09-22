@@ -272,9 +272,27 @@ def analyser(request):
 
 @login_required
 def resultats(request):
-    result = request.session.get("last_result")
-    recent = Analysis.objects.filter(user=request.user).order_by("-created_at")[:20]
-    return render(request, "resultats.html", {"result": result, "recent": recent, "document_name": request.session.get("last_document_name", "")})
+    """Historique complet des analyses de l'utilisateur, avec filtres et pagination."""
+    analyses = Analysis.objects.filter(user=request.user).order_by("-created_at")
+    q = request.GET.get("q", "").strip()
+    decision = request.GET.get("decision", "all")
+    mode = request.GET.get("mode", "all")
+    if q:
+        analyses = analyses.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
+    if decision in ("SIMILAIRE", "DIFFERENT", "A EXAMINER"):
+        analyses = analyses.filter(decision=decision)
+    if mode in ("duplicate", "plagiarism"):
+        analyses = analyses.filter(mode=mode)
+    paginator = Paginator(analyses, 10)
+    page_obj = paginator.get_page(request.GET.get("page", 1))
+    return render(request, "resultats.html", {
+        "analyses": page_obj.object_list,
+        "page_obj": page_obj,
+        "total_filtered": paginator.count,
+        "q": q,
+        "selected_decision": decision,
+        "selected_mode": mode,
+    })
 
 
 @login_required

@@ -45,4 +45,11 @@
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
+const KEY="docsec-theme"; const saved=localStorage.getItem(KEY);
+if(saved==="light"||saved==="dark") document.documentElement.dataset.theme=saved;
+function apply(theme){document.documentElement.dataset.theme=theme;localStorage.setItem(KEY,theme);const l=document.getElementById("docsec-theme-label");if(l)l.textContent=theme==="dark"?"Mode sombre":"Mode clair";}
+function init(){if(document.getElementById("docsec-settings"))return;const nav=document.querySelector(".rail-nav");if(!nav)return;
+const w=document.createElement("div");w.id="docsec-settings";w.className="rail-settings";w.innerHTML='<button class="rail-link rail-settings-trigger" type="button" aria-expanded="false" aria-controls="docsec-theme-panel"><span class="ico">⚙</span><span>Paramètres</span></button><div id="docsec-theme-panel" class="theme-settings-panel" hidden><strong>Apparence</strong><button type="button" data-theme-choice="light">☀ Mode clair</button><button type="button" data-theme-choice="dark">☾ Mode sombre</button><div id="docsec-theme-label" class="theme-current"></div></div>';nav.appendChild(w);
+const b=w.querySelector(".rail-settings-trigger"),p=w.querySelector(".theme-settings-panel");b.addEventListener("click",()=>{const open=!p.hidden;p.hidden=open;b.setAttribute("aria-expanded",String(!open));});w.querySelectorAll("[data-theme-choice]").forEach(x=>x.addEventListener("click",()=>{apply(x.dataset.themeChoice);p.hidden=true;b.setAttribute("aria-expanded","false");}));apply(document.documentElement.dataset.theme==="light"?"light":"dark");}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 })();
