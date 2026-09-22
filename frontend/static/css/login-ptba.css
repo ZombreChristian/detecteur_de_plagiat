@@ -494,6 +494,68 @@ body.auth-page{
   border-color:#9fa9a4;
 }
 
+
+.signup-page{
+  align-items:flex-start;
+  padding:22px 24px 34px;
+}
+.signup-card{
+  width:min(760px,100%);
+  margin:0 auto;
+}
+.signup-heading{
+  margin-bottom:18px;
+}
+.signup-heading .lede{
+  margin-bottom:0;
+}
+.signup-fields{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px 16px;
+}
+.signup-fields .field{
+  margin:0;
+}
+.signup-fields label{
+  display:block;
+  margin-bottom:7px;
+  font-weight:600;
+  color:#17202b;
+}
+.signup-fields input{
+  width:100%;
+  min-height:46px;
+  padding:9px 12px;
+  border:1px solid #cfd8d3;
+  border-radius:10px;
+  background:#fff;
+  color:#151515;
+  font:inherit;
+}
+.signup-fields input:focus{
+  outline:none;
+  border-color:#16823a;
+  box-shadow:0 0 0 3px rgba(22,130,58,.10);
+}
+.signup-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-top:18px;
+  padding-top:16px;
+  border-top:1px solid #e5ebe7;
+}
+.signup-actions .btn-login,
+.signup-actions .auth-secondary-action{
+  margin:0;
+}
+.signup-actions .btn-login{
+  height:auto;
+  min-height:50px;
+  line-height:1.25;
+}
+
 .simple-auth-page{
   min-height:calc(100vh - 108px);
   display:flex;
