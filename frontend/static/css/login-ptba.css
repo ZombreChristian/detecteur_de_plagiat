@@ -5,6 +5,8 @@
   --yellow: #f6c500;
   --text: #151515;
   --muted: #555d58;
+  --ui-bg: #f6f8fa;
+  --ui-border: #dbe2e8;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,7 +20,25 @@ html, body {
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   color: var(--text);
-  background: #0a0d12;
+  background:
+    radial-gradient(circle at 8% 18%, rgba(8,120,62,.055), transparent 280px),
+    radial-gradient(circle at 92% 82%, rgba(230,184,0,.045), transparent 260px),
+    linear-gradient(135deg,#f3f8f5 0%,#ffffff 52%,#f5f7f6 100%);
+  min-height: 100vh;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  z-index: 1000;
+  background: linear-gradient(90deg,
+    var(--red) 0 33.33%,
+    var(--yellow) 33.33% 66.66%,
+    #334e68 66.66% 100%);
 }
 
 /* En-tête compact */
@@ -30,7 +50,6 @@ body {
   gap: 20px;
   padding: 8px 2.5%;
   background: #fff;
-  border-top: 5px solid var(--green);
   border-bottom: 1px solid #e7e9e8;
 }
 
@@ -44,8 +63,8 @@ body {
 }
 
 .header-logo img {
-  width: 58px;
-  height: 70px;
+  width: 50px;
+  height: 66px;
   object-fit: contain;
   display: block;
 }
@@ -78,7 +97,7 @@ body {
   overflow: hidden;
   border-radius: 22px;
   background: #fff;
-  box-shadow: 0 8px 30px rgba(0,0,0,.24);
+  box-shadow: 0 10px 28px rgba(31,47,64,.10);
 }
 
 .login-panel {
@@ -147,14 +166,6 @@ body {
   width: 100%;
   max-width: 520px;
   padding: 10px 4px;
-}
-
-.card-accent {
-  width: 60px;
-  height: 4px;
-  margin-bottom: 18px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--green) 0 55%, var(--yellow) 55% 78%, var(--red) 78%);
 }
 
 .login-card h2 {
