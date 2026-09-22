@@ -1462,3 +1462,17 @@ html[data-theme="dark"] .admin-role-card{
 @media(max-width:600px){
   .admin-role-grid{grid-template-columns:1fr}
 }
+
+/* Accents nationaux pour les principaux blocs fonctionnels */
+.panel.national-bar-red,
+.engine.national-bar-red,
+.proc.national-bar-red,
+.admin-stat.national-bar-red{
+  border-top:3px solid var(--ui-red) !important;
+}
+.panel.national-bar-green,
+.engine.national-bar-green,
+.proc.national-bar-green,
+.admin-stat.national-bar-green{
+  border-top:3px solid #16823a !important;
+}
