@@ -9,6 +9,12 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.urls import reverse
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -23,6 +29,7 @@ from .forms import (
     AdminUserCreateForm,
     AdminUserUpdateForm,
     AdminSetPasswordForm,
+    PasswordRecoveryForm,
 )
 from .models import Analysis, StudyDocument
 
@@ -39,27 +46,48 @@ def login_view(request):
 
 
 def password_reset_request(request):
-    from django.contrib.auth.forms import PasswordResetForm
-    from django.template.loader import render_to_string
-    from django.core.mail import send_mail
-    from django.utils.http import urlsafe_base64_encode
-    from django.utils.encoding import force_bytes
-    from django.contrib.auth.tokens import default_token_generator
-
     if request.user.is_authenticated:
         return redirect("detector:dashboard")
 
-    form = PasswordResetForm(request.POST or None)
+    form = PasswordRecoveryForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        form.save(
-            request=request,
-            use_https=request.is_secure(),
-            email_template_name="password_reset_email.txt",
-            subject_template_name="password_reset_subject.txt",
-            html_email_template_name=None,
-            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+        user = form.user
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        reset_path = reverse(
+            "detector:password_reset_confirm",
+            kwargs={"uidb64": uid, "token": token},
         )
-        return redirect("detector:password_reset_done")
+        reset_url = f"{'https' if request.is_secure() else 'http'}://{request.get_host()}{reset_path}"
+        context = {
+            "email": user.email,
+            "user": user,
+            "domain": request.get_host(),
+            "site_name": "TDRDOC-SCAN",
+            "protocol": "https" if request.is_secure() else "http",
+            "uid": uid,
+            "token": token,
+            "reset_url": reset_url,
+        }
+        subject = render_to_string("password_reset_subject.txt", context).strip()
+        message = render_to_string("password_reset_email.txt", context)
+
+        try:
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                fail_silently=False,
+            )
+        except Exception:
+            form.add_error(
+                None,
+                "Le message de récupération n'a pas pu être envoyé. Vérifiez la configuration e-mail du serveur.",
+            )
+        else:
+            return redirect("detector:password_reset_done")
+
     return render(request, "password_reset.html", {"form": form})
 
 
