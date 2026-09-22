@@ -39,6 +39,36 @@ class SignUpForm(UserCreationForm):
         fields = ("username", "first_name", "last_name", "email", "password1", "password2")
 
 
+class PasswordRecoveryForm(forms.Form):
+    last_name = forms.CharField(label="Nom", max_length=150)
+    first_name = forms.CharField(label="Prénom", max_length=150)
+    email = forms.EmailField(label="Adresse e-mail")
+
+    def clean(self):
+        cleaned = super().clean()
+        last_name = (cleaned.get("last_name") or "").strip()
+        first_name = (cleaned.get("first_name") or "").strip()
+        email = (cleaned.get("email") or "").strip()
+
+        if not last_name or not first_name or not email:
+            return cleaned
+
+        user = User.objects.filter(
+            last_name__iexact=last_name,
+            first_name__iexact=first_name,
+            email__iexact=email,
+            is_active=True,
+        ).first()
+
+        if not user:
+            raise forms.ValidationError(
+                "Aucun compte actif ne correspond à ces nom, prénom et adresse e-mail."
+            )
+
+        self.user = user
+        return cleaned
+
+
 class AdminUserCreateForm(UserCreationForm):
     ROLE_CHOICES = (
         ("user", "Utilisateur"),
