@@ -28,7 +28,6 @@ from .forms import (
     SignUpForm,
     AdminUserCreateForm,
     AdminUserUpdateForm,
-    AdminSetPasswordForm,
     PasswordRecoveryForm,
 )
 from .models import Analysis, StudyDocument
@@ -519,8 +518,6 @@ def administration_utilisateur(request, pk):
     User = get_user_model()
     target = get_object_or_404(User, pk=pk)
     profile_form = AdminUserUpdateForm(request.POST or None, instance=target)
-    password_form = AdminSetPasswordForm(target, request.POST or None)
-
     action = request.POST.get("action", "")
     if request.method == "POST":
         if action == "update_profile":
@@ -539,26 +536,42 @@ def administration_utilisateur(request, pk):
                     messages.success(request, f"Le compte « {target.username} » a été mis à jour.")
                     return redirect("detector:administration_utilisateur", pk=target.pk)
 
-        elif action == "reset_password":
-            password_form = AdminSetPasswordForm(target, request.POST)
-            if password_form.is_valid():
-                password_form.save()
-                messages.success(request, f"Le mot de passe de « {target.username} » a été réinitialisé.")
-                return redirect("detector:administration_utilisateur", pk=target.pk)
-
         elif action == "delete_user":
             if target.pk == request.user.pk:
                 messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
                 return redirect("detector:administration_utilisateur", pk=target.pk)
             username = target.username
-            target.delete()
-            messages.success(request, f"Le compte « {username} » a été supprimé.")
-            return redirect("detector:administration")
+            return redirect("detector:administration_utilisateur_supprimer", pk=target.pk)
 
     return render(request, "administration_utilisateur.html", {
         "target_user": target,
         "profile_form": profile_form,
-        "password_form": password_form,
+    })
+
+
+@login_required
+def administration_utilisateur_supprimer(request, pk):
+    if not request.user.is_staff:
+        messages.error(request, "Accès réservé aux administrateurs.")
+        return redirect("detector:dashboard")
+
+    User = get_user_model()
+    target = get_object_or_404(User, pk=pk)
+    if target.pk == request.user.pk:
+        messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
+        return redirect("detector:administration")
+    if target.is_staff and target.is_active and User.objects.filter(is_staff=True, is_active=True).count() <= 1:
+        messages.error(request, "Impossible de supprimer le dernier administrateur actif.")
+        return redirect("detector:administration")
+
+    if request.method == "POST":
+        username = target.username
+        target.delete()
+        messages.success(request, f"Le compte « {username} » a été supprimé.")
+        return redirect("detector:administration")
+
+    return render(request, "administration_utilisateur_supprimer.html", {
+        "target_user": target,
     })
 
 
