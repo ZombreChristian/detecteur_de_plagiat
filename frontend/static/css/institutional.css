@@ -215,15 +215,17 @@ body::after{
   background:#fbfdfc !important;
 }
 .btn-primary{
-  background:#16823a !important;
-  border-color:#16823a !important;
-  color:#fff !important;
-  box-shadow:0 5px 14px rgba(22,130,58,.16);
+  background:var(--ui-surface) !important;
+  border-color:var(--ui-border-strong) !important;
+  color:var(--ui-text) !important;
+  box-shadow:var(--ui-shadow-soft) !important;
 }
-.btn-primary:hover{
-  background:#0f6d2f !important;
-  border-color:#0f6d2f !important;
-  color:#fff !important;
+.btn-primary:hover,
+.btn-primary:focus-visible{
+  background:#fbfdfc !important;
+  border-color:var(--ui-green) !important;
+  color:var(--ui-text) !important;
+  box-shadow:var(--ui-shadow-soft) !important;
 }
 
 /* ---------- cartes ---------- */
