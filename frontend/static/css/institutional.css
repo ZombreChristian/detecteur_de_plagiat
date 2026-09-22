@@ -215,14 +215,14 @@ body::after{
   background:#fbfdfc !important;
 }
 .btn-primary{
-  background:var(--ui-green) !important;
-  border-color:var(--ui-green) !important;
+  background:#16823a !important;
+  border-color:#16823a !important;
   color:#fff !important;
-  box-shadow:0 5px 14px rgba(47,67,87,.16);
+  box-shadow:0 5px 14px rgba(22,130,58,.16);
 }
 .btn-primary:hover{
-  background:var(--ui-green-dark) !important;
-  border-color:var(--ui-green-dark) !important;
+  background:#0f6d2f !important;
+  border-color:#0f6d2f !important;
   color:#fff !important;
 }
 
