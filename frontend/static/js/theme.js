@@ -123,10 +123,92 @@ function initThemeSettings(){
   apply(document.documentElement.dataset.theme==="light"?"light":"dark");
 }
 
+function initProfileMenu(){
+  const foot=document.querySelector(".rail-foot");
+  if(!foot || document.getElementById("tdr-profile-menu")) return;
+
+  const userNode=foot.querySelector(".rail-user");
+  const logoutLink=foot.querySelector(".rail-logout");
+  const accountLink=[...document.querySelectorAll('a[href*="/mon-compte/"]')][0];
+  if(!userNode || !logoutLink || !accountLink) return;
+
+  const nameNode=userNode.querySelector("strong");
+  const statusNode=userNode.querySelector("small");
+  const name=(nameNode?.textContent || "").trim();
+  const initials=name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0,2)
+    .map(part=>part.charAt(0).toUpperCase())
+    .join("") || "?";
+
+  // Le lien « Mon compte » reste disponible via le menu du profil,
+  // et n'est plus affiché comme une entrée de navigation principale.
+  accountLink.closest(".rail-link")?.remove();
+
+  const wrap=document.createElement("div");
+  wrap.className="tdr-profile-wrap";
+
+  const trigger=document.createElement("button");
+  trigger.type="button";
+  trigger.className="tdr-profile-trigger";
+  trigger.setAttribute("aria-expanded","false");
+  trigger.setAttribute("aria-controls","tdr-profile-menu");
+  trigger.innerHTML=
+    '<span class="tdr-profile-avatar">'+initials+'</span>'+
+    '<span class="tdr-profile-identity"><strong></strong><small></small></span>'+
+    '<span class="tdr-profile-chevron" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"></path></svg></span>';
+  trigger.querySelector("strong").textContent=name;
+  trigger.querySelector("small").textContent=statusNode?.textContent.trim() || "Session active";
+
+  const menu=document.createElement("div");
+  menu.id="tdr-profile-menu";
+  menu.className="tdr-profile-menu";
+  menu.hidden=true;
+  menu.innerHTML=
+    '<div class="tdr-profile-menu-head">'+
+      '<span class="tdr-profile-avatar tdr-profile-avatar-lg">'+initials+'</span>'+
+      '<div><strong></strong><small>Session active</small></div>'+
+    '</div>'+
+    '<div class="tdr-profile-menu-separator"></div>'+
+    '<a class="tdr-profile-menu-item" data-profile-account href="#"></a>'+
+    '<div class="tdr-profile-menu-separator"></div>'+
+    '<a class="tdr-profile-menu-item tdr-profile-logout" data-profile-logout href="#"></a>';
+  menu.querySelector(".tdr-profile-menu-head strong").textContent=name;
+  menu.querySelector("[data-profile-account]").textContent="Modifier mon mot de passe";
+  menu.querySelector("[data-profile-account]").href=accountLink.href;
+  menu.querySelector("[data-profile-logout]").textContent="Se déconnecter";
+  menu.querySelector("[data-profile-logout]").href=logoutLink.href;
+
+  wrap.append(trigger,menu);
+  foot.replaceChild(wrap,userNode);
+  logoutLink.remove();
+
+  const close=()=>{
+    menu.hidden=true;
+    trigger.setAttribute("aria-expanded","false");
+    wrap.classList.remove("open");
+  };
+  trigger.addEventListener("click",(event)=>{
+    event.stopPropagation();
+    const open=menu.hidden;
+    menu.hidden=!open;
+    trigger.setAttribute("aria-expanded",String(open));
+    wrap.classList.toggle("open",open);
+  });
+  document.addEventListener("click",(event)=>{
+    if(!wrap.contains(event.target)) close();
+  });
+  document.addEventListener("keydown",(event)=>{
+    if(event.key==="Escape") close();
+  });
+}
+
 function init(){
   initSidebar();
   initTopbar();
   initThemeSettings();
+  initProfileMenu();
 }
 
 if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",init);
