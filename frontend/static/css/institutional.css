@@ -1066,3 +1066,188 @@ html[data-theme="dark"] #docsec-settings .theme-settings-panel{
 .rail-link.active .ico {
   color:var(--ui-green-dark) !important;
 }
+
+
+/* ==========================================================================
+   Administration métier TDRDOC-SCAN
+   ========================================================================== */
+.admin-page{
+  display:grid;
+  gap:18px;
+}
+.admin-stats{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+}
+.admin-stat{
+  background:var(--ui-surface);
+  border:1px solid var(--ui-border);
+  border-radius:10px;
+  padding:16px 18px;
+  box-shadow:var(--ui-shadow-soft);
+}
+.admin-stat span{
+  display:block;
+  color:var(--ui-muted);
+  font-size:12px;
+  margin-bottom:7px;
+}
+.admin-stat strong{
+  display:block;
+  color:var(--ui-text);
+  font-size:26px;
+  line-height:1;
+}
+.admin-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:18px;
+}
+.admin-section{
+  min-width:0;
+}
+.admin-help{
+  font-size:12px;
+  margin-top:4px;
+}
+.admin-form{
+  display:grid;
+  gap:10px;
+}
+.admin-form p{
+  margin:0;
+}
+.admin-form label{
+  display:block;
+  margin-bottom:6px;
+  font-size:12px;
+  font-weight:700;
+  color:var(--ui-text);
+}
+.admin-form input,
+.admin-form select,
+.admin-form textarea{
+  width:100%;
+  padding:10px 12px;
+  border:1px solid var(--ui-border-strong);
+  border-radius:7px;
+  background:#fff;
+  color:var(--ui-text);
+  font:inherit;
+}
+.admin-form textarea{
+  min-height:82px;
+  resize:vertical;
+}
+.admin-form .helptext{
+  display:block;
+  margin-top:4px;
+  color:var(--ui-muted);
+  font-size:11px;
+}
+.admin-form .errorlist{
+  margin:4px 0 0;
+  padding:0;
+  color:var(--ui-red);
+  list-style:none;
+  font-size:11px;
+}
+.admin-table-wrap{
+  overflow:auto;
+}
+.admin-danger{
+  color:#8f1d28 !important;
+}
+.admin-danger:hover{
+  color:#6f151f !important;
+}
+.admin-actions{
+  display:flex;
+  gap:6px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.admin-list{
+  display:grid;
+  gap:8px;
+}
+.admin-list-item{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:14px;
+  padding:12px 13px;
+  border:1px solid var(--ui-border);
+  border-radius:8px;
+  background:#fff;
+}
+.admin-list-item strong{
+  display:block;
+  font-size:13px;
+  color:var(--ui-text);
+}
+.admin-passage{
+  margin-top:4px;
+  line-height:1.45;
+}
+.admin-meta{
+  margin-top:4px;
+  font-size:11px;
+}
+.admin-link{
+  text-decoration:none;
+}
+.admin-link:hover{
+  background:#f4f7f9;
+}
+.admin-user-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+}
+.admin-user-card{
+  border:1px solid var(--ui-border);
+  border-radius:8px;
+  padding:12px;
+  background:#fff;
+}
+.admin-user-card strong{
+  display:block;
+  font-size:13px;
+}
+.admin-user-card span{
+  display:block;
+  color:var(--ui-muted);
+  margin-top:3px;
+  font-size:12px;
+}
+.admin-user-card small{
+  display:block;
+  margin-top:7px;
+  color:#75827c;
+  font-size:10px;
+}
+html[data-theme="dark"] .admin-stat,
+html[data-theme="dark"] .admin-list-item,
+html[data-theme="dark"] .admin-user-card{
+  background:#131c26;
+  border-color:#2b3948;
+}
+html[data-theme="dark"] .admin-form input,
+html[data-theme="dark"] .admin-form select,
+html[data-theme="dark"] .admin-form textarea{
+  background:#1a2632;
+  color:#edf2f7;
+  border-color:#38495a;
+}
+@media(max-width:1000px){
+  .admin-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .admin-grid{grid-template-columns:1fr}
+  .admin-user-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:600px){
+  .admin-stats{grid-template-columns:1fr}
+  .admin-user-grid{grid-template-columns:1fr}
+  .admin-list-item{align-items:flex-start;flex-direction:column}
+}
