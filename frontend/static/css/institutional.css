@@ -918,3 +918,50 @@ html[data-sidebar="collapsed"] .rail-collapse{
   color:var(--ui-yellow) !important;
   background:#fff !important;
 }
+
+
+/* Correctif : le panneau Paramètres doit toujours rester visible au-dessus du contenu */
+#docsec-settings{
+  position:relative;
+  z-index:2100;
+}
+#docsec-settings .theme-settings-panel{
+  position:fixed !important;
+  left:calc(var(--rail-width) + 10px) !important;
+  right:auto !important;
+  bottom:72px !important;
+  min-width:210px !important;
+  z-index:2200 !important;
+  background:#fff !important;
+  border:1px solid var(--ui-border) !important;
+  box-shadow:0 14px 35px rgba(31,47,64,.18) !important;
+  opacity:1 !important;
+  visibility:visible !important;
+}
+html[data-sidebar="collapsed"] #docsec-settings .theme-settings-panel{
+  left:calc(var(--rail-width) + 10px) !important;
+}
+html[data-theme="dark"] #docsec-settings .theme-settings-panel{
+  background:#131c26 !important;
+  border-color:#2b3948 !important;
+  color:#edf2f7 !important;
+}
+@media(max-width:900px){
+  #docsec-settings .theme-settings-panel{
+    left:246px !important;
+    bottom:72px !important;
+  }
+  html[data-sidebar="collapsed"] #docsec-settings .theme-settings-panel{
+    left:10px !important;
+  }
+}
+@media(max-width:600px){
+  #docsec-settings .theme-settings-panel{
+    left:246px !important;
+    bottom:64px !important;
+    min-width:190px !important;
+  }
+  html[data-sidebar="collapsed"] #docsec-settings .theme-settings-panel{
+    left:10px !important;
+  }
+}
