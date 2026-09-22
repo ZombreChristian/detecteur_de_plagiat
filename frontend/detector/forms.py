@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm, SetPasswordForm
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from .models import StudyDocument, WhitelistedPassage
 
 User = get_user_model()
@@ -125,10 +125,6 @@ class AdminUserUpdateForm(forms.ModelForm):
         if commit:
             user.save()
         return user
-
-
-class AdminSetPasswordForm(SetPasswordForm):
-    pass
 
 
 class StudyDocumentForm(forms.ModelForm):
