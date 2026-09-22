@@ -498,9 +498,18 @@ def administration_utilisateur(request, pk):
         if action == "update_profile":
             profile_form = AdminUserUpdateForm(request.POST, instance=target)
             if profile_form.is_valid():
-                profile_form.save()
-                messages.success(request, f"Le compte « {target.username} » a été mis à jour.")
-                return redirect("detector:administration_utilisateur", pk=target.pk)
+                if target.pk == request.user.pk and (
+                    profile_form.cleaned_data["role"] != "admin"
+                    or not profile_form.cleaned_data["is_active"]
+                ):
+                    profile_form.add_error(
+                        "role",
+                        "Votre propre compte doit rester Administrateur et actif.",
+                    )
+                else:
+                    profile_form.save()
+                    messages.success(request, f"Le compte « {target.username} » a été mis à jour.")
+                    return redirect("detector:administration_utilisateur", pk=target.pk)
 
         elif action == "reset_password":
             password_form = AdminSetPasswordForm(target, request.POST)
