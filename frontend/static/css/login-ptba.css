@@ -465,7 +465,35 @@ body::after {
 /* ==========================================================================
    Comptes utilisateurs et récupération du mot de passe
    ========================================================================== */
-.simple-auth-page{
+
+html.auth-page,
+body.auth-page{
+  height:auto;
+  min-height:100%;
+  overflow:auto;
+}
+.auth-secondary-action{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  min-height:48px;
+  margin:10px auto 0;
+  padding:10px 16px;
+  border:1.5px solid #cfd8d3;
+  border-radius:24px;
+  background:#fff;
+  color:#222;
+  font-weight:600;
+  text-decoration:none;
+  transition:.2s ease;
+}
+.auth-secondary-action:hover,
+.auth-secondary-action:focus-visible{
+  background:#f2f5f3;
+  border-color:#9fa9a4;
+}
+\n.simple-auth-page{
   min-height:calc(100vh - 108px);
   display:flex;
   align-items:center;
