@@ -46,6 +46,7 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
+PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "").rstrip("/")
 LOGIN_URL = "/connexion/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/connexion/"
