@@ -6,7 +6,7 @@ from django.core.files.storage import FileSystemStorage
 from docx import Document as DocxDocument
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout, get_user_model
+from django.contrib.auth import authenticate, login, logout, get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.core.mail import send_mail
@@ -29,6 +29,7 @@ from .forms import (
     AdminUserCreateForm,
     AdminUserUpdateForm,
     PasswordRecoveryForm,
+    UserPasswordChangeForm,
 )
 from .models import Analysis, StudyDocument
 
@@ -136,6 +137,18 @@ def signup_view(request):
         messages.success(request, "Votre compte a été créé. Vous pouvez maintenant vous connecter.")
         return redirect("detector:login")
     return render(request, "signup.html", {"form": form})
+
+
+
+@login_required
+def account_settings(request):
+    form = UserPasswordChangeForm(request.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        update_session_auth_hash(request, request.user)
+        messages.success(request, "Votre mot de passe a été modifié avec succès.")
+        return redirect("detector:account_settings")
+    return render(request, "account_settings.html", {"form": form})
 
 
 def logout_view(request):
