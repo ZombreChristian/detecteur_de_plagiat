@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>TDRDOC-SCAN — Administration</title>
+  <title>TDRDOC-SCAN — Administration des utilisateurs</title>
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <link rel="stylesheet" href="{% static 'css/institutional.css' %}">
   <script src="{% static 'js/theme.js' %}"></script>
@@ -12,38 +12,16 @@
 <body>
 <div class="console">
   <aside class="rail">
-    <div class="rail-brand">
-      <div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div>
-    </div>
-
+    <div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
     <nav class="rail-nav">
-      <a class="rail-link" href="{% url 'detector:dashboard' %}">
-        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span>
-        <span>Tableau de bord</span>
-      </a>
-      <a class="rail-link" href="{% url 'detector:reception' %}">
-        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="m10 15 2 2 4-4"></path></svg></span>
-        <span>Vérifier un TDR</span>
-      </a>
-      <a class="rail-link" href="{% url 'detector:analyser' %}">
-        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M8 12h8"></path></svg></span>
-        <span>Nouvelle analyse</span>
-      </a>
-      <a class="rail-link" href="{% url 'detector:resultats' %}">
-        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span>
-        <span>Historique</span>
-      </a>
-      <a class="rail-link active" href="{% url 'detector:administration' %}">
-        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span>
-        <span>Administration</span>
-      </a>
+      <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span><span>Tableau de bord</span></a>
+      <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="m10 15 2 2 4-4"></path></svg></span><span>Vérifier un TDR</span></a>
+      <a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M8 12h8"></path></svg></span><span>Nouvelle analyse</span></a>
+      <a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span><span>Historique</span></a>
+      <a class="rail-link active" href="{% url 'detector:administration' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span><span>Administration</span></a>
     </nav>
-
     <div class="rail-foot">
-      <div class="rail-user">
-        <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
-        <small>Session active</small>
-      </div>
+      <div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div>
       <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
     </div>
   </aside>
@@ -51,37 +29,35 @@
   <main class="main">
     <div class="ctxbar">
       <div>
-        <h1>Administration</h1>
-        <div class="lede">Console métier TDRDOC-SCAN pour gérer le registre, les contrôles et les règles d'exclusion.</div>
+        <h1>Administration des utilisateurs</h1>
+        <div class="lede">Créer, modifier, désactiver, supprimer des comptes et attribuer les rôles TDRDOC-SCAN.</div>
       </div>
     </div>
 
     <div class="page-pad admin-page">
-      {% for message in messages %}
-        <div class="alert">{{ message }}</div>
-      {% endfor %}
+      {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
 
       <div class="admin-stats">
         <div class="admin-stat"><span>Utilisateurs</span><strong>{{ stats.users }}</strong></div>
-        <div class="admin-stat"><span>Documents du registre</span><strong>{{ stats.documents }}</strong></div>
-        <div class="admin-stat"><span>Analyses</span><strong>{{ stats.analyses }}</strong></div>
-        <div class="admin-stat"><span>Passages autorisés actifs</span><strong>{{ stats.whitelisted }}</strong></div>
+        <div class="admin-stat"><span>Actifs</span><strong>{{ stats.active }}</strong></div>
+        <div class="admin-stat"><span>Inactifs</span><strong>{{ stats.inactive }}</strong></div>
+        <div class="admin-stat"><span>Administrateurs</span><strong>{{ stats.admins }}</strong></div>
       </div>
 
       <div class="admin-grid">
         <section class="panel admin-section">
           <div class="panel-head">
             <div>
-              <h2>Ajouter un document au registre</h2>
-              <div class="muted admin-help">Créer une fiche TDR ou rapport sans passer par Django Admin.</div>
+              <h2>Créer un compte</h2>
+              <div class="muted admin-help">Le rôle Administrateur donne accès à cette console.</div>
             </div>
           </div>
           <div class="panel-body">
             <form method="post" class="admin-form">
               {% csrf_token %}
-              <input type="hidden" name="action" value="create_document">
-              {{ document_form.as_p }}
-              <button class="btn" type="submit">Ajouter au registre</button>
+              <input type="hidden" name="action" value="create_user">
+              {{ create_user_form.as_p }}
+              <button class="btn btn-primary" type="submit">Créer le compte</button>
             </form>
           </div>
         </section>
@@ -89,16 +65,15 @@
         <section class="panel admin-section">
           <div class="panel-head">
             <div>
-              <h2>Passages autorisés</h2>
-              <div class="muted admin-help">Gérer les textes institutionnels qui ne doivent pas déclencher une alerte.</div>
+              <h2>Recherche</h2>
+              <div class="muted admin-help">Rechercher par identifiant, nom ou e-mail.</div>
             </div>
           </div>
           <div class="panel-body">
-            <form method="post" class="admin-form">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="create_whitelist">
-              {{ whitelist_form.as_p }}
-              <button class="btn" type="submit">Enregistrer</button>
+            <form method="get" class="admin-search">
+              <input type="search" name="q" value="{{ q }}" placeholder="Nom d'utilisateur, nom ou e-mail">
+              <button class="btn" type="submit">Rechercher</button>
+              {% if q %}<a class="btn" href="{% url 'detector:administration' %}">Réinitialiser</a>{% endif %}
             </form>
           </div>
         </section>
@@ -107,35 +82,55 @@
       <section class="panel admin-section">
         <div class="panel-head">
           <div>
-            <h2>Documents du registre</h2>
-            <div class="muted admin-help">{{ documents|length }} éléments affichés</div>
+            <h2>Comptes utilisateurs</h2>
+            <div class="muted admin-help">{{ users|length }} compte(s) affiché(s)</div>
           </div>
         </div>
         <div class="panel-body">
           <div class="admin-table-wrap">
             <table class="ledger">
               <thead>
-                <tr><th>Titre</th><th>Type</th><th>Secteur</th><th>Statut</th><th>Année</th><th></th></tr>
+                <tr>
+                  <th>Utilisateur</th>
+                  <th>Nom complet</th>
+                  <th>E-mail</th>
+                  <th>Rôle</th>
+                  <th>État</th>
+                  <th>Dernière connexion</th>
+                  <th>Actions</th>
+                </tr>
               </thead>
               <tbody>
-              {% for document in documents %}
+              {% for user in users %}
                 <tr>
-                  <td class="doc-name"><strong>{{ document.title }}</strong></td>
-                  <td>{{ document.get_document_type_display }}</td>
-                  <td class="muted">{{ document.sector|default:"—" }}</td>
-                  <td>{{ document.status|default:"—" }}</td>
-                  <td>{{ document.year|default:"—" }}</td>
+                  <td><strong>{{ user.username }}</strong></td>
+                  <td>{{ user.get_full_name|default:"—" }}</td>
+                  <td class="muted">{{ user.email|default:"—" }}</td>
+                  <td>{% if user.is_staff %}<span class="status status-ok">Administrateur</span>{% else %}<span class="status status-neutral">Utilisateur</span>{% endif %}</td>
+                  <td>{% if user.is_active %}<span class="status status-ok">Actif</span>{% else %}<span class="status status-alert">Inactif</span>{% endif %}</td>
+                  <td class="muted">{{ user.last_login|date:"d/m/Y H:i"|default:"Jamais" }}</td>
                   <td>
-                    <form method="post" onsubmit="return confirm('Supprimer ce document du registre ?');">
-                      {% csrf_token %}
-                      <input type="hidden" name="action" value="delete_document">
-                      <input type="hidden" name="document_id" value="{{ document.id }}">
-                      <button class="btn admin-danger" type="submit">Supprimer</button>
-                    </form>
+                    <div class="admin-actions">
+                      <a class="btn" href="{% url 'detector:administration_utilisateur' user.id %}">Modifier</a>
+                      <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="toggle_user">
+                        <input type="hidden" name="user_id" value="{{ user.id }}">
+                        <button class="btn" type="submit">{% if user.is_active %}Désactiver{% else %}Activer{% endif %}</button>
+                      </form>
+                      {% if user.id != request.user.id %}
+                      <form method="post" onsubmit="return confirm('Supprimer définitivement ce compte ?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete_user">
+                        <input type="hidden" name="user_id" value="{{ user.id }}">
+                        <button class="btn admin-danger" type="submit">Supprimer</button>
+                      </form>
+                      {% endif %}
+                    </div>
                   </td>
                 </tr>
               {% empty %}
-                <tr><td colspan="6" class="ledger-empty">Aucun document dans le registre.</td></tr>
+                <tr><td colspan="7" class="ledger-empty">Aucun compte ne correspond à la recherche.</td></tr>
               {% endfor %}
               </tbody>
             </table>
@@ -143,72 +138,20 @@
         </div>
       </section>
 
-      <div class="admin-grid">
-        <section class="panel admin-section">
-          <div class="panel-head"><h2>Passages autorisés enregistrés</h2></div>
-          <div class="panel-body">
-            <div class="admin-list">
-            {% for passage in passages %}
-              <div class="admin-list-item">
-                <div>
-                  <strong>{{ passage.reason|default:"Sans motif" }}</strong>
-                  <div class="muted admin-passage">{{ passage.text|truncatechars:160 }}</div>
-                </div>
-                <div class="admin-actions">
-                  <form method="post">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="toggle_whitelist">
-                    <input type="hidden" name="passage_id" value="{{ passage.id }}">
-                    <button class="btn" type="submit">{% if passage.active %}Désactiver{% else %}Activer{% endif %}</button>
-                  </form>
-                  <form method="post" onsubmit="return confirm('Supprimer ce passage autorisé ?');">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="delete_whitelist">
-                    <input type="hidden" name="passage_id" value="{{ passage.id }}">
-                    <button class="btn admin-danger" type="submit">Supprimer</button>
-                  </form>
-                </div>
-              </div>
-            {% empty %}
-              <div class="ledger-empty">Aucun passage autorisé.</div>
-            {% endfor %}
-            </div>
-          </div>
-        </section>
-
-        <section class="panel admin-section">
-          <div class="panel-head"><h2>Dernières analyses</h2></div>
-          <div class="panel-body">
-            <div class="admin-list">
-            {% for analysis in analyses %}
-              <a class="admin-list-item admin-link" href="{% url 'detector:analysis_detail' analysis.id %}">
-                <div>
-                  <strong>{{ analysis.document_name }}</strong>
-                  <div class="muted admin-meta">{{ analysis.get_mode_display }} · {{ analysis.created_at|date:"d/m/Y H:i" }}</div>
-                </div>
-                <span class="status {% if analysis.decision == 'SIMILAIRE' %}status-alert{% elif analysis.decision == 'DIFFERENT' %}status-ok{% else %}status-neutral{% endif %}">{{ analysis.decision|default:"—" }}</span>
-              </a>
-            {% empty %}
-              <div class="ledger-empty">Aucune analyse enregistrée.</div>
-            {% endfor %}
-            </div>
-          </div>
-        </section>
-      </div>
-
       <section class="panel admin-section">
-        <div class="panel-head"><h2>Comptes utilisateurs</h2></div>
+        <div class="panel-head">
+          <div>
+            <h2>Responsabilités de l'administrateur</h2>
+            <div class="muted admin-help">La console centrale porte sur les comptes et leurs accès.</div>
+          </div>
+        </div>
         <div class="panel-body">
-          <div class="admin-user-grid">
-          {% for user in users %}
-            <div class="admin-user-card">
-              <strong>{{ user.get_full_name|default:user.username }}</strong>
-              <span>{{ user.username }}</span>
-              <small>{% if user.is_staff %}Administrateur{% else %}Utilisateur{% endif %} · {% if user.is_active %}Actif{% else %}Inactif{% endif %}</small>
-            </div>
-          {% empty %}
-            <div class="ledger-empty">Aucun utilisateur.</div>
-          {% endfor %}
+          <div class="admin-role-grid">
+            <div class="admin-role-card"><strong>Créer</strong><span>Créer de nouveaux comptes et définir leur rôle.</span></div>
+            <div class="admin-role-card"><strong>Modifier</strong><span>Corriger l'identité, l'e-mail, l'état ou le rôle d'un compte.</span></div>
+            <div class="admin-role-card"><strong>Sécuriser</strong><span>Réinitialiser le mot de passe d'un utilisateur.</span></div>
+            <div class="admin-role-card"><strong>Contrôler</strong><span>Activer ou désactiver l'accès à l'application.</span></div>
+            <div class="admin-role-card"><strong>Supprimer</strong><span>Retirer un compte qui ne doit plus accéder au système.</span></div>
           </div>
         </div>
       </section>
