@@ -57,7 +57,11 @@ def password_reset_request(request):
             "detector:password_reset_confirm",
             kwargs={"uidb64": uid, "token": token},
         )
-        reset_url = f"{'https' if request.is_secure() else 'http'}://{request.get_host()}{reset_path}"
+        base_url = getattr(settings, "PUBLIC_APP_URL", "").rstrip("/")
+        if base_url:
+            reset_url = f"{base_url}{reset_path}"
+        else:
+            reset_url = f"{'https' if request.is_secure() else 'http'}://{request.get_host()}{reset_path}"
         context = {
             "email": user.email,
             "user": user,
@@ -71,21 +75,36 @@ def password_reset_request(request):
         subject = render_to_string("password_reset_subject.txt", context).strip()
         message = render_to_string("password_reset_email.txt", context)
 
-        try:
-            send_mail(
-                subject,
-                message,
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-                fail_silently=False,
-            )
-        except Exception:
+        required_email_settings = (
+            getattr(settings, "EMAIL_HOST", ""),
+            getattr(settings, "EMAIL_HOST_USER", ""),
+            getattr(settings, "EMAIL_HOST_PASSWORD", ""),
+            getattr(settings, "DEFAULT_FROM_EMAIL", ""),
+        )
+        if not all(required_email_settings):
             form.add_error(
                 None,
-                "Le message de récupération n'a pas pu être envoyé. Vérifiez la configuration e-mail du serveur.",
+                "L'envoi e-mail n'est pas configuré. Renseignez EMAIL_HOST, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD et DEFAULT_FROM_EMAIL dans le fichier .env.",
             )
         else:
-            return redirect("detector:password_reset_done")
+            try:
+                send_mail(
+                    subject,
+                    message,
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                    fail_silently=False,
+                )
+            except Exception as exc:
+                if settings.DEBUG:
+                    form.add_error(None, f"Échec de l'envoi SMTP : {exc}")
+                else:
+                    form.add_error(
+                        None,
+                        "Le message de récupération n'a pas pu être envoyé. Vérifiez la configuration e-mail du serveur.",
+                    )
+            else:
+                return redirect("detector:password_reset_done")
 
     return render(request, "password_reset.html", {"form": form})
 
