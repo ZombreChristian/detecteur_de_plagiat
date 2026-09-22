@@ -437,3 +437,98 @@ body::after {
   .login-panel h2 { font-size: 23px; }
   .login-form-area { padding: 26px 20px 35px; }
 }
+
+
+/* ==========================================================================
+   Comptes utilisateurs et récupération du mot de passe
+   ========================================================================== */
+.simple-auth-page{
+  min-height:calc(100vh - 108px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+  background:
+    radial-gradient(circle at 8% 18%, rgba(8,120,62,.055), transparent 280px),
+    radial-gradient(circle at 92% 82%, rgba(230,184,0,.045), transparent 260px),
+    linear-gradient(135deg,#f3f8f5 0%,#ffffff 52%,#f5f7f6 100%);
+}
+.simple-auth-card{
+  width:min(560px,100%);
+  padding:36px 40px;
+  border:1px solid #dbe2dd;
+  border-radius:18px;
+  background:#fff;
+  box-shadow:0 12px 35px rgba(31,47,64,.09);
+}
+.simple-auth-card h2{
+  font-size:32px;
+  margin-bottom:8px;
+}
+.simple-auth-card .lede{
+  color:#667382;
+  margin-bottom:24px;
+  font-size:15px;
+}
+.simple-auth-card form{
+  display:grid;
+  gap:14px;
+}
+.simple-auth-card .field{
+  margin-bottom:0;
+}
+.simple-auth-card form p{
+  margin:0;
+}
+.simple-auth-card form label{
+  display:block;
+  margin-bottom:7px;
+  font-weight:600;
+  color:#17202b;
+}
+.simple-auth-card input,
+.simple-auth-card select,
+.simple-auth-card textarea{
+  width:100%;
+  min-height:48px;
+  padding:10px 13px;
+  border:1px solid #cfd8d3;
+  border-radius:10px;
+  background:#fff;
+  color:#151515;
+  font:inherit;
+}
+.simple-auth-card input:focus,
+.simple-auth-card select:focus,
+.simple-auth-card textarea:focus{
+  outline:none;
+  border-color:#16823a;
+  box-shadow:0 0 0 3px rgba(22,130,58,.10);
+}
+.simple-auth-card ul{
+  margin:5px 0 0;
+  padding:0;
+  list-style:none;
+}
+.simple-auth-card .helptext,
+.simple-auth-card .field-help{
+  display:block;
+  margin-top:5px;
+  color:#6c7a73;
+  font-size:11px;
+  line-height:1.45;
+}
+.simple-auth-card .error{
+  display:block;
+  margin-top:5px;
+  color:#b4232d;
+  font-size:11px;
+}
+.simple-link-button{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-decoration:none;
+  padding-top:15px;
+  padding-bottom:15px;
+}
