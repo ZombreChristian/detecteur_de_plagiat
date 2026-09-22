@@ -15,6 +15,15 @@
 </aside>
 <main class="main">
   <div class="ctxbar"><div><h1>Tableau de bord</h1><div class="lede">Vue d'ensemble du registre et de vos vérifications récentes</div></div><div class="actions"><a class="btn" href="{% url 'detector:reception' %}">Vérifier un TDR</a><a class="btn btn-primary" href="{% url 'detector:analyser' %}">Nouvelle analyse</a></div></div>
+  {% if not has_admin %}
+  <section class="panel admin-recovery-banner">
+    <div class="panel-body">
+      <strong>Accès administrateur indisponible.</strong>
+      <span> Aucun administrateur actif n'est actuellement configuré.</span>
+      <a class="btn" href="{% url 'detector:administration_recovery' %}">Récupérer mon accès administrateur</a>
+    </div>
+  </section>
+  {% endif %}
   <div class="pulse">
     <div class="pulse-cell"><b class="mono">{{ registry_total }}</b><span>Études au registre</span></div><div class="pulse-cell"><b class="mono">{{ registry_tdr }}</b><span>TDR référencés</span></div><div class="pulse-cell"><b class="mono">{{ registry_rapport }}</b><span>Rapports référencés</span></div><div class="pulse-cell"><b class="mono">{{ total }}</b><span>Vérifications effectuées</span></div><div class="pulse-cell"><b class="mono">{{ similar }}</b><span>Alertes de similarité</span></div>
   </div>
