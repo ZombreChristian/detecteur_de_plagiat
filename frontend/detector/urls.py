@@ -9,6 +9,7 @@ urlpatterns = [
     path("mot-de-passe-reinitialiser/<uidb64>/<token>/", views.password_reset_confirm, name="password_reset_confirm"),
     path("mot-de-passe-reinitialise/", views.password_reset_complete, name="password_reset_complete"),
     path("deconnexion/", views.logout_view, name="logout"),
+    path("mon-compte/", views.account_settings, name="account_settings"),
     path("", views.dashboard, name="dashboard"),
     path("reception/", views.reception, name="reception"),
     path("analyser/", views.analyser, name="analyser"),
