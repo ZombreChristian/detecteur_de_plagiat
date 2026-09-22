@@ -73,7 +73,8 @@
         </form>
 
         <a class="forgot-link" href="{% url 'detector:password_reset' %}">Mot de passe oublié ?</a>
-        <p class="create-account">Vous n'avez pas de compte ? <a href="{% url 'detector:signup' %}">Créer un compte</a></p>
+        <p class="create-account">Vous n'avez pas de compte ?</p>
+        <a class="create-account-action" href="{% url 'detector:signup' %}">Créer un compte</a>
       </div>
     </section>
   </main>
