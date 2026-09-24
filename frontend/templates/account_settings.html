@@ -1,0 +1,92 @@
+{% load static %}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TDRDOC-SCAN — Mon compte</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="stylesheet" href="{% static 'css/institutional.css' %}">
+  <script src="{% static 'js/theme.js' %}"></script>
+</head>
+<body>
+<div class="console">
+  <aside class="rail">
+    <div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
+
+    <nav class="rail-nav">
+      <a class="rail-link" href="{% url 'detector:dashboard' %}">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span>
+        <span>Tableau de bord</span>
+      </a>
+
+      <a class="rail-link" href="{% url 'detector:reception' %}">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="m10 15 2 2 4-4"></path></svg></span>
+        <span>Vérifier un TDR</span>
+      </a>
+
+      <a class="rail-link" href="{% url 'detector:analyser' %}">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M8 12h8"></path></svg></span>
+        <span>Nouvelle analyse</span>
+      </a>
+
+      <a class="rail-link" href="{% url 'detector:resultats' %}">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span>
+        <span>Historique</span>
+      </a>
+
+      <a class="rail-link active" href="{% url 'detector:account_settings' %}">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+        <span>Mon compte</span>
+      </a>
+
+      {% if request.user.is_staff %}
+      <a class="rail-link" href="{% url 'detector:administration' %}">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span>
+        <span>Administration</span>
+      </a>
+      {% endif %}
+    </nav>
+
+    <div class="rail-foot">
+      <div class="rail-user">
+        <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+        <small>Session active</small>
+      </div>
+      <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="ctxbar">
+      <div>
+        <h1>Mon compte</h1>
+        <div class="lede">Gérez vos informations de connexion.</div>
+      </div>
+    </div>
+
+    <div class="page-pad">
+      {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
+
+      <section class="panel admin-section national-bar-green" style="max-width:620px;">
+        <div class="panel-head">
+          <div>
+            <h2>Modifier mon mot de passe</h2>
+            <div class="muted admin-help">Saisissez votre ancien mot de passe, puis le nouveau et sa confirmation.</div>
+          </div>
+        </div>
+
+        <div class="panel-body">
+          <form method="post" class="admin-form">
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}
+            {{ form.as_p }}
+            <button class="btn btn-primary" type="submit">MODIFIER MON MOT DE PASSE</button>
+          </form>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>

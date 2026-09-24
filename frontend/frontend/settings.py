@@ -13,7 +13,7 @@ DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
 
 INSTALLED_APPS = [
-    "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
+    "django.contrib.auth", "django.contrib.contenttypes",
     "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles",
     "detector",
 ]
@@ -46,6 +46,19 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
+PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL", "").rstrip("/")
 LOGIN_URL = "/connexion/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/connexion/"
+
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@tdrdoc-scan.local")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False").lower() == "true"
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "20"))
+
+ALLOW_ADMIN_BOOTSTRAP = os.getenv("ALLOW_ADMIN_BOOTSTRAP", "False").lower() == "true"

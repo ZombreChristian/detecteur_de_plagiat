@@ -6,9 +6,15 @@ from django.core.files.storage import FileSystemStorage
 from docx import Document as DocxDocument
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.urls import reverse
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -17,7 +23,14 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from .forms import LoginForm
+from .forms import (
+    LoginForm,
+    SignUpForm,
+    AdminUserCreateForm,
+    AdminUserUpdateForm,
+    PasswordRecoveryForm,
+    UserPasswordChangeForm,
+)
 from .models import Analysis, StudyDocument
 
 
@@ -29,6 +42,113 @@ def login_view(request):
         login(request, form.get_user())
         return redirect("detector:dashboard")
     return render(request, "login.html", {"form": form})
+
+
+
+def password_reset_request(request):
+    if request.user.is_authenticated:
+        return redirect("detector:dashboard")
+
+    form = PasswordRecoveryForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.user
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        reset_path = reverse(
+            "detector:password_reset_confirm",
+            kwargs={"uidb64": uid, "token": token},
+        )
+        base_url = getattr(settings, "PUBLIC_APP_URL", "").rstrip("/")
+        if base_url:
+            reset_url = f"{base_url}{reset_path}"
+        else:
+            reset_url = f"{'https' if request.is_secure() else 'http'}://{request.get_host()}{reset_path}"
+        context = {
+            "email": user.email,
+            "user": user,
+            "domain": request.get_host(),
+            "site_name": "TDRDOC-SCAN",
+            "protocol": "https" if request.is_secure() else "http",
+            "uid": uid,
+            "token": token,
+            "reset_url": reset_url,
+        }
+        subject = render_to_string("password_reset_subject.txt", context).strip()
+        message = render_to_string("password_reset_email.txt", context)
+
+        required_email_settings = (
+            getattr(settings, "EMAIL_HOST", ""),
+            getattr(settings, "EMAIL_HOST_USER", ""),
+            getattr(settings, "EMAIL_HOST_PASSWORD", ""),
+            getattr(settings, "DEFAULT_FROM_EMAIL", ""),
+        )
+        if not all(required_email_settings):
+            form.add_error(
+                None,
+                "L'envoi e-mail n'est pas configuré. Renseignez EMAIL_HOST, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD et DEFAULT_FROM_EMAIL dans le fichier .env.",
+            )
+        else:
+            try:
+                send_mail(
+                    subject,
+                    message,
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                    fail_silently=False,
+                )
+            except Exception as exc:
+                if settings.DEBUG:
+                    form.add_error(None, f"Échec de l'envoi SMTP : {exc}")
+                else:
+                    form.add_error(
+                        None,
+                        "Le message de récupération n'a pas pu être envoyé. Vérifiez la configuration e-mail du serveur.",
+                    )
+            else:
+                return redirect("detector:password_reset_done")
+
+    return render(request, "password_reset.html", {"form": form})
+
+
+def password_reset_done(request):
+    return render(request, "password_reset_done.html")
+
+
+def password_reset_confirm(request, uidb64, token):
+    from django.contrib.auth.views import PasswordResetConfirmView
+    view = PasswordResetConfirmView.as_view(
+        template_name="password_reset_confirm.html",
+        success_url="/mot-de-passe-reinitialise/",
+    )
+    return view(request, uidb64=uidb64, token=token)
+
+
+def password_reset_complete(request):
+    return render(request, "password_reset_complete.html")
+
+
+
+def signup_view(request):
+    if request.user.is_authenticated:
+        return redirect("detector:dashboard")
+    form = SignUpForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.save()
+        messages.success(request, "Votre compte a été créé. Vous pouvez maintenant vous connecter.")
+        return redirect("detector:login")
+    return render(request, "signup.html", {"form": form})
+
+
+
+@login_required
+def account_settings(request):
+    form = UserPasswordChangeForm(request.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        update_session_auth_hash(request, request.user)
+        messages.success(request, "Votre mot de passe a été modifié avec succès.")
+        return redirect("detector:account_settings")
+    return render(request, "account_settings.html", {"form": form})
 
 
 def logout_view(request):
@@ -78,12 +198,14 @@ def dashboard(request):
     registry_total = StudyDocument.objects.count()
     registry_tdr = StudyDocument.objects.filter(document_type="TDR").count()
     registry_rapport = StudyDocument.objects.filter(document_type="RAPPORT").count()
+    has_admin = get_user_model().objects.filter(is_staff=True, is_active=True).exists()
     return render(request, "dashboard.html", {
         "recent": page_obj.object_list, "page_obj": page_obj, "total_filtered": paginator.count,
         "q": q, "selected_decision": decision, "selected_mode": mode,
         "total": total, "similar": similar, "different": different, "to_review": to_review,
         "tdr_checks": tdr_checks, "report_checks": report_checks,
         "registry_total": registry_total, "registry_tdr": registry_tdr, "registry_rapport": registry_rapport,
+        "has_admin": has_admin,
     })
 
 
@@ -316,3 +438,177 @@ def export_pdf(request):
     table = Table(data, colWidths=[150, 350]); table.setStyle(TableStyle([("BACKGROUND", (0,0), (0,-1), colors.HexColor("#eef2f7")), ("GRID", (0,0), (-1,-1), .5, colors.grey), ("VALIGN", (0,0), (-1,-1), "TOP"), ("PADDING", (0,0), (-1,-1), 7)])); story.append(table); story.append(Spacer(1, 18)); story.append(Paragraph("Sources proches", styles["Heading2"]))
     for source in result.get("sources", [])[:10]: story.extend([Paragraph(f"{source.get('source','')} — score {source.get('hybrid_score','')}", styles["BodyText"]), Spacer(1, 5)])
     doc.build(story); response = HttpResponse(buffer.getvalue(), content_type="application/pdf"); response["Content-Disposition"] = 'attachment; filename="rapport_analyse.pdf"'; return response
+
+
+
+
+
+@login_required
+def administration_recovery(request):
+    """Récupération contrôlée de l'accès administrateur lorsqu'il n'existe plus aucun administrateur actif."""
+    User = get_user_model()
+    active_admin_exists = User.objects.filter(is_staff=True, is_active=True).exists()
+    if active_admin_exists:
+        return redirect("detector:administration")
+
+    if not settings.DEBUG and not getattr(settings, "ALLOW_ADMIN_BOOTSTRAP", False):
+        messages.error(
+            request,
+            "Aucun administrateur actif n'est configuré. Le mode de récupération est désactivé sur cette installation.",
+        )
+        return redirect("detector:dashboard")
+
+    if request.method == "POST":
+        user = User.objects.get(pk=request.user.pk)
+        user.is_staff = True
+        user.is_active = True
+        user.save(update_fields=["is_staff", "is_active"])
+        messages.success(
+            request,
+            "Votre compte a retrouvé le rôle Administrateur. Vous pouvez maintenant accéder à la console.",
+        )
+        return redirect("detector:administration")
+
+    return render(request, "administration_recovery.html", {
+        "username": request.user.get_username(),
+    })
+
+@login_required
+def administration(request):
+    User = get_user_model()
+    if not request.user.is_staff:
+        if not User.objects.filter(is_staff=True, is_active=True).exists() and (
+            settings.DEBUG or getattr(settings, "ALLOW_ADMIN_BOOTSTRAP", False)
+        ):
+            return redirect("detector:administration_recovery")
+        messages.error(request, "Accès réservé aux administrateurs.")
+        return redirect("detector:dashboard")
+
+    User = get_user_model()
+    q = request.GET.get("q", "").strip()
+    users = User.objects.order_by("-is_active", "username")
+    if q:
+        users = users.filter(
+            Q(username__icontains=q)
+            | Q(first_name__icontains=q)
+            | Q(last_name__icontains=q)
+            | Q(email__icontains=q)
+        )
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+
+        if action == "create_user":
+            form = AdminUserCreateForm(request.POST)
+            if form.is_valid():
+                user = form.save()
+                messages.success(request, f"Le compte « {user.username} » a été créé.")
+                return redirect("detector:administration")
+            return render(request, "administration.html", {
+                "create_user_form": form,
+                "users": users,
+                "stats": _admin_user_stats(User),
+                "current_section": "users",
+            })
+
+        if action == "toggle_user":
+            user = get_object_or_404(User, pk=request.POST.get("user_id"))
+            if user.pk == request.user.pk:
+                messages.error(request, "Vous ne pouvez pas désactiver votre propre compte depuis cette page.")
+            else:
+                user.is_active = not user.is_active
+                user.save(update_fields=["is_active"])
+                messages.success(request, f"Le compte « {user.username} » est maintenant {'actif' if user.is_active else 'inactif'}.")
+            return redirect("detector:administration")
+
+        if action == "delete_user":
+            user = get_object_or_404(User, pk=request.POST.get("user_id"))
+            if user.pk == request.user.pk:
+                messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
+                return redirect("detector:administration")
+            return redirect("detector:administration_utilisateur_supprimer", pk=user.pk)
+
+    context = {
+        "create_user_form": AdminUserCreateForm(),
+        "users": users,
+        "q": q,
+        "stats": _admin_user_stats(User),
+        "current_section": "users",
+    }
+    return render(request, "administration.html", context)
+
+
+@login_required
+def administration_utilisateur(request, pk):
+    if not request.user.is_staff:
+        messages.error(request, "Accès réservé aux administrateurs.")
+        return redirect("detector:dashboard")
+
+    User = get_user_model()
+    target = get_object_or_404(User, pk=pk)
+    profile_form = AdminUserUpdateForm(request.POST or None, instance=target)
+    action = request.POST.get("action", "")
+    if request.method == "POST":
+        if action == "update_profile":
+            profile_form = AdminUserUpdateForm(request.POST, instance=target)
+            if profile_form.is_valid():
+                if target.pk == request.user.pk and (
+                    profile_form.cleaned_data["role"] != "admin"
+                    or not profile_form.cleaned_data["is_active"]
+                ):
+                    profile_form.add_error(
+                        "role",
+                        "Votre propre compte doit rester Administrateur et actif.",
+                    )
+                else:
+                    profile_form.save()
+                    messages.success(request, f"Le compte « {target.username} » a été mis à jour.")
+                    return redirect("detector:administration_utilisateur", pk=target.pk)
+
+        elif action == "delete_user":
+            if target.pk == request.user.pk:
+                messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
+                return redirect("detector:administration_utilisateur", pk=target.pk)
+            username = target.username
+            return redirect("detector:administration_utilisateur_supprimer", pk=target.pk)
+
+    return render(request, "administration_utilisateur.html", {
+        "target_user": target,
+        "profile_form": profile_form,
+    })
+
+
+@login_required
+def administration_utilisateur_supprimer(request, pk):
+    if not request.user.is_staff:
+        messages.error(request, "Accès réservé aux administrateurs.")
+        return redirect("detector:dashboard")
+
+    User = get_user_model()
+    target = get_object_or_404(User, pk=pk)
+    if target.pk == request.user.pk:
+        messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
+        return redirect("detector:administration")
+    if target.is_staff and target.is_active and User.objects.filter(is_staff=True, is_active=True).count() <= 1:
+        messages.error(request, "Impossible de supprimer le dernier administrateur actif.")
+        return redirect("detector:administration")
+
+    if request.method == "POST":
+        username = target.username
+        target.delete()
+        messages.success(request, f"Le compte « {username} » a été supprimé.")
+        return redirect("detector:administration")
+
+    return render(request, "administration_utilisateur_supprimer.html", {
+        "target_user": target,
+    })
+
+
+def _admin_user_stats(User):
+    return {
+        "users": User.objects.count(),
+        "active": User.objects.filter(is_active=True).count(),
+        "inactive": User.objects.filter(is_active=False).count(),
+        "admins": User.objects.filter(is_staff=True).count(),
+        "regular": User.objects.filter(is_staff=False).count(),
+    }
