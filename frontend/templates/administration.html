@@ -1,157 +1,43 @@
 {% load static %}
-<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>TDRDOC-SCAN — Administration des utilisateurs</title>
-  <link rel="stylesheet" href="{% static 'css/app.css' %}">
-  <link rel="stylesheet" href="{% static 'css/institutional.css' %}">
-  <script src="{% static 'js/theme.js' %}"></script>
-</head>
-<body>
-<div class="console">
-  <aside class="rail">
-    <div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
-    <nav class="rail-nav">
-      <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span><span>Tableau de bord</span></a>
-      <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="m10 15 2 2 4-4"></path></svg></span><span>Vérifier un TDR</span></a>
-      <a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M8 12h8"></path></svg></span><span>Nouvelle analyse</span></a>
-      <a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span><span>Historique</span></a>
-      <a class="rail-link active" href="{% url 'detector:administration' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span><span>Administration</span></a>
-    </nav>
-    <div class="rail-foot">
-      <div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div>
-      <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
-    </div>
-  </aside>
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TDRDOC-SCAN — Administration</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}"><link rel="stylesheet" href="{% static 'css/institutional.css' %}">
+<script src="{% static 'js/theme.js' %}"></script></head>
+<body><div class="console">
+<aside class="rail"><div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
+<nav class="rail-nav">
+<a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">▦</span><span>Tableau de bord</span></a>
+<a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">✓</span><span>Vérifier un TDR</span></a>
+<a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico">+</span><span>Nouvelle analyse</span></a>
+<a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico">◷</span><span>Historique</span></a>
+<a class="rail-link active" href="{% url 'detector:administration' %}"><span class="ico">◆</span><span>Administration</span></a>
+</nav><div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div></aside>
+<main class="main"><div class="ctxbar"><div><h1>Administration</h1><div class="lede">Gestion centralisée des utilisateurs, rôles, permissions et accès fonctionnels.</div></div></div>
+<div class="page-pad admin-page">{% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
+<div class="admin-stats"><div class="admin-stat"><span>Utilisateurs</span><strong>{{ stats.users }}</strong></div><div class="admin-stat"><span>Actifs</span><strong>{{ stats.active }}</strong></div><div class="admin-stat"><span>Administrateurs</span><strong>{{ stats.admins }}</strong></div><div class="admin-stat"><span>Rôles</span><strong>{{ groups|length }}</strong></div></div>
 
-  <main class="main">
-    <div class="ctxbar">
-      <div>
-        <h1>Administration des utilisateurs</h1>
-        <div class="lede">Créer, modifier, désactiver, supprimer des comptes et attribuer les rôles TDRDOC-SCAN.</div>
-      </div>
-    </div>
-
-    <div class="page-pad admin-page">
-      {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
-
-      <div class="admin-stats">
-        <div class="admin-stat"><span>Utilisateurs</span><strong>{{ stats.users }}</strong></div>
-        <div class="admin-stat"><span>Actifs</span><strong>{{ stats.active }}</strong></div>
-        <div class="admin-stat"><span>Inactifs</span><strong>{{ stats.inactive }}</strong></div>
-        <div class="admin-stat"><span>Administrateurs</span><strong>{{ stats.admins }}</strong></div>
-      </div>
-
-      <div class="admin-grid">
-        <section class="panel admin-section national-bar-red">
-          <div class="panel-head">
-            <div>
-              <h2>Créer un compte</h2>
-              <div class="muted admin-help">Le rôle Administrateur donne accès à cette console.</div>
-            </div>
-          </div>
-          <div class="panel-body">
-            <form method="post" class="admin-form">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="create_user">
-              {{ create_user_form.as_p }}
-              <button class="btn btn-primary" type="submit">Créer le compte</button>
-            </form>
-          </div>
-        </section>
-
-        <section class="panel admin-section national-bar-green">
-          <div class="panel-head">
-            <div>
-              <h2>Recherche</h2>
-              <div class="muted admin-help">Rechercher par identifiant, nom ou e-mail.</div>
-            </div>
-          </div>
-          <div class="panel-body">
-            <form method="get" class="admin-search">
-              <input type="search" name="q" value="{{ q }}" placeholder="Nom d'utilisateur, nom ou e-mail">
-              <button class="btn" type="submit">Rechercher</button>
-              {% if q %}<a class="btn" href="{% url 'detector:administration' %}">Réinitialiser</a>{% endif %}
-            </form>
-          </div>
-        </section>
-      </div>
-
-      <section class="panel admin-section national-bar-red">
-        <div class="panel-head">
-          <div>
-            <h2>Comptes utilisateurs</h2>
-            <div class="muted admin-help">{{ users|length }} compte(s) affiché(s)</div>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div class="admin-table-wrap">
-            <table class="ledger">
-              <thead>
-                <tr>
-                  <th>Utilisateur</th>
-                  <th>Nom complet</th>
-                  <th>E-mail</th>
-                  <th>Rôle</th>
-                  <th>État</th>
-                  <th>Dernière connexion</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-              {% for user in users %}
-                <tr>
-                  <td><strong>{{ user.username }}</strong></td>
-                  <td>{{ user.get_full_name|default:"—" }}</td>
-                  <td class="muted">{{ user.email|default:"—" }}</td>
-                  <td>{% if user.is_staff %}<span class="status status-ok">Administrateur</span>{% else %}<span class="status status-neutral">Utilisateur</span>{% endif %}</td>
-                  <td>{% if user.is_active %}<span class="status status-ok">Actif</span>{% else %}<span class="status status-alert">Inactif</span>{% endif %}</td>
-                  <td class="muted">{{ user.last_login|date:"d/m/Y H:i"|default:"Jamais" }}</td>
-                  <td>
-                    <div class="admin-actions">
-                      <a class="btn" href="{% url 'detector:administration_utilisateur' user.id %}">Modifier</a>
-                      <form method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="toggle_user">
-                        <input type="hidden" name="user_id" value="{{ user.id }}">
-                        <button class="btn" type="submit">{% if user.is_active %}Désactiver{% else %}Activer{% endif %}</button>
-                      </form>
-                      {% if user.id != request.user.id %}
-                      <a class="btn admin-danger" href="{% url 'detector:administration_utilisateur_supprimer' user.id %}">Supprimer</a>
-                      {% endif %}
-                    </div>
-                  </td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="7" class="ledger-empty">Aucun compte ne correspond à la recherche.</td></tr>
-              {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel admin-section national-bar-green">
-        <div class="panel-head">
-          <div>
-            <h2>Responsabilités de l'administrateur</h2>
-            <div class="muted admin-help">La console centrale porte sur les comptes et leurs accès.</div>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div class="admin-role-grid">
-            <div class="admin-role-card"><strong>Créer</strong><span>Créer de nouveaux comptes et définir leur rôle.</span></div>
-            <div class="admin-role-card"><strong>Modifier</strong><span>Corriger l'identité, l'e-mail, l'état ou le rôle d'un compte.</span></div>
-            <div class="admin-role-card"><strong>Sécuriser</strong><span>L'utilisateur gère lui-même la récupération et le changement de son mot de passe.</span></div>
-            <div class="admin-role-card"><strong>Contrôler</strong><span>Activer ou désactiver l'accès à l'application.</span></div>
-            <div class="admin-role-card"><strong>Supprimer</strong><span>Retirer un compte qui ne doit plus accéder au système.</span></div>
-          </div>
-        </div>
-      </section>
-    </div>
-  </main>
+<section class="panel admin-section"><div class="panel-head"><div><h2>Rôles et permissions</h2><div class="muted admin-help">Chaque rôle définit exactement les fonctionnalités accessibles à ses membres.</div></div></div>
+<div class="panel-body">
+<div class="admin-grid">
+<div class="card"><h3>Créer un rôle</h3><form method="post" class="admin-form"><input type="hidden" name="action" value="create_role">{% csrf_token %}<label>Nom du rôle</label><input name="role_name" placeholder="Ex. Analyste TDR" required><button class="btn btn-primary" type="submit">Créer le rôle</button></form></div>
+<div class="card"><h3>Rôles existants</h3><div class="admin-role-grid">{% for group in groups %}<div class="admin-role-card"><strong>{{ group.name }}</strong><span>{{ group.user_set.count }} utilisateur(s)</span><form method="post" style="margin-top:10px">{% csrf_token %}<input type="hidden" name="action" value="delete_role"><input type="hidden" name="group_id" value="{{ group.id }}"><button class="btn admin-danger" type="submit" {% if group.name == "Utilisateur" or group.name == "Administrateur" %}disabled{% endif %}>Supprimer</button></form></div>{% endfor %}</div></div>
 </div>
-</body>
-</html>
+{% for group in groups %}
+<div class="card" style="margin-top:14px"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><div><h3>{{ group.name }}</h3><p class="muted" style="margin:4px 0 0;font-size:12px">{{ group.user_set.count }} membre(s)</p></div></div>
+<form method="post" class="permission-list" style="margin-top:12px">{% csrf_token %}<input type="hidden" name="action" value="update_role"><input type="hidden" name="group_id" value="{{ group.id }}">
+{% for permission in permissions %}<label class="permission-item"><input type="checkbox" name="permissions" value="{{ permission.codename }}" {% if permission in group.permissions.all %}checked{% endif %}><span>{{ permission.name }}</span></label>{% endfor %}
+<button class="btn btn-primary" type="submit" style="margin-top:8px">Enregistrer les permissions du rôle</button></form></div>
+{% endfor %}
+</div></section>
+
+<section class="panel admin-section"><div class="panel-head"><div><h2>Utilisateurs et accès</h2><div class="muted admin-help">Attribuez un rôle à chaque compte. Les permissions suivent automatiquement le rôle.</div></div></div>
+<div class="panel-body"><form method="get" class="admin-search"><input type="search" name="q" value="{{ q }}" placeholder="Rechercher un utilisateur"><button class="btn" type="submit">Rechercher</button></form>
+<div class="admin-table-wrap" style="margin-top:14px"><table class="ledger"><thead><tr><th>Utilisateur</th><th>État</th><th>Rôle</th><th>Accès</th><th>Actions</th></tr></thead><tbody>
+{% for user in users %}<tr><td><strong>{{ user.username }}</strong><div class="doc-meta">{{ user.email|default:"—" }}</div></td><td>{% if user.is_active %}<span class="status status-ok">Actif</span>{% else %}<span class="status status-alert">Inactif</span>{% endif %}</td>
+<td>{% for g in user.groups.all %}<span class="status status-neutral">{{ g.name }}</span>{% empty %}<span class="muted">Aucun rôle</span>{% endfor %}</td>
+<td class="muted">{% if user.is_staff %}Administration{% else %}Fonctionnel{% endif %}</td>
+<td><a class="btn" href="{% url 'detector:administration_utilisateur' user.id %}">Gérer l'accès</a></td></tr>{% empty %}<tr><td colspan="5" class="ledger-empty">Aucun utilisateur.</td></tr>{% endfor %}
+</tbody></table></div></div></section>
+
+<section class="panel admin-section"><div class="panel-head"><div><h2>Créer un utilisateur</h2><div class="muted admin-help">Le rôle choisi pourra ensuite être ajusté depuis sa fiche.</div></div></div><div class="panel-body"><form method="post" class="admin-form">{% csrf_token %}<input type="hidden" name="action" value="create_user">{{ create_user_form.as_p }}<label>Rôle initial</label><select name="group_id" required><option value="">Choisir un rôle</option>{% for group in groups %}<option value="{{ group.id }}">{{ group.name }}</option>{% endfor %}</select><button class="btn btn-primary" type="submit">Créer le compte</button></form></div></section>
+</div></main></div></body></html>
