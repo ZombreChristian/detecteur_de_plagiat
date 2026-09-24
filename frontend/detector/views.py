@@ -167,6 +167,30 @@ def _require_permission(request, codename, message):
     return False
 
 
+@login_required
+def administration_utilisateur_supprimer(request, pk):
+    if not request.user.is_staff:
+        messages.error(request, "Accès réservé aux administrateurs.")
+        return redirect("detector:dashboard")
+    User = get_user_model()
+    target = get_object_or_404(User, pk=pk)
+    if target.pk == request.user.pk:
+        messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
+        return redirect("detector:administration")
+    if request.method == "POST":
+        target.is_active = False
+        target.save(update_fields=["is_active"])
+        messages.success(request, f"Le compte « {target.username} » a été désactivé.")
+        return redirect("detector:administration")
+    return render(request, "administration_utilisateur.html", {
+        "target_user": target,
+        "profile_form": AdminUserUpdateForm(instance=target),
+        "groups": Group.objects.order_by("name"),
+        "current_group": target.groups.first(),
+        "delete_confirmation": True,
+    })
+
+
 def _get_uploaded_docx(request):
     candidates = ("document", "tdr_document", "report_document", "file")
     for field_name in candidates:
