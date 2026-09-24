@@ -641,3 +641,22 @@ html[data-theme="light"] .registry-stat-card small{color:#68756d}
 .permission-item{display:flex;align-items:center;gap:9px;padding:9px 10px;background:var(--panel-raised);border:1px solid var(--hairline);border-radius:4px;color:var(--text)}
 .permission-item label{font-size:12.5px}
 @media(max-width:900px){.registry-stat-grid,.admin-role-grid{grid-template-columns:1fr}.admin-permission-grid{grid-template-columns:1fr}}
+
+/* Sources et preuves : 5 documents proches + passages dans le document source */
+.source-evidence-list{display:grid;gap:10px}
+.source-card{border:1px solid var(--hairline);border-radius:var(--radius-m);background:var(--panel-raised);overflow:hidden}
+.source-card summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;cursor:pointer;list-style:none;color:var(--text)}
+.source-card summary::-webkit-details-marker{display:none}
+.source-card summary strong{display:block;font-size:13.5px;word-break:break-word}
+.source-card summary small{display:block;margin-top:5px;color:var(--text-faint);font:11.5px var(--font-mono)}
+.source-chevron{font-size:18px;color:var(--text-faint);transition:transform .2s}
+.source-card[open] .source-chevron{transform:rotate(180deg)}
+.source-card-body{border-top:1px solid var(--hairline);padding:0 18px 20px}
+.source-overview{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--hairline-soft);font-size:12px;color:var(--text-dim)}
+.evidence-match{padding:15px 0;border-bottom:1px solid var(--hairline-soft)}
+.evidence-quote{white-space:pre-wrap}
+.source-document{margin-top:18px}
+.source-document h3{font-size:13px;margin:0 0 10px}
+.source-document-content{max-height:600px;overflow:auto;padding:18px;background:var(--panel);border:1px solid var(--hairline);border-radius:var(--radius-s);white-space:pre-wrap;line-height:1.7;font-size:13px;color:var(--text)}
+.source-document-content .docsec-evidence{background:rgba(230,184,0,.30);color:inherit;padding:2px 3px;border-radius:2px;outline:1px solid rgba(230,184,0,.45)}
+html[data-theme="light"] .source-document-content .docsec-evidence{background:rgba(230,184,0,.35)}
