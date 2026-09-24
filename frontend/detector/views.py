@@ -312,6 +312,13 @@ def reception(request):
         request.session["last_analysis_id"] = analysis.id
         request.session["last_document_name"] = uploaded.name
         if mode == "tdr" and result.get("decision") == "DIFFERENT":
+            saved_path = _save_uploaded_document(uploaded)
+            StudyDocument.objects.create(
+                title=Path(uploaded.name).stem,
+                document_type="TDR",
+                file_path=saved_path,
+                status="TDR validé / étude en cours",
+            )
             request.session["validated_tdr_name"] = uploaded.name
             messages.success(request, "TDR accepté : aucune similarité suffisante n'a été trouvée. Le rapport associé peut maintenant être réceptionné.")
             return redirect("detector:reception")
@@ -347,6 +354,12 @@ def upload_report_for_tdr(request, pk):
         response.raise_for_status()
         result = response.json()
         result["uploaded_path"] = _save_uploaded_document(uploaded)
+        StudyDocument.objects.create(
+            title=Path(uploaded.name).stem,
+            document_type="RAPPORT",
+            file_path=result["uploaded_path"],
+            status="Rapport reçu et contrôlé",
+        )
         result["linked_tdr_analysis_id"] = tdr.id
         result["linked_tdr_name"] = tdr.document_name
         duration = round((time.perf_counter() - start) * 1000)
