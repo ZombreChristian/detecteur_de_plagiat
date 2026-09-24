@@ -157,6 +157,16 @@ def logout_view(request):
     return redirect("detector:login")
 
 
+def _has_permission(user, codename):
+    return bool(user and user.is_authenticated and (user.is_superuser or user.is_staff or user.has_perm(f"detector.{codename}")))
+
+def _require_permission(request, codename, message):
+    if _has_permission(request.user, codename):
+        return True
+    messages.error(request, message)
+    return False
+
+
 def _get_uploaded_docx(request):
     candidates = ("document", "tdr_document", "report_document", "file")
     for field_name in candidates:
@@ -270,6 +280,8 @@ def analysis_detail(request, pk):
 
 @login_required
 def reception(request):
+    if not _require_permission(request, "can_verify_tdr", "Votre profil ne dispose pas de l'accès à la vérification des TDR."):
+        return redirect("detector:dashboard")
     if request.method == "GET":
         return render(request, "reception.html")
     mode = request.POST.get("mode", "tdr")
@@ -316,6 +328,8 @@ def reception(request):
 
 @login_required
 def upload_report_for_tdr(request, pk):
+    if not _require_permission(request, "can_analyze_report", "Votre profil ne dispose pas de l'accès à l'analyse des rapports."):
+        return redirect("detector:dashboard")
     tdr = get_object_or_404(Analysis, pk=pk, user=request.user, mode="duplicate", decision="DIFFERENT")
     if request.method == "GET":
         return render(request, "report_upload.html", {"tdr": tdr})
@@ -354,6 +368,8 @@ def upload_report_for_tdr(request, pk):
 
 @login_required
 def analyser(request):
+    if not _require_permission(request, "can_analyze_report", "Votre profil ne dispose pas de l'accès à l'analyse des rapports."):
+        return redirect("detector:dashboard")
     if request.method != "POST":
         return render(request, "analyser.html")
     uploaded = _get_uploaded_docx(request)
@@ -395,6 +411,8 @@ def analyser(request):
 
 @login_required
 def resultats(request):
+    if not _require_permission(request, "can_view_history", "Votre profil ne dispose pas de l'accès à l'historique."):
+        return redirect("detector:dashboard")
     """Historique complet des analyses de l'utilisateur, avec filtres et pagination."""
     analyses = Analysis.objects.filter(user=request.user).order_by("-created_at")
     q = request.GET.get("q", "").strip()
@@ -420,6 +438,8 @@ def resultats(request):
 
 @login_required
 def export_excel(request):
+    if not _require_permission(request, "can_export_results", "Votre profil ne dispose pas de l'accès aux exports."):
+        return redirect("detector:dashboard")
     analysis = Analysis.objects.filter(user=request.user).order_by("-created_at").first()
     if not analysis:
         return HttpResponse("Aucune analyse à exporter.", status=404)
@@ -431,6 +451,8 @@ def export_excel(request):
 
 @login_required
 def export_pdf(request):
+    if not _require_permission(request, "can_export_results", "Votre profil ne dispose pas de l'accès aux exports."):
+        return redirect("detector:dashboard")
     analysis = Analysis.objects.filter(user=request.user).order_by("-created_at").first()
     if not analysis: return HttpResponse("Aucune analyse à exporter.", status=404)
     result = analysis.result_json or {}; buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36); styles = getSampleStyleSheet()
