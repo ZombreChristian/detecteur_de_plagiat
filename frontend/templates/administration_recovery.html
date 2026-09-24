@@ -1,0 +1,55 @@
+{% load static %}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TDRDOC-SCAN — Récupération administrateur</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="stylesheet" href="{% static 'css/institutional.css' %}">
+  <script src="{% static 'js/theme.js' %}"></script>
+</head>
+<body>
+<div class="console">
+  <aside class="rail">
+    <div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
+    <nav class="rail-nav">
+      <a class="rail-link active" href="{% url 'detector:dashboard' %}">
+        <span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span>
+        <span>Tableau de bord</span>
+      </a>
+    </nav>
+    <div class="rail-foot">
+      <div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div>
+      <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="ctxbar">
+      <div>
+        <h1>Récupération de l'accès administrateur</h1>
+        <div class="lede">Aucun administrateur actif n'est actuellement configuré.</div>
+      </div>
+    </div>
+
+    <div class="page-pad">
+      <section class="panel admin-recovery-card">
+        <div class="panel-body">
+          <div class="admin-recovery-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="m9 12 2 2 4-4"></path></svg>
+          </div>
+          <h2>Compte : {{ username }}</h2>
+          <p class="muted">Cette opération remet votre compte en rôle <strong>Administrateur</strong>. Elle n'est disponible que lorsqu'aucun administrateur actif n'existe.</p>
+          <form method="post">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit">Récupérer mon accès administrateur</button>
+            <a class="btn" href="{% url 'detector:dashboard' %}">Annuler</a>
+          </form>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -3,19 +3,19 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DOCSEC — Nouvelle analyse</title>
-<link rel="stylesheet" href="{% static 'css/app.css' %}">
+<title>TDRDOC-SCAN — Nouvelle analyse</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}" /><link rel="stylesheet" href="{% static 'css/institutional.css' %}">
 <script src="{% static 'js/theme.js' %}"></script></head>
 <body>
 <div class="console">
 <aside class="rail">
-  <div class="rail-brand"><div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div><div class="brand-tag">Registre national des études — PTBA</div></div>
+  <div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
   <nav class="rail-nav">
-    <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">#</span><span>Tableau de bord</span></a>
-    <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">↳</span><span>Vérifier un TDR</span></a>
-    <a class="rail-link active" href="{% url 'detector:analyser' %}"><span class="ico">+</span><span>Nouvelle analyse</span></a>
-    <a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico">≡</span><span>Historique</span></a>
-    <a class="rail-link" href="/admin/"><span class="ico">*</span><span>Administration</span></a>
+    <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span><span>Tableau de bord</span></a>
+    <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="m10 15 2 2 4-4"></path></svg></span><span>Vérifier un TDR</span></a>
+    <a class="rail-link active" href="{% url 'detector:analyser' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M8 12h8"></path></svg></span><span>Nouvelle analyse</span></a>
+    <a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span><span>Historique</span></a>
+    {% if request.user.is_staff %}<a class="rail-link" href="{% url 'detector:administration' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span><span>Administration</span></a>{% endif %}
   </nav>
   <div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div>
 </aside>
@@ -23,7 +23,7 @@
   <div class="ctxbar"><div><h1>Nouvelle analyse</h1><div class="lede">Contrôle libre d'un document, hors parcours de réception guidé</div></div></div>
   <div class="page-pad">
     {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
-    <section class="panel" id="form-card" style="max-width:640px">
+    <section class="panel national-bar-red" id="form-card" style="max-width:640px">
       <div class="panel-head"><h2>Choisir le contrôle à effectuer</h2></div>
       <div class="panel-body">
         <form id="analysis-form" method="post" enctype="multipart/form-data">
@@ -34,7 +34,7 @@
         </form>
       </div>
     </section>
-    <section id="loading" class="proc" aria-live="polite" style="max-width:640px">
+    <section id="loading" class="proc national-bar-green" aria-live="polite" style="max-width:640px">
       <div class="proc-head"><strong id="loading-title">Analyse en cours</strong><span class="pct" id="loading-percent">0 %</span></div>
       <div class="proc-track"><span id="progress-bar"></span></div>
       <div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span id="loading-text">Lecture du document et préparation du contrôle.</span></div></div>

@@ -1,0 +1,51 @@
+{% load static %}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TDRDOC-SCAN — Confirmer la suppression</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="stylesheet" href="{% static 'css/institutional.css' %}">
+  <script src="{% static 'js/theme.js' %}"></script>
+</head>
+<body>
+<div class="console">
+  <aside class="rail">
+    <div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
+    <nav class="rail-nav">
+      <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span><span>Tableau de bord</span></a>
+      <a class="rail-link" href="{% url 'detector:administration' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span><span>Administration</span></a>
+    </nav>
+    <div class="rail-foot">
+      <div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div>
+      <a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="ctxbar">
+      <div>
+        <h1>Confirmer la suppression</h1>
+        <div class="lede">Cette opération est définitive.</div>
+      </div>
+      <div class="actions"><a class="btn" href="{% url 'detector:administration_utilisateur' target_user.id %}">Retour au compte</a></div>
+    </div>
+
+    <div class="page-pad">
+      <section class="panel admin-section admin-danger-zone">
+        <div class="panel-head"><div><h2>Supprimer le compte « {{ target_user.username }} » ?</h2></div></div>
+        <div class="panel-body">
+          <p class="muted">Vous êtes sur le point de supprimer définitivement ce compte, son accès à TDRDOC-SCAN et ses données associées. Cette action ne peut pas être annulée.</p>
+          <form method="post" style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px;">
+            {% csrf_token %}
+            <a class="btn" href="{% url 'detector:administration_utilisateur' target_user.id %}">Annuler</a>
+            <button class="btn admin-danger" type="submit">Oui, supprimer définitivement</button>
+          </form>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>

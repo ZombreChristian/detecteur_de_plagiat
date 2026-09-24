@@ -1,39 +1,96 @@
 {% load static %}
-<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DOCSEC — Connexion</title><link rel="stylesheet" href="{% static 'css/app.css' %}"><script src="{% static 'js/theme.js' %}"></script></head>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion · TDRDOC-SCAN</title>
+  <link rel="stylesheet" href="{% static 'css/login-ptba.css' %}">
+  <style>
+    .institution-title{overflow:hidden;white-space:nowrap;position:relative;}
+    .institution-title h1{display:inline-block;min-width:max-content;animation:tdr-marquee 18s linear infinite;will-change:transform;}
+    @keyframes tdr-marquee{from{transform:translateX(-100%)}to{transform:translateX(100vw)}}
+    @media(prefers-reduced-motion:reduce){.institution-title h1{animation:none;transform:none;}}
+  </style>
+</head>
 <body>
-<div class="auth-shell">
-  <section class="auth-aside">
-    <div class="brand"><span class="brand-mark">DOC<b>SEC</b></span></div>
-    <h1>Registre national des études du PTBA</h1>
-    <p class="lede">Un socle commun à deux moteurs de détection : éviter de financer deux fois la même étude, et vérifier qu'un livrable reçu n'est pas recyclé d'un rapport existant. L'outil signale ; la décision reste toujours humaine.</p>
-    <div class="auth-facts">
-      <div><b>01</b><span>Doublon détecté à la programmation, par similarité sémantique entre TDR.</span></div>
-      <div><b>02</b><span>Plagiat détecté à la réception, avec localisation précise des passages en cause.</span></div>
-      <div><b>03</b><span>Chaque alerte est instruite et tranchée par un agent habilité, de façon tracée.</span></div>
+  <header class="institution-header">
+    <div class="header-logo crest" aria-hidden="true">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/00/Armoiries%2C_coat_of_arms_Burkina_Faso.png/250px-Armoiries%2C_coat_of_arms_Burkina_Faso.png"
+           alt="Armoiries du Burkina Faso">
     </div>
-  </section>
-  <section class="auth-panel">
-    <div class="auth-panel-inner">
-      <div class="brand" style="margin-bottom:28px"><span class="brand-mark">DOC<b>SEC</b></span></div>
-      <h2>Connexion</h2>
-      <p class="lede">Accès réservé aux agents habilités.</p>
-      <form method="post">
-        {% csrf_token %}
-        {% if form.non_field_errors %}<div class="alert">{{ form.non_field_errors }}</div>{% endif %}
-        <div class="field">
-          <label>{{ form.username.label }}</label>
-          {{ form.username }}
-          {% for error in form.username.errors %}<small class="error">{{ error }}</small>{% endfor %}
-        </div>
-        <div class="field">
-          <label>{{ form.password.label }}</label>
-          {{ form.password }}
-          {% for error in form.password.errors %}<small class="error">{{ error }}</small>{% endfor %}
-        </div>
-        <button class="btn btn-primary btn-block" type="submit">Se connecter</button>
-      </form>
+
+    <div class="institution-title">
+      <h1><strong>TDRDOC-SCAN:</strong> <span>détecteur de plagiat et de doublon d'études</span></h1>
     </div>
-  </section>
-</div>
-</body></html>
+
+    <div class="flag-burkina" aria-label="Drapeau du Burkina Faso">
+      <span class="flag-green"></span>
+      <span class="flag-red"></span>
+      <span class="flag-star">★</span>
+    </div>
+  </header>
+
+  <main class="login-page">
+    <section class="login-panel">
+      <div class="login-panel-content">
+        <div class="brand-mark">TDRDOC-SCAN</div>
+        <h2>Pour accéder à votre espace,<br>connectez-vous.</h2>
+      </div>
+    </section>
+
+    <section class="login-form-area" aria-label="Connexion">
+      <div class="login-card">
+        <h2>Connexion</h2>
+        <p class="lede">Accédez à votre espace de travail</p>
+
+        <form method="post" novalidate>
+          {% csrf_token %}
+          {% if form.non_field_errors %}
+            <div class="alert">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="field">
+            <label for="{{ form.username.id_for_label }}">Nom d'utilisateur</label>
+            <div class="input-wrap">
+              <span class="field-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0"/></svg>
+              </span>
+              {{ form.username }}
+            </div>
+            {% if form.username.errors %}<span class="error">{{ form.username.errors }}</span>{% endif %}
+          </div>
+
+          <div class="field">
+            <label for="{{ form.password.id_for_label }}">Mot de passe</label>
+            <div class="input-wrap">
+              <span class="field-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+              </span>
+              {{ form.password }}
+              <button type="button" class="password-toggle" aria-label="Afficher ou masquer le mot de passe" onclick="togglePassword()">
+                <svg id="eye-icon" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+              </button>
+            </div>
+            {% if form.password.errors %}<span class="error">{{ form.password.errors }}</span>{% endif %}
+          </div>
+
+          <button type="submit" class="btn-login">SE CONNECTER</button>
+        </form>
+
+        <a class="forgot-link" href="{% url 'detector:password_reset' %}">Mot de passe oublié ?</a>
+        <p class="create-account">Vous n'avez pas de compte ?</p>
+        <a class="create-account-action" href="{% url 'detector:signup' %}">Créer un compte</a>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    function togglePassword() {
+      const input = document.getElementById('{{ form.password.id_for_label }}');
+      if (!input) return;
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+  </script>
+</body>
+</html>
