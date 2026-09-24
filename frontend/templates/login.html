@@ -6,6 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Connexion · TDRDOC-SCAN</title>
   <link rel="stylesheet" href="{% static 'css/login-ptba.css' %}">
+  <style>
+    .institution-title{overflow:hidden;white-space:nowrap;position:relative;}
+    .institution-title h1{display:inline-block;min-width:max-content;animation:tdr-marquee 18s linear infinite;will-change:transform;}
+    @keyframes tdr-marquee{from{transform:translateX(-100%)}to{transform:translateX(100vw)}}
+    @media(prefers-reduced-motion:reduce){.institution-title h1{animation:none;transform:none;}}
+  </style>
 </head>
 <body>
   <header class="institution-header">
