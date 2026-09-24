@@ -626,7 +626,10 @@ def _admin_user_stats(User):
         "inactive": User.objects.filter(is_active=False).count(),
         "admins": User.objects.filter(is_staff=True).count(),
         "regular": User.objects.filter(is_staff=False).count(),
-    }@login_required
+    }
+
+
+@login_required
 def administration_utilisateur(request, pk):
     if not request.user.is_staff:
         messages.error(request, "Accès réservé aux administrateurs.")
