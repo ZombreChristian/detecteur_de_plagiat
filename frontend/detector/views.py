@@ -7,6 +7,7 @@ from docx import Document as DocxDocument
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, get_user_model, update_session_auth_hash
+from django.contrib.auth.models import Group, Permission
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.core.mail import send_mail
@@ -477,132 +478,87 @@ def administration_recovery(request):
 def administration(request):
     User = get_user_model()
     if not request.user.is_staff:
-        if not User.objects.filter(is_staff=True, is_active=True).exists() and (
-            settings.DEBUG or getattr(settings, "ALLOW_ADMIN_BOOTSTRAP", False)
-        ):
+        if not User.objects.filter(is_staff=True, is_active=True).exists() and (settings.DEBUG or getattr(settings, "ALLOW_ADMIN_BOOTSTRAP", False)):
             return redirect("detector:administration_recovery")
         messages.error(request, "Accès réservé aux administrateurs.")
         return redirect("detector:dashboard")
 
-    User = get_user_model()
+    permissions = list(Permission.objects.filter(content_type__app_label="detector").order_by("codename"))
+    groups = list(Group.objects.prefetch_related("permissions", "user_set").order_by("name"))
     q = request.GET.get("q", "").strip()
     users = User.objects.order_by("-is_active", "username")
     if q:
-        users = users.filter(
-            Q(username__icontains=q)
-            | Q(first_name__icontains=q)
-            | Q(last_name__icontains=q)
-            | Q(email__icontains=q)
-        )
+        users = users.filter(Q(username__icontains=q) | Q(first_name__icontains=q) | Q(last_name__icontains=q) | Q(email__icontains=q))
 
     if request.method == "POST":
         action = request.POST.get("action", "")
-
         if action == "create_user":
             form = AdminUserCreateForm(request.POST)
             if form.is_valid():
                 user = form.save()
+                group_id = request.POST.get("group_id")
+                if group_id:
+                    group = get_object_or_404(Group, pk=group_id)
+                    user.groups.add(group)
+                    user.is_staff = group.name == "Administrateur" or user.is_staff
+                    user.save(update_fields=["is_staff"])
                 messages.success(request, f"Le compte « {user.username} » a été créé.")
                 return redirect("detector:administration")
-            return render(request, "administration.html", {
-                "create_user_form": form,
-                "users": users,
-                "stats": _admin_user_stats(User),
-                "current_section": "users",
-            })
-
+            return render(request, "administration.html", {"create_user_form": form, "users": users, "groups": groups, "permissions": permissions, "stats": _admin_user_stats(User), "q": q})
         if action == "toggle_user":
             user = get_object_or_404(User, pk=request.POST.get("user_id"))
             if user.pk == request.user.pk:
-                messages.error(request, "Vous ne pouvez pas désactiver votre propre compte depuis cette page.")
+                messages.error(request, "Vous ne pouvez pas désactiver votre propre compte.")
             else:
                 user.is_active = not user.is_active
                 user.save(update_fields=["is_active"])
                 messages.success(request, f"Le compte « {user.username} » est maintenant {'actif' if user.is_active else 'inactif'}.")
             return redirect("detector:administration")
-
-        if action == "delete_user":
+        if action == "create_role":
+            name = request.POST.get("role_name", "").strip()
+            if not name:
+                messages.error(request, "Le nom du rôle est obligatoire.")
+            elif Group.objects.filter(name__iexact=name).exists():
+                messages.error(request, "Ce rôle existe déjà.")
+            else:
+                Group.objects.create(name=name)
+                messages.success(request, f"Le rôle « {name} » a été créé.")
+            return redirect("detector:administration")
+        if action == "update_role":
+            group = get_object_or_404(Group, pk=request.POST.get("group_id"))
+            selected = set(request.POST.getlist("permissions"))
+            group.permissions.set([p for p in permissions if p.codename in selected])
+            messages.success(request, f"Les permissions du rôle « {group.name} » ont été mises à jour.")
+            return redirect("detector:administration")
+        if action == "assign_role":
             user = get_object_or_404(User, pk=request.POST.get("user_id"))
-            if user.pk == request.user.pk:
-                messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
-                return redirect("detector:administration")
-            return redirect("detector:administration_utilisateur_supprimer", pk=user.pk)
+            group = get_object_or_404(Group, pk=request.POST.get("group_id"))
+            if user.pk == request.user.pk and group.name != "Administrateur":
+                messages.error(request, "Votre propre compte doit conserver un accès administrateur.")
+            else:
+                user.groups.clear()
+                user.groups.add(group)
+                user.is_staff = group.name == "Administrateur"
+                user.save(update_fields=["is_staff"])
+                messages.success(request, f"Le rôle « {group.name} » a été attribué à « {user.username} ».")
+            return redirect("detector:administration")
+        if action == "delete_role":
+            group = get_object_or_404(Group, pk=request.POST.get("group_id"))
+            if group.name in ("Utilisateur", "Administrateur"):
+                messages.error(request, "Les rôles système Utilisateur et Administrateur ne peuvent pas être supprimés.")
+            else:
+                group.delete()
+                messages.success(request, "Le rôle a été supprimé.")
+            return redirect("detector:administration")
 
-    context = {
+    return render(request, "administration.html", {
         "create_user_form": AdminUserCreateForm(),
         "users": users,
+        "groups": groups,
+        "permissions": permissions,
         "q": q,
         "stats": _admin_user_stats(User),
-        "current_section": "users",
-    }
-    return render(request, "administration.html", context)
-
-
-@login_required
-def administration_utilisateur(request, pk):
-    if not request.user.is_staff:
-        messages.error(request, "Accès réservé aux administrateurs.")
-        return redirect("detector:dashboard")
-
-    User = get_user_model()
-    target = get_object_or_404(User, pk=pk)
-    profile_form = AdminUserUpdateForm(request.POST or None, instance=target)
-    action = request.POST.get("action", "")
-    if request.method == "POST":
-        if action == "update_profile":
-            profile_form = AdminUserUpdateForm(request.POST, instance=target)
-            if profile_form.is_valid():
-                if target.pk == request.user.pk and (
-                    profile_form.cleaned_data["role"] != "admin"
-                    or not profile_form.cleaned_data["is_active"]
-                ):
-                    profile_form.add_error(
-                        "role",
-                        "Votre propre compte doit rester Administrateur et actif.",
-                    )
-                else:
-                    profile_form.save()
-                    messages.success(request, f"Le compte « {target.username} » a été mis à jour.")
-                    return redirect("detector:administration_utilisateur", pk=target.pk)
-
-        elif action == "delete_user":
-            if target.pk == request.user.pk:
-                messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
-                return redirect("detector:administration_utilisateur", pk=target.pk)
-            username = target.username
-            return redirect("detector:administration_utilisateur_supprimer", pk=target.pk)
-
-    return render(request, "administration_utilisateur.html", {
-        "target_user": target,
-        "profile_form": profile_form,
     })
-
-
-@login_required
-def administration_utilisateur_supprimer(request, pk):
-    if not request.user.is_staff:
-        messages.error(request, "Accès réservé aux administrateurs.")
-        return redirect("detector:dashboard")
-
-    User = get_user_model()
-    target = get_object_or_404(User, pk=pk)
-    if target.pk == request.user.pk:
-        messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
-        return redirect("detector:administration")
-    if target.is_staff and target.is_active and User.objects.filter(is_staff=True, is_active=True).count() <= 1:
-        messages.error(request, "Impossible de supprimer le dernier administrateur actif.")
-        return redirect("detector:administration")
-
-    if request.method == "POST":
-        username = target.username
-        target.delete()
-        messages.success(request, f"Le compte « {username} » a été supprimé.")
-        return redirect("detector:administration")
-
-    return render(request, "administration_utilisateur_supprimer.html", {
-        "target_user": target,
-    })
-
 
 def _admin_user_stats(User):
     return {
@@ -611,4 +567,34 @@ def _admin_user_stats(User):
         "inactive": User.objects.filter(is_active=False).count(),
         "admins": User.objects.filter(is_staff=True).count(),
         "regular": User.objects.filter(is_staff=False).count(),
-    }
+    }@login_required
+def administration_utilisateur(request, pk):
+    if not request.user.is_staff:
+        messages.error(request, "Accès réservé aux administrateurs.")
+        return redirect("detector:dashboard")
+    User = get_user_model()
+    target = get_object_or_404(User, pk=pk)
+    groups = Group.objects.order_by("name")
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        if action == "update_profile":
+            form = AdminUserUpdateForm(request.POST, instance=target)
+            if form.is_valid():
+                role = get_object_or_404(Group, pk=request.POST.get("group_id"))
+                if target.pk == request.user.pk and role.name != "Administrateur":
+                    form.add_error(None, "Votre propre compte doit rester Administrateur.")
+                else:
+                    form.save()
+                    target.groups.clear()
+                    target.groups.add(role)
+                    target.is_staff = role.name == "Administrateur"
+                    target.save(update_fields=["is_staff"])
+                    messages.success(request, f"Le compte « {target.username} » a été mis à jour.")
+                    return redirect("detector:administration")
+        else:
+            form = AdminUserUpdateForm(instance=target)
+    else:
+        form = AdminUserUpdateForm(instance=target)
+    current_group = target.groups.first()
+    return render(request, "administration_utilisateur.html", {"target_user": target, "profile_form": form, "groups": groups, "current_group": current_group})
+
