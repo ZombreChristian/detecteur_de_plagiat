@@ -43,7 +43,7 @@
             <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Le rapport associé peut maintenant être soumis au contrôle de plagiat.</p>
             <form id="report-form" method="post" enctype="multipart/form-data">
               {% csrf_token %}<input type="hidden" name="mode" value="report">
-              <div class="field"><label>Rapport d'étude (.docx ou .pdf)</label><input id="report-file" type="file" name="document" accept=".docx,.pdf" required></div>
+              <div class="field"><label>Rapport d'étude (.docx ou .pdf)</label><input id="report-file" type="file" name="document" accept=".docx,.pdf" required></div><div class="field"><label for="report-threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="report-threshold" type="range" name="threshold" min="1" max="100" value="55"><output id="report-threshold-value">55 %</output></div><small class="muted">Ajustez le seuil selon le niveau de proximité retenu.</small></div>
               <button id="report-button" class="btn btn-primary" type="submit">Contrôler le rapport</button>
             </form>
           {% else %}
