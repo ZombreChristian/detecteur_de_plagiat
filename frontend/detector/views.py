@@ -354,30 +354,55 @@ def _analysis_problem_passages(result):
     return sorted(passages, key=len, reverse=True)
 
 
-def _normalize_for_match(value):
-    value = value or ""
-    return re.sub(r"\\s+", " ", value).strip().casefold()
+def _normalized_with_map(text):
+    """Normalise le texte tout en conservant la correspondance avec les positions originales."""
+    normalized = []
+    positions = []
+    previous_space = False
+    for index, char in enumerate(text or ""):
+        if char.isspace():
+            if not previous_space:
+                normalized.append(" ")
+                positions.append(index)
+            previous_space = True
+            continue
+        normalized.append(char.casefold())
+        positions.append(index)
+        previous_space = False
+
+    while normalized and normalized[0] == " ":
+        normalized.pop(0)
+        positions.pop(0)
+    while normalized and normalized[-1] == " ":
+        normalized.pop()
+        positions.pop()
+
+    return "".join(normalized), positions
 
 
 def _highlight_text_runs(paragraph, passages):
-    """Colorie les passages même si Word les a répartis sur plusieurs runs."""
+    """Colorie en rouge les passages même si les espaces diffèrent dans le fichier Word."""
     text = paragraph.text
     if not text or not passages:
         return
 
-    normalized_text = _normalize_for_match(text)
+    normalized_text, positions = _normalized_with_map(text)
     matches = []
+
     for passage in passages:
-        normalized_passage = _normalize_for_match(passage)
+        normalized_passage, _ = _normalized_with_map(passage)
         if not normalized_passage:
             continue
+
         start = 0
         while True:
             index = normalized_text.find(normalized_passage, start)
             if index < 0:
                 break
-            matches.append((index, index + len(normalized_passage)))
-            start = index + len(normalized_passage)
+            end = index + len(normalized_passage) - 1
+            if index < len(positions) and end < len(positions):
+                matches.append((positions[index], positions[end] + 1))
+            start = index + 1
 
     if not matches:
         return
@@ -390,9 +415,7 @@ def _highlight_text_runs(paragraph, passages):
         else:
             merged[-1][1] = max(merged[-1][1], end)
 
-    # Pour garantir un résultat visible dans Word, on reconstruit le paragraphe
-    # à partir du texte normalisé et applique le rouge aux zones correspondantes.
-    # Les documents analysés restent inchangés : seule la copie téléchargée est modifiée.
+    # On reconstruit uniquement la copie téléchargée : le fichier original reste intact.
     for run in list(paragraph.runs):
         run._element.getparent().remove(run._element)
 
@@ -404,8 +427,10 @@ def _highlight_text_runs(paragraph, passages):
         run.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
         run.bold = True
         cursor = end
+
     if cursor < len(text):
         paragraph.add_run(text[cursor:])
+
 
 
 def _highlight_docx(path, passages):
