@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 import html
+import os
 import re
 import tempfile
 import time
@@ -23,10 +24,13 @@ from src.similarity.model_manager import get_model, get_model_info
 
 
 THRESHOLDS = {"plagiarism": 0.55, "duplicate": 0.70}
-LEXICAL_WEIGHT = 0.30
-SEMANTIC_WEIGHT = 0.70
-TOP_SOURCES = 10
-TOP_PASSAGE_SOURCES = 3
+LEXICAL_WEIGHT = float(os.getenv("SIMILARITY_LEXICAL_WEIGHT", "0.30"))
+SEMANTIC_WEIGHT = float(os.getenv("SIMILARITY_SEMANTIC_WEIGHT", "0.70"))
+TOP_SOURCES = int(os.getenv("SIMILARITY_REFERENCE_TOP_K", "10"))
+TOP_PASSAGE_SOURCES = int(os.getenv("SIMILARITY_PASSAGE_TOP_K", "3"))
+
+if abs((LEXICAL_WEIGHT + SEMANTIC_WEIGHT) - 1.0) > 1e-6:
+    raise RuntimeError("SIMILARITY_LEXICAL_WEIGHT + SIMILARITY_SEMANTIC_WEIGHT doit être égal à 1.0")
 
 _REFERENCE_CACHE = {}
 
