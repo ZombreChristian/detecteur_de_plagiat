@@ -370,21 +370,30 @@ def upload_report_for_tdr(request, pk):
     if request.method == "GET":
         return render(request, "report_upload.html", {"tdr": tdr})
     uploaded = _get_uploaded_docx(request)
-    if not _validate_docx(uploaded):
-        messages.error(request, "Veuillez sélectionner un rapport DOCX valide.")
+    if not _validate_document(uploaded):
+        messages.error(request, "Veuillez sélectionner un rapport Word (.docx) ou PDF (.pdf) valide.")
+        return redirect("detector:upload_report_for_tdr", pk=tdr.pk)
+    uploaded_path = _save_uploaded_document(uploaded)
+    try:
+        threshold = float(request.POST.get("threshold", "")) / 100.0
+        if not 0.01 <= threshold <= 1.0:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
         return redirect("detector:upload_report_for_tdr", pk=tdr.pk)
     start = time.perf_counter()
     try:
         response = requests.post(
             f"{settings.FASTAPI_URL}/api/detect/plagiarism",
-            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            data={"threshold": threshold},
+            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))},
             timeout=600,
         )
         response.raise_for_status()
         result = response.json()
         # Le rapport est un candidat de comparaison : son analyse est
         # conservée dans l'historique, sans enrichissement automatique du registre.
-        result["uploaded_path"] = _save_uploaded_document(uploaded)
+        result["uploaded_path"] = uploaded_path
         result["linked_tdr_analysis_id"] = tdr.id
         result["linked_tdr_name"] = tdr.document_name
         duration = round((time.perf_counter() - start) * 1000)
