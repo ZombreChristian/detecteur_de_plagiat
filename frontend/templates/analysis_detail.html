@@ -6,13 +6,8 @@
 <title>TDRDOC-SCAN — Détail de l'analyse</title>
 <link rel="stylesheet" href="{% static 'css/app.css' %}" /><link rel="stylesheet" href="{% static 'css/institutional.css' %}">
 <script src="{% static 'js/theme.js' %}"></script><style>
-.document-reader{background:var(--surface,#fff);border:1px solid rgba(0,0,0,.10);border-radius:12px;padding:18px;line-height:1.7;white-space:pre-wrap;max-height:620px;overflow:auto}
-.document-reader mark.docsec-evidence{padding:2px 4px;border-radius:4px;background:#ffe66d;color:#171717;box-shadow:0 0 0 1px rgba(180,140,0,.2)}
-.document-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-.document-reader-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
 .document-reader-title h3{margin:0}
 .source-open{font-size:12px}
-@media(max-width:900px){.document-grid{grid-template-columns:1fr}}
 </style></head>
 <body>
 <div class="console">
@@ -43,16 +38,6 @@
 <span>{{ group.matches|length }} passage(s) signalé(s)</span>
 {% if group.source_id %}<a class="btn source-open" href="{% url 'detector:open_reference_document' group.source_id %}" target="_blank" rel="noopener">Ouvrir le document original</a>{% else %}<span class="muted source-open">Document original indisponible pour cette ancienne analyse</span>{% endif %}
 </div>
-<div class="document-grid">
-<div>
-<div class="document-reader-title"><h3>Document testé</h3><span class="muted">Passages similaires en jaune</span></div>
-<div class="document-reader">{{ group.candidate_document_html|safe }}</div>
-</div>
-<div>
-<div class="document-reader-title"><h3>Document de référence</h3><span class="muted">Passages correspondants en jaune</span></div>
-<div class="document-reader">{{ group.source_document_html|safe }}</div>
-</div>
-</div>
 {% for match in group.matches %}<div class="evidence-match"><div class="evidence-match-score">Correspondance {{ forloop.counter }} · score {{ match.score|floatformat:3 }}</div><div class="evidence-quote candidate"><span class="tag">PASSAGE DU DOCUMENT ANALYSÉ</span>{{ match.candidate_passage }}</div><div class="evidence-quote source"><span class="tag">PASSAGE CORRESPONDANT DANS LA SOURCE</span>{{ match.source_passage }}</div></div>{% empty %}<p class="muted">Aucun passage dépassant le seuil n'a été identifié dans cette source.</p>{% endfor %}
 {% endif %}{% endfor %}
 </div></details>
@@ -60,15 +45,9 @@
 </div></section>{% endif %}
 {% if result.matches %}<section class="panel national-bar-green"><div class="panel-head"><h2>Synthèse des passages signalés</h2></div><div class="panel-body"><p class="muted">Les correspondances ci-dessus sont détaillées source par source. Les extraits proviennent directement des documents sources analysés.</p></div></section>{% endif %}
 <section class="panel national-bar-red">
-<div class="panel-head"><h2>Document analysé</h2></div>
+<div class="panel-head"><h2>Document analysé</h2><a class="btn btn-primary" href="{% url 'detector:download_annotated_document' analysis.id %}">Télécharger le document analysé</a></div>
 <div class="panel-body">
-{% if document_url %}
-<p style="margin:0"><strong>{{ analysis.document_name }}</strong></p>
-<p class="muted" style="margin:6px 0 14px">Le document original est conservé dans <code>frontend/media/documents</code>.</p>
-<a class="btn btn-primary" href="{{ document_url }}" target="_blank" rel="noopener">Ouvrir le document</a>
-{% else %}
-<p class="muted">Le fichier original de cette analyse n'est pas disponible.</p>
-{% endif %}
+<p class="muted" style="margin:0">Le fichier téléchargé reprend le document analysé et met en rouge les passages signalés comme problématiques.</p>
 </div>
 {% if analysis.mode == "duplicate" and analysis.decision == "DIFFERENT" %}<section class="panel national-bar-green"><div class="panel-head"><h2>Étape suivante</h2></div><div class="panel-body"><p class="muted">Ce TDR a été jugé différent. Vous pouvez maintenant déposer le rapport d’étude correspondant afin de lancer son contrôle de plagiat.</p><a class="btn btn-primary" href="{% url 'detector:upload_report_for_tdr' analysis.id %}">Déposer le rapport lié à ce TDR</a></div></section>{% endif %}
 </section>
