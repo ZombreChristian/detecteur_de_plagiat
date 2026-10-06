@@ -41,7 +41,7 @@
 <div class="source-overview">
 <span>Couverture des passages : <b>{{ group.coverage|floatformat:1 }}</b></span>
 <span>{{ group.matches|length }} passage(s) signalé(s)</span>
-<a class="btn source-open" href="{% url 'detector:open_reference_document' group.source_id %}" target="_blank" rel="noopener">Ouvrir le document original</a>
+{% if group.source_id %}<a class="btn source-open" href="{% url 'detector:open_reference_document' group.source_id %}" target="_blank" rel="noopener">Ouvrir le document original</a>{% else %}<span class="muted source-open">Document original indisponible pour cette ancienne analyse</span>{% endif %}
 </div>
 <div class="document-grid">
 <div>
