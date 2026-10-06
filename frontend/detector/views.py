@@ -744,8 +744,7 @@ def delete_analysis(request, pk):
     analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
 
     if request.method != "POST":
-        messages.error(request, "La suppression doit être confirmée.")
-        return redirect("detector:resultats")
+        return render(request, "analysis_delete_confirm.html", {"analysis": analysis})
 
     uploaded_path = (analysis.result_json or {}).get("uploaded_path", "")
     if uploaded_path:
