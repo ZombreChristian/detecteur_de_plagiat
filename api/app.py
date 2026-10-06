@@ -272,9 +272,22 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             }
         )
 
+    # Une décision de doublon/plagiat ne doit pas reposer uniquement sur
+    # un score documentaire : elle doit être confirmée par au moins un
+    # passage dépassant le seuil de comparaison des passages.
+    has_passage_evidence = any(
+        group.get("matches")
+        for group in passage_groups
+    )
+    final_decision = (
+        decision(best["hybrid_score"], threshold)
+        if has_passage_evidence
+        else "DIFFERENT"
+    )
+
     return {
         "mode": kind,
-        "decision": decision(best["hybrid_score"], threshold),
+        "decision": final_decision,
         "threshold": threshold,
         "lexical_weight": LEXICAL_WEIGHT,
         "semantic_weight": SEMANTIC_WEIGHT,
