@@ -157,14 +157,46 @@ def adjusted_hybrid_score(candidate, source, lexical, semantic, lexical_weight=0
     return float(np.clip(adjusted, 0.0, 1.0))
 
 
+def _split_structured_paragraph(text):
+    """Découpe aussi les blocs qui contiennent plusieurs sections de TDR.
+
+    L'extraction DOCX peut supprimer les retours à la ligne entre des titres.
+    Sans cette étape, un bloc « Résultats attendus + Livrables + Sources » peut
+    être comparé à un bloc « Revue documentaire + Collecte + Analyse », ce qui
+    donne une fausse proximité sémantique alors que les sujets sont différents.
+    """
+    text = re.sub(r"\\s+", " ", text or "").strip()
+    if not text:
+        return []
+
+    # Titres courants dans les TDR, y compris les titres numérotés.
+    heading = re.compile(
+        r"(?=(?:\\b\\d+(?:\\.\\d+)*[.)]?\\s+|"
+        r"Résultats attendus\\b|Livrables\\b|Sources indicatives\\b|"
+        r"Mandat du bureau d[’']études\\b|Méthodologie\\b|"
+        r"Revue documentaire\\b|Collecte de données\\b|Analyse\\b|"
+        r"Restitution\\b|Profil du consultant\\b))",
+        flags=re.IGNORECASE,
+    )
+    pieces = [p.strip() for p in heading.split(text) if p.strip()]
+    return pieces or [text]
+
+
 def split_into_passages(text, max_chars=1200):
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", text or "") if p.strip()]
-    passages = []
+    paragraphs = [p.strip() for p in re.split(r"\\n\\s*\\n+", text or "") if p.strip()]
+    structured = []
     for paragraph in paragraphs:
+        structured.extend(_split_structured_paragraph(paragraph))
+
+    passages = []
+    for paragraph in structured:
         if len(paragraph) <= max_chars:
             passages.append(paragraph)
             continue
-        sentences = re.split(r"(?<=[.!?])\s+", paragraph)
+
+        # Pour les sections longues, on conserve des groupes de phrases
+        # suffisamment courts pour éviter de mélanger plusieurs sujets.
+        sentences = re.split(r"(?<=[.!?])\\s+", paragraph)
         current = ""
         for sentence in sentences:
             if current and len(current) + len(sentence) + 1 > max_chars:
