@@ -39,12 +39,14 @@
 </div></section>{% endif %}
 {% if result.matches %}<section class="panel national-bar-green"><div class="panel-head"><h2>Synthèse des passages signalés</h2></div><div class="panel-body"><p class="muted">Les correspondances ci-dessus sont détaillées source par source. Les extraits proviennent directement des documents sources analysés.</p></div></section>{% endif %}
 <section class="panel national-bar-red">
-<div class="panel-head"><h2>Document intégral</h2></div>
+<div class="panel-head"><h2>Document analysé</h2></div>
 <div class="panel-body">
-{% if document_text %}
-<div class="document-content">{{ document_text }}</div>
+{% if document_url %}
+<p style="margin:0"><strong>{{ analysis.document_name }}</strong></p>
+<p class="muted" style="margin:6px 0 14px">Le document original est conservé dans <code>frontend/media/documents</code>.</p>
+<a class="btn btn-primary" href="{{ document_url }}" target="_blank" rel="noopener">Ouvrir le document</a>
 {% else %}
-<p class="muted">Le contenu intégral de ce document n'est pas disponible dans le corpus local associé à cette analyse.</p>
+<p class="muted">Le fichier original de cette analyse n'est pas disponible.</p>
 {% endif %}
 </div>
 {% if analysis.mode == "duplicate" and analysis.decision == "DIFFERENT" %}<section class="panel national-bar-green"><div class="panel-head"><h2>Étape suivante</h2></div><div class="panel-body"><p class="muted">Ce TDR a été jugé différent. Vous pouvez maintenant déposer le rapport d’étude correspondant afin de lancer son contrôle de plagiat.</p><a class="btn btn-primary" href="{% url 'detector:upload_report_for_tdr' analysis.id %}">Déposer le rapport lié à ce TDR</a></div></section>{% endif %}
