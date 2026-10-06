@@ -9,9 +9,10 @@ import tempfile
 import time
 
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from starlette.concurrency import run_in_threadpool
 from docx import Document
+from pypdf import PdfReader
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv
@@ -40,8 +41,11 @@ if abs((LEXICAL_WEIGHT + SEMANTIC_WEIGHT) - 1.0) > 1e-6:
 _REFERENCE_CACHE = {}
 
 
-def read_docx(path: Path) -> str:
+def read_document(path: Path) -> str:
     try:
+        if path.suffix.lower() == ".pdf":
+            reader = PdfReader(str(path))
+            return "\n\n".join((page.extract_text() or "").strip() for page in reader.pages if (page.extract_text() or "").strip())
         doc = Document(path)
     except Exception as exc:
         raise HTTPException(400, f"Document DOCX invalide : {exc}")
@@ -178,7 +182,7 @@ def decision(score, threshold):
     return "SIMILAIRE" if score >= threshold else "DIFFERENT"
 
 
-def run_detection(candidate_text: str, kind: str):
+def run_detection(candidate_text: str, kind: str, threshold: float | None = None):
     candidate = clean_text(candidate_text)
     if not candidate:
         raise HTTPException(400, "Le document ne contient aucun texte exploitable.")
@@ -190,7 +194,9 @@ def run_detection(candidate_text: str, kind: str):
             f"Aucun document de référence indexé pour le mode « {kind} ».",
         )
 
-    threshold = THRESHOLDS[kind]
+    threshold = THRESHOLDS[kind] if threshold is None else float(threshold)
+    if not 0.01 <= threshold <= 1.0:
+        raise HTTPException(400, "Le seuil de similarité doit être compris entre 0.01 et 1.00.")
     best = ranked[0]
     passage_groups = []
 
@@ -311,14 +317,14 @@ def health():
 
 
 @app.post("/api/detect/{kind}")
-async def detect(kind: str, file: UploadFile = File(...)):
+async def detect(kind: str, file: UploadFile = File(...), threshold: float | None = Form(None)):
     if kind not in THRESHOLDS:
         raise HTTPException(
             404,
             "Mode inconnu. Utilisez plagiarism ou duplicate.",
         )
-    if not file.filename or not file.filename.lower().endswith(".docx"):
-        raise HTTPException(400, "Format accepté : DOCX.")
+    if not file.filename or Path(file.filename).suffix.lower() not in {".docx", ".pdf"}:
+        raise HTTPException(400, "Formats acceptés : DOCX et PDF.")
 
     start = time.perf_counter()
     safe_name = re.sub(r"[^\w.\- ]", "_", file.filename)
@@ -326,11 +332,11 @@ async def detect(kind: str, file: UploadFile = File(...)):
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / safe_name
         path.write_bytes(await file.read())
-        candidate_text = read_docx(path)
+        candidate_text = read_document(path)
         # run_detection utilise le Django ORM de façon synchrone.
         # On l'exécute dans un thread pour éviter SynchronousOnlyOperation
         # lorsque cet endpoint FastAPI est appelé depuis le contexte async.
-        result = await run_in_threadpool(run_detection, candidate_text, kind)
+        result = await run_in_threadpool(run_detection, candidate_text, kind, threshold)
 
     result["duration_ms"] = round((time.perf_counter() - start) * 1000)
     return result
@@ -339,11 +345,11 @@ async def detect(kind: str, file: UploadFile = File(...)):
 @app.post("/api/compare")
 async def compare(file_a: UploadFile = File(...), file_b: UploadFile = File(...)):
     with tempfile.TemporaryDirectory() as directory:
-        a = Path(directory) / "a.docx"
-        b = Path(directory) / "b.docx"
+        a = Path(directory) / ("a" + Path(file_a.filename or "a.docx").suffix.lower())
+        b = Path(directory) / ("b" + Path(file_b.filename or "b.docx").suffix.lower())
         a.write_bytes(await file_a.read())
         b.write_bytes(await file_b.read())
-        result = score_two_texts(read_docx(a), read_docx(b))
+        result = score_two_texts(read_document(a), read_document(b))
 
     if result is None:
         raise HTTPException(400, "Les deux documents doivent contenir du texte.")
