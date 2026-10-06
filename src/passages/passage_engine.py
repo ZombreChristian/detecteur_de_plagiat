@@ -230,6 +230,37 @@ def compare_passages(
     return matches[:top_k]
 
 
+def aggregate_passage_scores(matches, candidate_passages):
+    """Calcule les scores documentaires à partir des correspondances de passages.
+
+    La similarité sémantique globale n'est plus calculée indépendamment des
+    passages : elle est la moyenne des similarités sémantiques des passages
+    effectivement retenus comme correspondances. Le même principe est appliqué
+    au score lexical, puis le score hybride combine ces deux mesures.
+    """
+    if not matches:
+        return {
+            "tfidf_score": 0.0,
+            "semantic_score": 0.0,
+            "hybrid_score": 0.0,
+            "coverage": 0.0,
+        }
+
+    lexical_scores = [float(match["tfidf_score"]) for match in matches]
+    semantic_scores = [float(match["semantic_score"]) for match in matches]
+    lexical_score = float(np.mean(lexical_scores))
+    semantic_score = float(np.mean(semantic_scores))
+    hybrid_score = float(0.30 * lexical_score + 0.70 * semantic_score)
+    coverage = calculate_coverage(candidate_passages, matches)
+
+    return {
+        "tfidf_score": round(float(np.clip(lexical_score, 0.0, 1.0)), 4),
+        "semantic_score": round(float(np.clip(semantic_score, 0.0, 1.0)), 4),
+        "hybrid_score": round(float(np.clip(hybrid_score, 0.0, 1.0)), 4),
+        "coverage": coverage,
+    }
+
+
 def calculate_coverage(candidate_passages, matches):
     if not candidate_passages:
         return 0.0
@@ -241,10 +272,13 @@ def analyze_document_pair(candidate_text, source_text, threshold=0.50, top_k=10)
     candidate_passages = split_into_passages(candidate_text)
     source_passages = split_into_passages(source_text)
     matches = compare_passages(candidate_passages, source_passages, threshold, top_k)
-    coverage = calculate_coverage(candidate_passages, matches)
+    scores = aggregate_passage_scores(matches, candidate_passages)
     return {
         "matches": matches,
-        "coverage": coverage,
+        "coverage": scores["coverage"],
+        "tfidf_score": scores["tfidf_score"],
+        "semantic_score": scores["semantic_score"],
+        "hybrid_score": scores["hybrid_score"],
         "passages_candidate": len(candidate_passages),
         "passages_source": len(source_passages),
     }
