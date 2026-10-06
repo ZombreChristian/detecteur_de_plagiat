@@ -232,9 +232,19 @@ def compare_passages(
                 candidate, source, semantic_score
             )
 
-            # On ne laisse pas un passage très générique devenir une preuve
-            # simplement parce que sa similarité sémantique brute est élevée.
-            if relevance < 0.50:
+            # Si aucun vocabulaire thématique n'est partagé, une forte
+            # similarité sémantique peut provenir de la structure standard
+            # d'un TDR (collecte, analyse, restitution, recommandations...).
+            # Dans ce cas, on exige un signal lexical minimal ou une très forte
+            # similarité sémantique pour préserver les vraies paraphrases.
+            if topic_overlap < 0.08 and not (
+                semantic_score >= 0.90 and lexical_score >= 0.15
+            ):
+                continue
+
+            # La pertinence reste un second garde-fou : elle ne remplace pas
+            # la similarité sémantique et ne sert pas à calculer le TF-IDF.
+            if relevance < 0.54:
                 continue
 
             current = (relevance, semantic_score)
