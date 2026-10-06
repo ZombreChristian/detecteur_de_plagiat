@@ -39,6 +39,47 @@ def _topic_tokens(text):
     return {token for token in tokens if token not in FRENCH_STOPWORDS}
 
 
+GENERIC_TDR_TERMS = {
+    "etude", "étude", "etudes", "études", "objectif", "objectifs",
+    "objet", "diagnostic", "analyse", "analyses", "methodologie",
+    "méthodologie", "donnees", "données", "resultats", "résultats",
+    "recommandation", "recommandations", "rapport", "mission",
+    "missions", "consultant", "consultants", "prestation", "prestations",
+    "livrable", "livrables", "suivi", "evaluation", "évaluation",
+    "contraintes", "contrainte", "contexte", "besoins", "besoin",
+    "proposition", "propositions", "activites", "activités", "activité",
+    "travail", "travaux", "phase", "phases", "etape", "étape",
+    "etapes", "étapes", "document", "documents", "information",
+    "informations", "terrain", "questionnaire", "entretiens",
+    "entretien", "collecte", "collecter", "produire", "production",
+    "description", "projet", "projets", "programme", "programmes",
+    "validation", "comite", "comité", "parties", "prenantes",
+    "reunions", "réunions", "resultat", "résultat", "final",
+    "provisoire", "conclusion", "conclusions",
+}
+
+
+def _semantic_text(text):
+    """
+    Prépare le passage pour l'encodage sémantique en retirant les mots
+    génériques de la rédaction des TDR. Le texte reste ensuite encodé
+    par le modèle sémantique : aucun TF-IDF n'entre dans le score.
+    """
+    folded = _fold_text(normalize_passage(text))
+    tokens = re.findall(r"[a-z]{3,}", folded)
+
+    content_tokens = [
+        token
+        for token in tokens
+        if token not in FRENCH_STOPWORDS and token not in GENERIC_TDR_TERMS
+    ]
+
+    if len(content_tokens) >= 4:
+        return " ".join(content_tokens)
+
+    return normalize_passage(text)
+
+
 def split_into_passages(text, max_chars=1200):
     paragraphs = [
         p.strip()
@@ -116,8 +157,12 @@ def compare_passages(
         tfidf[len(candidate_passages):],
     )
 
+    # La sémantique est calculée sur le contenu utile du passage.
+    # Les formulations génériques des TDR sont retirées avant encodage.
+    semantic_texts = [_semantic_text(text) for text in texts]
+
     embeddings = get_model().encode(
-        texts,
+        semantic_texts,
         normalize_embeddings=True,
         show_progress_bar=False,
         convert_to_numpy=True,
