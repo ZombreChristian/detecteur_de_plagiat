@@ -53,6 +53,7 @@ const threshold=document.getElementById('threshold');
 const thresholdValue=document.getElementById('threshold-value');
 function updateThreshold(){const value=mode.value==='duplicate'?70:55;threshold.value=value;thresholdValue.textContent=value+' %';}
 mode.addEventListener('change',updateThreshold);
+updateThreshold();
 threshold.addEventListener('input',()=>thresholdValue.textContent=threshold.value+' %');
 const bar=document.getElementById('progress-bar');
 const percent=document.getElementById('loading-percent');
