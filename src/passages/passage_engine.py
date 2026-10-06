@@ -165,13 +165,13 @@ def _split_structured_paragraph(text):
     être comparé à un bloc « Revue documentaire + Collecte + Analyse », ce qui
     donne une fausse proximité sémantique alors que les sujets sont différents.
     """
-    text = re.sub(r"\\s+", " ", text or "").strip()
+    text = re.sub(r"\s+", " ", text or "").strip()
     if not text:
         return []
 
     # Titres courants dans les TDR, y compris les titres numérotés.
     heading = re.compile(
-        r"(?=(?:\\b\\d+(?:\\.\\d+)*[.)]?\\s+|"
+        r"(?=(?:\b\\d+(?:\.\d+)*[.)]?\\s+|"
         r"Résultats attendus\\b|Livrables\\b|Sources indicatives\\b|"
         r"Mandat du bureau d[’']études\\b|Méthodologie\\b|"
         r"Revue documentaire\\b|Collecte de données\\b|Analyse\\b|"
@@ -183,7 +183,7 @@ def _split_structured_paragraph(text):
 
 
 def split_into_passages(text, max_chars=1200):
-    paragraphs = [p.strip() for p in re.split(r"\\n\\s*\\n+", text or "") if p.strip()]
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", text or "") if p.strip()]
     structured = []
     for paragraph in paragraphs:
         structured.extend(_split_structured_paragraph(paragraph))
@@ -196,7 +196,7 @@ def split_into_passages(text, max_chars=1200):
 
         # Pour les sections longues, on conserve des groupes de phrases
         # suffisamment courts pour éviter de mélanger plusieurs sujets.
-        sentences = re.split(r"(?<=[.!?])\\s+", paragraph)
+        sentences = re.split(r"(?<=[.!?])\s+", paragraph)
         current = ""
         for sentence in sentences:
             if current and len(current) + len(sentence) + 1 > max_chars:
