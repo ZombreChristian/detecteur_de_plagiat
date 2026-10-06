@@ -381,41 +381,58 @@ def _normalized_with_map(text):
 
 
 def _highlight_text_runs(paragraph, passages):
-    """Colorie en rouge les passages même si les espaces diffèrent dans le fichier Word."""
+    """Colorie les portions réellement retrouvées dans le paragraphe Word."""
     text = paragraph.text
     if not text or not passages:
         return
 
     normalized_text, positions = _normalized_with_map(text)
-    matches = []
+    fragments = []
 
+    # Les passages du moteur peuvent couvrir plusieurs paragraphes Word.
+    # On recherche donc aussi leurs phrases/fragments à l'intérieur de chaque
+    # paragraphe, plutôt que d'exiger que tout le passage soit sur une seule ligne.
     for passage in passages:
         normalized_passage, _ = _normalized_with_map(passage)
         if not normalized_passage:
             continue
 
-        start = 0
-        while True:
-            index = normalized_text.find(normalized_passage, start)
-            if index < 0:
-                break
-            end = index + len(normalized_passage) - 1
-            if index < len(positions) and end < len(positions):
-                matches.append((positions[index], positions[end] + 1))
-            start = index + 1
+        candidates = [normalized_passage]
+        for fragment in re.split(r"[.!?;:]+", passage):
+            fragment_norm, _ = _normalized_with_map(fragment)
+            if len(fragment_norm) >= 45:
+                candidates.append(fragment_norm)
 
-    if not matches:
+        # Fragments de secours pour les passages très longs ou coupés entre
+        # plusieurs paragraphes.
+        if len(normalized_passage) > 140:
+            for start in range(0, len(normalized_passage) - 59, 60):
+                chunk = normalized_passage[start:start + 100].strip()
+                if len(chunk) >= 45:
+                    candidates.append(chunk)
+
+        for candidate in candidates:
+            start = 0
+            while candidate:
+                index = normalized_text.find(candidate, start)
+                if index < 0:
+                    break
+                end = index + len(candidate) - 1
+                if index < len(positions) and end < len(positions):
+                    fragments.append((positions[index], positions[end] + 1))
+                start = index + max(1, len(candidate))
+
+    if not fragments:
         return
 
-    matches.sort()
+    fragments.sort()
     merged = []
-    for start, end in matches:
+    for start, end in fragments:
         if not merged or start > merged[-1][1]:
             merged.append([start, end])
         else:
             merged[-1][1] = max(merged[-1][1], end)
 
-    # On reconstruit uniquement la copie téléchargée : le fichier original reste intact.
     for run in list(paragraph.runs):
         run._element.getparent().remove(run._element)
 
@@ -430,7 +447,6 @@ def _highlight_text_runs(paragraph, passages):
 
     if cursor < len(text):
         paragraph.add_run(text[cursor:])
-
 
 
 def _highlight_docx(path, passages):
