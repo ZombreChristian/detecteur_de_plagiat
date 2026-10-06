@@ -171,8 +171,7 @@ def _split_structured_paragraph(text):
 
     # Titres courants dans les TDR, y compris les titres numérotés.
     heading = re.compile(
-        r"(?=(?:\b\\d+(?:\.\d+)*[.)]?\\s+|"
-        r"Résultats attendus\b|Livrables\b|Sources indicatives\b|"
+        r"(?=(?:Résultats attendus\b|Livrables\b|Sources indicatives\b|"
         r"Mandat du bureau d[’']études\b|Méthodologie\b|"
         r"Revue documentaire\b|Collecte de données\b|Analyse\b|"
         r"Restitution\b|Profil du consultant\b))",
