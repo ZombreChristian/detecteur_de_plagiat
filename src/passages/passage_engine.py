@@ -115,6 +115,21 @@ def _topic_overlap(candidate, source):
     return 2 * precision * recall / (precision + recall)
 
 
+def _passage_relevance(candidate, source, semantic_score):
+    """Évalue la pertinence thématique d'un match sémantique."""
+    topic = _topic_overlap(candidate, source)
+    generic = (_generic_ratio(candidate) + _generic_ratio(source)) / 2
+
+    # La proximité thématique conserve l'essentiel du score. Les formulations
+    # très génériques sont progressivement pénalisées.
+    topic_factor = 0.62 + 0.38 * topic
+    generic_excess = max(0.0, generic - 0.30)
+    generic_factor = 1.0 - min(0.32, generic_excess * 0.90)
+
+    relevance = float(semantic_score) * topic_factor * generic_factor
+    return float(np.clip(relevance, 0.0, 1.0)), topic, generic
+
+
 def adjusted_hybrid_score(candidate, source, lexical, semantic, lexical_weight=0.30, semantic_weight=0.70):
     """Calcule le score hybride utilisé pour le classement et la décision.
 
@@ -200,24 +215,52 @@ def compare_passages(
         candidate_words = normalize_passage(candidate).split()
         semantic_order = np.argsort(semantic[i])[::-1]
 
-        for j in semantic_order[:3]:
+        # On examine plusieurs voisins sémantiques et on retient celui qui
+        # combine le mieux proximité sémantique et pertinence thématique.
+        best_match = None
+        for j in semantic_order[:5]:
             semantic_score = float(semantic[i, j])
             lexical_score = float(lexical[i, j])
             source = source_passages[j]
 
             if len(candidate_words) < 7 and semantic_score < 0.85:
                 continue
+            if semantic_score < semantic_threshold:
+                continue
 
-            if semantic_score >= semantic_threshold:
-                matches.append({
-                    "candidate_passage": candidate,
-                    "source_passage": source,
-                    "tfidf_score": round(lexical_score, 4),
-                    "semantic_score": round(semantic_score, 4),
-                    # Ici, score = proximité sémantique du passage.
-                    "score": round(semantic_score, 4),
-                })
-                break
+            relevance, topic_overlap, generic_ratio = _passage_relevance(
+                candidate, source, semantic_score
+            )
+
+            # On ne laisse pas un passage très générique devenir une preuve
+            # simplement parce que sa similarité sémantique brute est élevée.
+            if relevance < 0.50:
+                continue
+
+            current = (relevance, semantic_score)
+            if best_match is None or current > best_match[0]:
+                best_match = (
+                    current,
+                    j,
+                    lexical_score,
+                    semantic_score,
+                    topic_overlap,
+                    generic_ratio,
+                )
+
+        if best_match is not None:
+            _, j, lexical_score, semantic_score, topic_overlap, generic_ratio = best_match
+            matches.append({
+                "candidate_passage": candidate,
+                "source_passage": source_passages[j],
+                "tfidf_score": round(lexical_score, 4),
+                "semantic_score": round(semantic_score, 4),
+                "topic_overlap": round(topic_overlap, 4),
+                "generic_ratio": round(generic_ratio, 4),
+                "relevance_score": round(best_match[0][0], 4),
+                # Le score affiché reste la proximité sémantique brute.
+                "score": round(semantic_score, 4),
+            })
 
     matches.sort(key=lambda item: item["score"], reverse=True)
     return matches[:top_k]
