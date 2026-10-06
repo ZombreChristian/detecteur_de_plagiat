@@ -172,7 +172,6 @@ def score_two_texts(candidate_text: str, source_text: str):
     detail = analyze_document_pair(
         candidate,
         source,
-        threshold=0.58,
         top_k=8,
         lexical_weight=LEXICAL_WEIGHT,
         semantic_weight=SEMANTIC_WEIGHT,
@@ -202,9 +201,18 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             f"Aucun document de référence indexé pour le mode « {kind} ».",
         )
 
-    threshold = THRESHOLDS[kind] if threshold is None else float(threshold)
+    # Le seuil choisi dans l'interface est uniquement un seuil de décision.
+    # Le formulaire envoie un pourcentage (ex. 70) alors que le moteur compare
+    # les scores sur une échelle 0-1 (ex. 0.70).
+    if threshold is None:
+        threshold = THRESHOLDS[kind]
+    else:
+        threshold = float(threshold)
+        if threshold > 1.0:
+            threshold /= 100.0
+
     if not 0.01 <= threshold <= 1.0:
-        raise HTTPException(400, "Le seuil de similarité doit être compris entre 0.01 et 1.00.")
+        raise HTTPException(400, "Le seuil de décision doit être compris entre 1 % et 100 %.")
     best = ranked[0]
     passage_groups = []
 
@@ -215,7 +223,6 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         detail = analyze_document_pair(
             candidate,
             source_text,
-            threshold=0.58,
             top_k=8,
             lexical_weight=LEXICAL_WEIGHT,
             semantic_weight=SEMANTIC_WEIGHT,
