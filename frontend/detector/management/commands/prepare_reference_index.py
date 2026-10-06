@@ -1,3 +1,7 @@
+from pathlib import Path
+import sys
+
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 
@@ -15,6 +19,10 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        root = Path(settings.BASE_DIR).parent
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+
         try:
             from src.indexing.reference_index import index_reference_corpus
 
