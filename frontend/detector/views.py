@@ -336,15 +336,12 @@ def reception(request):
         request.session["last_analysis_id"] = analysis.id
         request.session["last_document_name"] = uploaded.name
         if mode == "tdr" and result.get("decision") == "DIFFERENT":
+            # L'upload sert à l'analyse uniquement : il ne devient pas
+            # automatiquement un document de référence dans PostgreSQL.
             saved_path = _save_uploaded_document(uploaded)
-            StudyDocument.objects.create(
-                title=Path(uploaded.name).stem,
-                document_type="TDR",
-                file_path=saved_path,
-                status="TDR validé / étude en cours",
-            )
+            result["uploaded_path"] = saved_path
             request.session["validated_tdr_name"] = uploaded.name
-            messages.success(request, "TDR accepté : aucune similarité suffisante n'a été trouvée. Le rapport associé peut maintenant être réceptionné.")
+            messages.success(request, "TDR accepté : aucune similarité suffisante n'a été trouvée. Le document n'a pas été ajouté automatiquement au registre.")
             return redirect("detector:reception")
         if mode == "tdr" and result.get("decision") == "SIMILAIRE":
             messages.error(request, "TDR non retenu : un document similaire existe déjà dans la base.")
@@ -377,13 +374,9 @@ def upload_report_for_tdr(request, pk):
         )
         response.raise_for_status()
         result = response.json()
+        # Le rapport est un candidat de comparaison : son analyse est
+        # conservée dans l'historique, sans enrichissement automatique du registre.
         result["uploaded_path"] = _save_uploaded_document(uploaded)
-        StudyDocument.objects.create(
-            title=Path(uploaded.name).stem,
-            document_type="RAPPORT",
-            file_path=result["uploaded_path"],
-            status="Rapport reçu et contrôlé",
-        )
         result["linked_tdr_analysis_id"] = tdr.id
         result["linked_tdr_name"] = tdr.document_name
         duration = round((time.perf_counter() - start) * 1000)
