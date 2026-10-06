@@ -271,7 +271,20 @@ def calculate_coverage(candidate_passages, matches):
 def analyze_document_pair(candidate_text, source_text, threshold=0.50, top_k=10, lexical_weight=0.30, semantic_weight=0.70):
     candidate_passages = split_into_passages(candidate_text)
     source_passages = split_into_passages(source_text)
-    matches = compare_passages(\n        candidate_passages,\n        source_passages,\n        threshold,\n        top_k,\n        lexical_weight,\n        semantic_weight,\n    )\n    scores = aggregate_passage_scores(\n        matches,\n        candidate_passages,\n        lexical_weight,\n        semantic_weight,\n    )
+    matches = compare_passages(
+        candidate_passages,
+        source_passages,
+        threshold,
+        top_k,
+        lexical_weight,
+        semantic_weight,
+    )
+    scores = aggregate_passage_scores(
+        matches,
+        candidate_passages,
+        lexical_weight,
+        semantic_weight,
+    )
     return {
         "matches": matches,
         "coverage": scores["coverage"],
