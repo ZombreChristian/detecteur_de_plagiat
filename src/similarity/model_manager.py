@@ -9,9 +9,11 @@ import os
 from pathlib import Path
 
 from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
 
 
 ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(ROOT / "frontend" / ".env")
 MODEL_NAME = os.getenv(
     "SIMILARITY_MODEL_NAME",
     "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
