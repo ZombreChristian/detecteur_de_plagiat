@@ -310,19 +310,29 @@ def reception(request):
         return render(request, "reception.html")
     mode = request.POST.get("mode", "tdr")
     uploaded = _get_uploaded_docx(request)
-    if not _validate_docx(uploaded):
-        messages.error(request, "Veuillez sélectionner un document DOCX valide.")
+    if not _validate_document(uploaded):
+        messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
+        return redirect("detector:reception")
+    uploaded_path = _save_uploaded_document(uploaded)
+    try:
+        threshold = float(request.POST.get("threshold", "")) / 100.0
+        if not 0.01 <= threshold <= 1.0:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
         return redirect("detector:reception")
     endpoint = "/api/detect/duplicate" if mode == "tdr" else "/api/detect/plagiarism"
     start = time.perf_counter()
     try:
         response = requests.post(
             f"{settings.FASTAPI_URL}{endpoint}",
-            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            data={"threshold": threshold},
+            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))},
             timeout=600,
         )
         response.raise_for_status()
         result = response.json()
+        result["uploaded_path"] = uploaded_path
         duration = round((time.perf_counter() - start) * 1000)
         result["duration_ms"] = duration
         analysis = Analysis.objects.create(
@@ -338,8 +348,6 @@ def reception(request):
         if mode == "tdr" and result.get("decision") == "DIFFERENT":
             # L'upload sert à l'analyse uniquement : il ne devient pas
             # automatiquement un document de référence dans PostgreSQL.
-            saved_path = _save_uploaded_document(uploaded)
-            result["uploaded_path"] = saved_path
             request.session["validated_tdr_name"] = uploaded.name
             messages.success(request, "TDR accepté : aucune similarité suffisante n'a été trouvée. Le document n'a pas été ajouté automatiquement au registre.")
             return redirect("detector:reception")
