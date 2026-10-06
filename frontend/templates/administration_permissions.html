@@ -1,0 +1,20 @@
+{% load static %}
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TDRDOC-SCAN — Permissions utilisateur</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}"><link rel="stylesheet" href="{% static 'css/institutional.css' %}">
+<script src="{% static 'js/theme.js' %}"></script></head>
+<body><div class="console">
+<aside class="rail"><div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div><nav class="rail-nav">
+<a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">▦</span><span>Tableau de bord</span></a>
+<a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">✓</span><span>Vérifier un TDR</span></a>
+<a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico">+</span><span>Nouvelle analyse</span></a>
+<a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico">◷</span><span>Historique</span></a>
+<a class="rail-link active" href="{% url 'detector:administration' %}"><span class="ico">◆</span><span>Administration</span></a>
+</nav><div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div></aside>
+<main class="main"><div class="ctxbar"><div><h1>Permissions utilisateur</h1><div class="lede">{{ target_user.username }} — attribution précise des accès fonctionnels.</div></div><div class="actions"><a class="btn" href="{% url 'detector:administration' %}">Retour à l'administration</a></div></div>
+<div class="page-pad admin-page">{% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
+<section class="panel admin-section"><div class="panel-head"><div><h2>Rôle</h2><div class="muted admin-help">Le rôle fournit un socle de permissions. Les permissions cochées ci-dessous sont propres à cet utilisateur.</div></div></div><div class="panel-body">
+<form method="post" class="admin-form">{% csrf_token %}<label for="group_id">Rôle de l'utilisateur</label><select id="group_id" name="group_id"><option value="">Aucun rôle</option>{% for group in groups %}<option value="{{ group.id }}" {% if current_group and current_group.id == group.id %}selected{% endif %}>{{ group.name }}</option>{% endfor %}</select>
+<h3 style="margin-top:22px">Permissions directes</h3><div class="permission-list">{% for permission in permissions %}<label class="permission-item"><input type="checkbox" name="permissions" value="{{ permission.codename }}" {% if permission.id in direct_permission_ids %}checked{% endif %}><span><strong>{{ permission.name }}</strong><small style="display:block;color:var(--text-faint);margin-top:2px">{{ permission.codename }}</small></span></label>{% empty %}<p class="muted">Aucune permission fonctionnelle n'est disponible. Vérifiez que la migration des permissions a été exécutée.</p>{% endfor %}</div><button class="btn btn-primary" type="submit" style="margin-top:16px">Enregistrer les accès</button></form></div></section>
+<section class="panel admin-section"><div class="panel-head"><div><h2>Permissions héritées du rôle</h2><div class="muted admin-help">Ces permissions viennent du groupe actuellement attribué à l'utilisateur.</div></div></div><div class="panel-body"><div class="permission-list">{% for permission in permissions %}{% if permission.id in inherited_permission_ids %}<div class="permission-item"><span>✓ {{ permission.name }} <small style="display:block;color:var(--text-faint);margin-top:2px">héritée du rôle {{ current_group.name }}</small></span></div>{% endif %}{% empty %}<p class="muted">Aucune permission héritée.</p>{% endfor %}</div>{% if not current_group %}<p class="muted" style="margin-top:12px">Cet utilisateur n'a actuellement aucun rôle.</p>{% endif %}</div></section>
+</div></main></div></body></html>
