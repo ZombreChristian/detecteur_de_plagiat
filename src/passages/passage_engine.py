@@ -115,19 +115,53 @@ def _topic_overlap(candidate, source):
     return 2 * precision * recall / (precision + recall)
 
 
-def _passage_relevance(candidate, source, semantic_score):
+def _content_semantic_similarity(candidate, source):
+    """Compare uniquement le contenu thématique des deux passages.
+
+    Les formulations de rapport (« données », « recommandations », « suivi »...)
+    peuvent produire de faux rapprochements. Elles sont retirées avant
+    l'encodage afin de comparer davantage le sujet réel, sans coder un domaine
+    métier particulier.
+    """
+    candidate_content = " ".join(sorted(_topic_tokens(candidate)))
+    source_content = " ".join(sorted(_topic_tokens(source)))
+    if not candidate_content or not source_content:
+        return 0.0
+
+    embeddings = get_model().encode(
+        [candidate_content, source_content],
+        normalize_embeddings=True,
+        show_progress_bar=False,
+        convert_to_numpy=True,
+    )
+    return float(np.clip(np.dot(embeddings[0], embeddings[1]), 0.0, 1.0))
+
+
+def _passage_relevance(candidate, source, semantic_score, content_semantic=None):
     """Évalue la pertinence thématique d'un match sémantique."""
     topic = _topic_overlap(candidate, source)
     generic = (_generic_ratio(candidate) + _generic_ratio(source)) / 2
 
-    # La proximité thématique conserve l'essentiel du score. Les formulations
-    # très génériques sont progressivement pénalisées.
+    if content_semantic is None:
+        content_semantic = _content_semantic_similarity(candidate, source)
+
+    content_factor = 0.55 + 0.45 * content_semantic
     topic_factor = 0.62 + 0.38 * topic
     generic_excess = max(0.0, generic - 0.30)
     generic_factor = 1.0 - min(0.32, generic_excess * 0.90)
 
-    relevance = float(semantic_score) * topic_factor * generic_factor
-    return float(np.clip(relevance, 0.0, 1.0)), topic, generic
+    relevance = (
+        float(semantic_score)
+        * content_factor
+        * topic_factor
+        * generic_factor
+    )
+    return (
+        float(np.clip(relevance, 0.0, 1.0)),
+        topic,
+        generic,
+        float(content_semantic),
+    )
 
 
 def adjusted_hybrid_score(candidate, source, lexical, semantic, lexical_weight=0.30, semantic_weight=0.70):
@@ -256,12 +290,20 @@ def compare_passages(
             if semantic_score < semantic_threshold:
                 continue
 
-            relevance, topic_overlap, generic_ratio = _passage_relevance(
-                candidate, source, semantic_score
+            content_semantic = _content_semantic_similarity(candidate, source)
+            relevance, topic_overlap, generic_ratio, content_semantic = _passage_relevance(
+                candidate, source, semantic_score, content_semantic
             )
 
+            if content_semantic < 0.38 and not (
+                semantic_score >= 0.93 and lexical_score >= 0.20
+            ):
+                continue
+
             if topic_overlap < 0.08 and not (
-                semantic_score >= 0.90 and lexical_score >= 0.15
+                semantic_score >= 0.90
+                and lexical_score >= 0.15
+                and content_semantic >= 0.50
             ):
                 continue
 
@@ -275,6 +317,7 @@ def compare_passages(
                 "semantic_score": semantic_score,
                 "topic_overlap": topic_overlap,
                 "generic_ratio": generic_ratio,
+                "content_semantic_score": content_semantic,
                 "relevance_score": relevance,
             })
 
@@ -306,6 +349,7 @@ def compare_passages(
             "semantic_score": round(edge["semantic_score"], 4),
             "topic_overlap": round(edge["topic_overlap"], 4),
             "generic_ratio": round(edge["generic_ratio"], 4),
+            "content_semantic_score": round(edge["content_semantic_score"], 4),
             "relevance_score": round(edge["relevance_score"], 4),
             "score": round(edge["semantic_score"], 4),
         })
