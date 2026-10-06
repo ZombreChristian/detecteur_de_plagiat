@@ -18,7 +18,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from openpyxl import Workbook
 from reportlab.lib import colors
@@ -265,6 +265,37 @@ def _document_url(relative_path):
     if not relative_path:
         return ""
     return f"{settings.MEDIA_URL.rstrip('/')}/{relative_path.lstrip('/')}"
+
+def _safe_reference_path(document):
+    """Retourne le chemin absolu d'une référence uniquement si elle reste dans le projet."""
+    if not document or not document.file_path:
+        return None
+    root = Path(settings.BASE_DIR).resolve().parent
+    candidate = (root / document.file_path).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() else None
+
+
+@login_required
+def open_reference_document(request, pk):
+    """Ouvre/télécharge le document de référence depuis le registre."""
+    document = get_object_or_404(StudyDocument, pk=pk, is_reference=True)
+    path = _safe_reference_path(document)
+    if not path:
+        messages.error(request, "Le fichier de référence n'est plus disponible.")
+        return redirect("detector:dashboard")
+
+    content_type = "application/pdf" if path.suffix.lower() == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    return FileResponse(
+        path.open("rb"),
+        as_attachment=False,
+        filename=path.name,
+        content_type=content_type,
+    )
+
 
 
 def _read_saved_document(path):
