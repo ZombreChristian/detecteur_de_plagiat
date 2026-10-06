@@ -1,4 +1,6 @@
 import re
+import unicodedata
+
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -6,9 +8,138 @@ from sklearn.metrics.pairwise import cosine_similarity
 from src.similarity.model_manager import get_model
 
 
+# Formulations très fréquentes dans les TDR. Elles décrivent la façon de conduire
+# une étude mais ne suffisent pas, à elles seules, à établir que deux études
+# portent sur le même sujet.
+GENERIC_PREFIXES = (
+    "collect",
+    "analys",
+    "trait",
+    "restit",
+    "valid",
+    "methodolog",
+    "document",
+    "recommand",
+    "rapport",
+    "livr",
+    "suiv",
+    "comit",
+    "reun",
+    "entreti",
+    "enquet",
+    "questionnair",
+    "donne",
+    "resultat",
+    "conclusion",
+    "bibliograph",
+    "revue",
+    "echantillon",
+    "echantillonn",
+    "indicateur",
+    "tableau",
+    "graphique",
+    "calendrier",
+    "chronogramm",
+    "mission",
+    "prestataire",
+    "consultant",
+    "restitution",
+)
+
+FRENCH_STOPWORDS = {
+    "alors", "au", "aucun", "aussi", "autre", "avec", "avoir", "avant",
+    "aux", "car", "ce", "ceci", "cela", "ces", "cet", "cette", "comme",
+    "dans", "de", "des", "du", "elle", "elles", "en", "entre", "est",
+    "et", "eux", "il", "ils", "je", "la", "le", "les", "leur", "leurs",
+    "lui", "mais", "me", "mes", "meme", "mêmes", "mon", "ne", "nos",
+    "notre", "nous", "on", "ont", "ou", "par", "pas", "pour", "que",
+    "quel", "quelle", "quelles", "quels", "qui", "sa", "sans", "se",
+    "sera", "seront", "ses", "soi", "soit", "sont", "sur", "ta", "te",
+    "tes", "toi", "ton", "tous", "tout", "toute", "toutes", "un", "une",
+    "vos", "votre", "vous", "y", "afin", "ainsi", "apres", "après",
+    "chez", "dont", "leurs", "peut", "peuvent", "plus", "moins", "tres",
+    "très", "doit", "doivent", "sera", "serait", "etre", "être",
+}
+
+
 def normalize_passage(text):
     text = re.sub(r"\s+", " ", text or "").strip().lower()
     return text
+
+
+def _fold_text(text):
+    normalized = unicodedata.normalize("NFKD", text or "")
+    return "".join(char for char in normalized if not unicodedata.combining(char))
+
+
+def _topic_tokens(text):
+    folded = _fold_text(normalize_passage(text))
+    tokens = re.findall(r"[a-zà-ÿ]{4,}", folded)
+    result = set()
+    for token in tokens:
+        if token in FRENCH_STOPWORDS:
+            continue
+        if any(token.startswith(prefix) for prefix in GENERIC_PREFIXES):
+            continue
+        result.add(token)
+    return result
+
+
+def _generic_ratio(text):
+    folded = _fold_text(normalize_passage(text))
+    tokens = re.findall(r"[a-zà-ÿ]{4,}", folded)
+    if not tokens:
+        return 0.0
+    generic = sum(
+        1
+        for token in tokens
+        if token in FRENCH_STOPWORDS
+        or any(token.startswith(prefix) for prefix in GENERIC_PREFIXES)
+    )
+    return generic / len(tokens)
+
+
+def _topic_overlap(candidate, source):
+    candidate_topics = _topic_tokens(candidate)
+    source_topics = _topic_tokens(source)
+    if not candidate_topics or not source_topics:
+        return 0.0
+
+    intersection = len(candidate_topics & source_topics)
+    # F1 entre les deux ensembles de termes spécifiques : il évite qu'un
+    # document très long soit avantagé simplement parce qu'il contient plus de mots.
+    precision = intersection / len(candidate_topics)
+    recall = intersection / len(source_topics)
+    if precision + recall == 0:
+        return 0.0
+    return 2 * precision * recall / (precision + recall)
+
+
+def adjusted_hybrid_score(candidate, source, lexical, semantic, lexical_weight=0.30, semantic_weight=0.70):
+    """Calcule le score hybride utilisé pour le classement et la décision.
+
+    Les scores lexical et sémantique restent les mesures brutes affichées.
+    Le score hybride est corrigé uniquement pour éviter que des formulations
+    méthodologiques génériques produisent artificiellement une forte proximité.
+    """
+    base = lexical_weight * float(lexical) + semantic_weight * float(semantic)
+    topic = _topic_overlap(candidate, source)
+    generic = (_generic_ratio(candidate) + _generic_ratio(source)) / 2
+
+    # Les documents partageant un vocabulaire thématique spécifique conservent
+    # presque tout leur score. À l'inverse, une forte proximité essentiellement
+    # générique est progressivement réduite.
+    specificity = 0.60 + 0.40 * topic
+    generic_penalty = 1.0 - min(0.20, max(0.0, generic - 0.35) * 0.55)
+
+    adjusted = base * specificity * generic_penalty
+
+    # Une très forte similarité lexicale reste un signal solide : cette règle
+    # évite de dégrader les vrais doublons quasi identiques.
+    if lexical >= 0.88 and semantic >= 0.88:
+        adjusted = max(adjusted, base * 0.95)
+
+    return float(np.clip(adjusted, 0.0, 1.0))
 
 
 def split_into_passages(text, max_chars=1200):
@@ -31,7 +162,14 @@ def split_into_passages(text, max_chars=1200):
     return passages
 
 
-def compare_passages(candidate_passages, source_passages, threshold=0.50, top_k=10):
+def compare_passages(
+    candidate_passages,
+    source_passages,
+    threshold=0.50,
+    top_k=10,
+    lexical_weight=0.30,
+    semantic_weight=0.70,
+):
     if not candidate_passages or not source_passages:
         return []
 
@@ -56,10 +194,24 @@ def compare_passages(candidate_passages, source_passages, threshold=0.50, top_k=
 
     matches = []
     for i, candidate in enumerate(candidate_passages):
-        combined = 0.30 * lexical[i] + 0.70 * semantic[i]
+        raw_combined = lexical_weight * lexical[i] + semantic_weight * semantic[i]
+        corrected = np.array(
+            [
+                adjusted_hybrid_score(
+                    candidate,
+                    source_passages[j],
+                    lexical[i, j],
+                    semantic[i, j],
+                    lexical_weight,
+                    semantic_weight,
+                )
+                for j in range(len(source_passages))
+            ]
+        )
+
         candidate_words = normalize_passage(candidate).split()
-        for j in np.argsort(combined)[::-1][:3]:
-            score = float(combined[j])
+        for j in np.argsort(corrected)[::-1][:3]:
+            score = float(corrected[j])
             lexical_score = float(lexical[i, j])
             semantic_score = float(semantic[i, j])
             source = source_passages[j]
@@ -72,6 +224,7 @@ def compare_passages(candidate_passages, source_passages, threshold=0.50, top_k=
                     "tfidf_score": round(lexical_score, 4),
                     "semantic_score": round(semantic_score, 4),
                     "score": round(score, 4),
+                    "raw_hybrid_score": round(float(raw_combined[j]), 4),
                 })
                 break
 
