@@ -172,10 +172,10 @@ def _split_structured_paragraph(text):
     # Titres courants dans les TDR, y compris les titres numérotés.
     heading = re.compile(
         r"(?=(?:\b\\d+(?:\.\d+)*[.)]?\\s+|"
-        r"Résultats attendus\\b|Livrables\\b|Sources indicatives\\b|"
-        r"Mandat du bureau d[’']études\\b|Méthodologie\\b|"
-        r"Revue documentaire\\b|Collecte de données\\b|Analyse\\b|"
-        r"Restitution\\b|Profil du consultant\\b))",
+        r"Résultats attendus\b|Livrables\b|Sources indicatives\b|"
+        r"Mandat du bureau d[’']études\b|Méthodologie\b|"
+        r"Revue documentaire\b|Collecte de données\b|Analyse\b|"
+        r"Restitution\b|Profil du consultant\b))",
         flags=re.IGNORECASE,
     )
     pieces = [p.strip() for p in heading.split(text) if p.strip()]
@@ -239,17 +239,14 @@ def compare_passages(
     )
     semantic = np.clip(semantic, 0.0, 1.0)
 
-    matches = []
+    # Construire toutes les correspondances admissibles avant de les attribuer.
+    # Cela évite qu'un même passage méthodologique générique soit réutilisé
+    # plusieurs fois pour gonfler artificiellement la couverture.
+    candidate_edges = []
     for i, candidate in enumerate(candidate_passages):
-        # La détection d'une correspondance sémantique est indépendante du
-        # TF-IDF : une paraphrase peut donc être reconnue même avec peu de mots
-        # en commun.
         candidate_words = normalize_passage(candidate).split()
         semantic_order = np.argsort(semantic[i])[::-1]
 
-        # On examine plusieurs voisins sémantiques et on retient celui qui
-        # combine le mieux proximité sémantique et pertinence thématique.
-        best_match = None
         for j in semantic_order[:5]:
             semantic_score = float(semantic[i, j])
             lexical_score = float(lexical[i, j])
@@ -264,48 +261,63 @@ def compare_passages(
                 candidate, source, semantic_score
             )
 
-            # Si aucun vocabulaire thématique n'est partagé, une forte
-            # similarité sémantique peut provenir de la structure standard
-            # d'un TDR (collecte, analyse, restitution, recommandations...).
-            # Dans ce cas, on exige un signal lexical minimal ou une très forte
-            # similarité sémantique pour préserver les vraies paraphrases.
             if topic_overlap < 0.08 and not (
                 semantic_score >= 0.90 and lexical_score >= 0.15
             ):
                 continue
 
-            # La pertinence reste un second garde-fou : elle ne remplace pas
-            # la similarité sémantique et ne sert pas à calculer le TF-IDF.
             if relevance < 0.54:
                 continue
 
-            current = (relevance, semantic_score)
-            if best_match is None or current > best_match[0]:
-                best_match = (
-                    current,
-                    j,
-                    lexical_score,
-                    semantic_score,
-                    topic_overlap,
-                    generic_ratio,
-                )
-
-        if best_match is not None:
-            _, j, lexical_score, semantic_score, topic_overlap, generic_ratio = best_match
-            matches.append({
-                "candidate_passage": candidate,
-                "source_passage": source_passages[j],
-                "tfidf_score": round(lexical_score, 4),
-                "semantic_score": round(semantic_score, 4),
-                "topic_overlap": round(topic_overlap, 4),
-                "generic_ratio": round(generic_ratio, 4),
-                "relevance_score": round(best_match[0][0], 4),
-                # Le score affiché reste la proximité sémantique brute.
-                "score": round(semantic_score, 4),
+            candidate_edges.append({
+                "candidate_index": int(i),
+                "source_index": int(j),
+                "tfidf_score": lexical_score,
+                "semantic_score": semantic_score,
+                "topic_overlap": topic_overlap,
+                "generic_ratio": generic_ratio,
+                "relevance_score": relevance,
             })
 
+    # Attribution un-à-un : un passage source ne peut expliquer qu'un seul
+    # passage candidat dans cette comparaison.
+    candidate_edges.sort(
+        key=lambda item: (
+            item["relevance_score"],
+            item["semantic_score"],
+            item["tfidf_score"],
+        ),
+        reverse=True,
+    )
+
+    used_candidates = set()
+    used_sources = set()
+    matches = []
+
+    for edge in candidate_edges:
+        i = edge["candidate_index"]
+        j = edge["source_index"]
+        if i in used_candidates or j in used_sources:
+            continue
+
+        matches.append({
+            "candidate_passage": candidate_passages[i],
+            "source_passage": source_passages[j],
+            "tfidf_score": round(edge["tfidf_score"], 4),
+            "semantic_score": round(edge["semantic_score"], 4),
+            "topic_overlap": round(edge["topic_overlap"], 4),
+            "generic_ratio": round(edge["generic_ratio"], 4),
+            "relevance_score": round(edge["relevance_score"], 4),
+            "score": round(edge["semantic_score"], 4),
+        })
+        used_candidates.add(i)
+        used_sources.add(j)
+
+        if len(matches) >= top_k:
+            break
+
     matches.sort(key=lambda item: item["score"], reverse=True)
-    return matches[:top_k]
+    return matches
 
 
 def aggregate_passage_scores(
@@ -315,20 +327,27 @@ def aggregate_passage_scores(
     lexical_weight=0.30,
     semantic_weight=0.70,
 ):
-    """Combine un TF-IDF documentaire indépendant avec la sémantique des passages.
+    """Combine un TF-IDF documentaire indépendant avec l'évidence sémantique
+    réellement couverte par les passages.
 
-    Le TF-IDF ne sert pas de filtre pour détecter une correspondance sémantique.
+    Le TF-IDF reste indépendant : il ne filtre pas les correspondances
+    sémantiques. La sémantique finale tient maintenant compte de la couverture,
+    afin qu'un seul passage générique ne puisse représenter tout le document.
     """
+    coverage = calculate_coverage(candidate_passages, matches)
     if not matches:
         return {
             "tfidf_score": 0.0,
             "semantic_score": 0.0,
             "hybrid_score": 0.0,
-            "coverage": 0.0,
+            "coverage": coverage,
         }
 
-    semantic_scores = [float(match["semantic_score"]) for match in matches]
-    semantic_score = float(np.mean(semantic_scores))
+    semantic_scores = np.array(
+        [float(match["semantic_score"]) for match in matches],
+        dtype=float,
+    )
+    semantic_mean = float(np.mean(semantic_scores))
 
     if document_lexical_score is None:
         lexical_scores = [float(match["tfidf_score"]) for match in matches]
@@ -336,10 +355,15 @@ def aggregate_passage_scores(
     else:
         lexical_score = float(document_lexical_score)
 
+    # La racine carrée évite une pénalisation trop brutale des vrais doublons
+    # partiels/paraphrasés tout en empêchant un faible nombre de passages
+    # génériques de produire un score documentaire élevé.
+    coverage_factor = float(np.sqrt(max(0.0, min(1.0, coverage))))
+    semantic_score = semantic_mean * coverage_factor
+
     hybrid_score = float(
         lexical_weight * lexical_score + semantic_weight * semantic_score
     )
-    coverage = calculate_coverage(candidate_passages, matches)
 
     return {
         "tfidf_score": round(float(np.clip(lexical_score, 0.0, 1.0)), 4),
