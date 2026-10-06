@@ -24,7 +24,7 @@ from src.indexing.reference_index import (
     ensure_reference_index,
     load_reference_documents,
 )
-from src.passages.passage_engine import analyze_document_pair
+from src.passages.passage_engine import analyze_document_pair, adjusted_hybrid_score
 from src.preprocessing.clean_text import clean_text
 from src.similarity.model_manager import get_model, get_model_info
 
@@ -123,9 +123,18 @@ def score_documents(candidate_text: str, kind: str):
     )[0]
     semantic = _semantic_scores(candidate_embedding, reference_embeddings)
 
-    hybrid = (
-        LEXICAL_WEIGHT * lexical
-        + SEMANTIC_WEIGHT * semantic
+    hybrid = np.array(
+        [
+            adjusted_hybrid_score(
+                candidate,
+                rows[int(idx)].extracted_text or rows[int(idx)].cleaned_text,
+                lexical[idx],
+                semantic[idx],
+                LEXICAL_WEIGHT,
+                SEMANTIC_WEIGHT,
+            )
+            for idx in range(len(rows))
+        ]
     )
 
     order = np.argsort(hybrid)[::-1]
@@ -169,7 +178,14 @@ def score_two_texts(candidate_text: str, source_text: str):
     )
     semantic = float(np.dot(embeddings[0], embeddings[1]))
     semantic = float(np.clip(semantic, 0.0, 1.0))
-    hybrid = LEXICAL_WEIGHT * lexical + SEMANTIC_WEIGHT * semantic
+    hybrid = adjusted_hybrid_score(
+        candidate,
+        source,
+        lexical,
+        semantic,
+        LEXICAL_WEIGHT,
+        SEMANTIC_WEIGHT,
+    )
 
     return {
         "tfidf_score": round(lexical, 4),
