@@ -33,7 +33,7 @@ THRESHOLDS = {"plagiarism": 0.55, "duplicate": 0.70}
 LEXICAL_WEIGHT = float(os.getenv("SIMILARITY_LEXICAL_WEIGHT", "0.30"))
 SEMANTIC_WEIGHT = float(os.getenv("SIMILARITY_SEMANTIC_WEIGHT", "0.70"))
 TOP_SOURCES = int(os.getenv("SIMILARITY_REFERENCE_TOP_K", "10"))
-TOP_PASSAGE_SOURCES = int(os.getenv("SIMILARITY_PASSAGE_TOP_K", "3"))
+TOP_PASSAGE_SOURCES = int(os.getenv("SIMILARITY_PASSAGE_TOP_K", "5"))
 
 if abs((LEXICAL_WEIGHT + SEMANTIC_WEIGHT) - 1.0) > 1e-6:
     raise RuntimeError("SIMILARITY_LEXICAL_WEIGHT + SIMILARITY_SEMANTIC_WEIGHT doit être égal à 1.0")
@@ -259,9 +259,12 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             {
                 "source_id": item["id"],
                 "source": item["source"],
-                "document_score": item["hybrid_score"],
-                "tfidf_score": item["tfidf_score"],
-                "semantic_score": item["semantic_score"],
+                # Ces trois scores proviennent désormais des correspondances
+                # de passages, et non plus de la comparaison globale initiale.
+                "document_score": detail["hybrid_score"],
+                "tfidf_score": detail["tfidf_score"],
+                "semantic_score": detail["semantic_score"],
+                "hybrid_score": detail["hybrid_score"],
                 "coverage": detail["coverage"],
                 "matches": detail["matches"],
                 "passages_candidate": detail["passages_candidate"],
@@ -272,17 +275,34 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             }
         )
 
-    # Une décision de doublon/plagiat ne doit pas reposer uniquement sur
-    # un score documentaire : elle doit être confirmée par au moins un
-    # passage dépassant le seuil de comparaison des passages.
-    has_passage_evidence = any(
-        group.get("matches")
-        for group in passage_groups
-    )
-    final_decision = (
-        decision(best["hybrid_score"], threshold)
-        if has_passage_evidence
-        else "DIFFERENT"
+    # La décision et les scores affichés reposent maintenant sur la même
+    # preuve : les correspondances entre passages. Une comparaison globale
+    # sert uniquement à présélectionner les sources à examiner.
+    evidence_groups = [group for group in passage_groups if group.get("matches")]
+    evidence_groups.sort(key=lambda group: group.get("hybrid_score", 0.0), reverse=True)
+    best_evidence = evidence_groups[0] if evidence_groups else None
+
+    if best_evidence is not None:
+        final_decision = decision(best_evidence["hybrid_score"], threshold)
+        result_tfidf = best_evidence["tfidf_score"]
+        result_semantic = best_evidence["semantic_score"]
+        result_hybrid = best_evidence["hybrid_score"]
+        result_source = best_evidence["source"]
+        result_source_id = best_evidence["source_id"]
+    else:
+        final_decision = "DIFFERENT"
+        result_tfidf = 0.0
+        result_semantic = 0.0
+        result_hybrid = 0.0
+        result_source = best["source"]
+        result_source_id = best["id"]
+
+    # Les sources présentées sont celles effectivement comparées par passages.
+    # Leur ordre est celui de la preuve obtenue, pas celui du seul score global.
+    displayed_sources = sorted(
+        passage_groups,
+        key=lambda group: group.get("hybrid_score", 0.0),
+        reverse=True,
     )
 
     return {
@@ -291,20 +311,17 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         "threshold": threshold,
         "lexical_weight": LEXICAL_WEIGHT,
         "semantic_weight": SEMANTIC_WEIGHT,
-        "best_source": best["source"],
-        "best_source_id": best["id"],
+        "best_source": result_source,
+        "best_source_id": result_source_id,
         "candidate_document_html": (
             passage_groups[0]["candidate_document_html"]
             if passage_groups else html.escape(candidate)
         ),
-        "tfidf_score": best["tfidf_score"],
-        "semantic_score": best["semantic_score"],
-        "hybrid_score": best["hybrid_score"],
-        "novelty_score": round(max(0.0, 1 - best["hybrid_score"]), 4),
-        "sources": [
-            {k: v for k, v in item.items() if k != "_document"}
-            for item in ranked[:TOP_SOURCES]
-        ],
+        "tfidf_score": result_tfidf,
+        "semantic_score": result_semantic,
+        "hybrid_score": result_hybrid,
+        "novelty_score": round(max(0.0, 1 - result_hybrid), 4),
+        "sources": displayed_sources[:TOP_SOURCES],
         "matches": passage_groups,
     }
 
