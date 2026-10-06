@@ -163,36 +163,21 @@ def score_two_texts(candidate_text: str, source_text: str):
     if not candidate or not source:
         return None
 
-    vectorizer = TfidfVectorizer(
-        ngram_range=(1, 2),
-        sublinear_tf=True,
-    )
-    tfidf = vectorizer.fit_transform([candidate, source])
-    lexical = float(cosine_similarity(tfidf[0:1], tfidf[1:2])[0, 0])
-
-    embeddings = get_model().encode(
-        [candidate, source],
-        normalize_embeddings=True,
-        show_progress_bar=False,
-        convert_to_numpy=True,
-    )
-    semantic = float(np.dot(embeddings[0], embeddings[1]))
-    semantic = float(np.clip(semantic, 0.0, 1.0))
-    hybrid = adjusted_hybrid_score(
+    detail = analyze_document_pair(
         candidate,
         source,
-        lexical,
-        semantic,
-        LEXICAL_WEIGHT,
-        SEMANTIC_WEIGHT,
+        threshold=0.50,
+        top_k=8,
+        lexical_weight=LEXICAL_WEIGHT,
+        semantic_weight=SEMANTIC_WEIGHT,
     )
-
     return {
-        "tfidf_score": round(lexical, 4),
-        "semantic_score": round(semantic, 4),
-        "hybrid_score": round(hybrid, 4),
+        "tfidf_score": detail["tfidf_score"],
+        "semantic_score": detail["semantic_score"],
+        "hybrid_score": detail["hybrid_score"],
+        "coverage": detail["coverage"],
+        "passages_similaires": len(detail["matches"]),
     }
-
 
 def decision(score, threshold):
     return "SIMILAIRE" if score >= threshold else "DIFFERENT"
@@ -216,7 +201,7 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
     best = ranked[0]
     passage_groups = []
 
-    # L'analyse lourde des passages est limitée aux 3 sources les plus proches.
+    # L'analyse lourde des passages est limitée aux sources les plus proches.
     for item in ranked[:TOP_PASSAGE_SOURCES]:
         document = item["_document"]
         source_text = document.extracted_text or document.cleaned_text
@@ -225,6 +210,8 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             source_text,
             threshold=0.50,
             top_k=8,
+            lexical_weight=LEXICAL_WEIGHT,
+            semantic_weight=SEMANTIC_WEIGHT,
         )
 
         source_html = html.escape(source_text)
@@ -314,8 +301,9 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         "best_source": result_source,
         "best_source_id": result_source_id,
         "candidate_document_html": (
-            passage_groups[0]["candidate_document_html"]
-            if passage_groups else html.escape(candidate)
+            best_evidence["candidate_document_html"]
+            if best_evidence is not None
+            else (passage_groups[0]["candidate_document_html"] if passage_groups else html.escape(candidate))
         ),
         "tfidf_score": result_tfidf,
         "semantic_score": result_semantic,
