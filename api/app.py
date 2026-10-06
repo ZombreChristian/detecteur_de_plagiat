@@ -163,13 +163,20 @@ def score_two_texts(candidate_text: str, source_text: str):
     if not candidate or not source:
         return None
 
+    # TF-IDF documentaire indépendant : il ne sert pas à décider si deux
+    # passages sont sémantiquement similaires.
+    vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True)
+    matrix = vectorizer.fit_transform([candidate, source])
+    document_lexical = float(cosine_similarity(matrix[0:1], matrix[1:2])[0, 0])
+
     detail = analyze_document_pair(
         candidate,
         source,
-        threshold=0.50,
+        threshold=0.58,
         top_k=8,
         lexical_weight=LEXICAL_WEIGHT,
         semantic_weight=SEMANTIC_WEIGHT,
+        document_lexical_score=document_lexical,
     )
     return {
         "tfidf_score": detail["tfidf_score"],
@@ -208,10 +215,11 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         detail = analyze_document_pair(
             candidate,
             source_text,
-            threshold=0.50,
+            threshold=0.58,
             top_k=8,
             lexical_weight=LEXICAL_WEIGHT,
             semantic_weight=SEMANTIC_WEIGHT,
+            document_lexical_score=item["tfidf_score"],
         )
 
         source_html = html.escape(source_text)
@@ -262,9 +270,10 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             }
         )
 
-    # La décision et les scores affichés reposent maintenant sur la même
-    # preuve : les correspondances entre passages. Une comparaison globale
-    # sert uniquement à présélectionner les sources à examiner.
+    # La décision et les scores affichés utilisent une preuve mixte :
+    # TF-IDF documentaire indépendant + sémantique issue des passages.
+    # Le TF-IDF ne sert jamais de filtre pour accepter/refuser une correspondance
+    # sémantique.
     evidence_groups = [group for group in passage_groups if group.get("matches")]
     evidence_groups.sort(key=lambda group: group.get("hybrid_score", 0.0), reverse=True)
     best_evidence = evidence_groups[0] if evidence_groups else None
