@@ -165,7 +165,7 @@ def split_into_passages(text, max_chars=1200):
 def compare_passages(
     candidate_passages,
     source_passages,
-    threshold=0.50,
+    semantic_threshold=0.58,
     top_k=10,
     lexical_weight=0.30,
     semantic_weight=0.70,
@@ -194,35 +194,28 @@ def compare_passages(
 
     matches = []
     for i, candidate in enumerate(candidate_passages):
-        corrected = np.array(
-            [
-                adjusted_hybrid_score(
-                    candidate,
-                    source_passages[j],
-                    lexical[i, j],
-                    semantic[i, j],
-                    lexical_weight,
-                    semantic_weight,
-                )
-                for j in range(len(source_passages))
-            ]
-        )
-
+        # La détection d'une correspondance sémantique est indépendante du
+        # TF-IDF : une paraphrase peut donc être reconnue même avec peu de mots
+        # en commun.
         candidate_words = normalize_passage(candidate).split()
-        for j in np.argsort(corrected)[::-1][:3]:
-            score = float(corrected[j])
-            lexical_score = float(lexical[i, j])
+        semantic_order = np.argsort(semantic[i])[::-1]
+
+        for j in semantic_order[:3]:
             semantic_score = float(semantic[i, j])
+            lexical_score = float(lexical[i, j])
             source = source_passages[j]
-            if len(candidate_words) < 7 and score < 0.85:
+
+            if len(candidate_words) < 7 and semantic_score < 0.85:
                 continue
-            if score >= threshold:
+
+            if semantic_score >= semantic_threshold:
                 matches.append({
                     "candidate_passage": candidate,
                     "source_passage": source,
                     "tfidf_score": round(lexical_score, 4),
                     "semantic_score": round(semantic_score, 4),
-                    "score": round(score, 4),
+                    # Ici, score = proximité sémantique du passage.
+                    "score": round(semantic_score, 4),
                 })
                 break
 
@@ -230,13 +223,16 @@ def compare_passages(
     return matches[:top_k]
 
 
-def aggregate_passage_scores(matches, candidate_passages, lexical_weight=0.30, semantic_weight=0.70):
-    """Calcule les scores documentaires à partir des correspondances de passages.
+def aggregate_passage_scores(
+    matches,
+    candidate_passages,
+    document_lexical_score=None,
+    lexical_weight=0.30,
+    semantic_weight=0.70,
+):
+    """Combine un TF-IDF documentaire indépendant avec la sémantique des passages.
 
-    La similarité sémantique globale n'est plus calculée indépendamment des
-    passages : elle est la moyenne des similarités sémantiques des passages
-    effectivement retenus comme correspondances. Le même principe est appliqué
-    au score lexical, puis le score hybride combine ces deux mesures.
+    Le TF-IDF ne sert pas de filtre pour détecter une correspondance sémantique.
     """
     if not matches:
         return {
@@ -246,11 +242,18 @@ def aggregate_passage_scores(matches, candidate_passages, lexical_weight=0.30, s
             "coverage": 0.0,
         }
 
-    lexical_scores = [float(match["tfidf_score"]) for match in matches]
     semantic_scores = [float(match["semantic_score"]) for match in matches]
-    lexical_score = float(np.mean(lexical_scores))
     semantic_score = float(np.mean(semantic_scores))
-    hybrid_score = float(lexical_weight * lexical_score + semantic_weight * semantic_score)
+
+    if document_lexical_score is None:
+        lexical_scores = [float(match["tfidf_score"]) for match in matches]
+        lexical_score = float(np.mean(lexical_scores))
+    else:
+        lexical_score = float(document_lexical_score)
+
+    hybrid_score = float(
+        lexical_weight * lexical_score + semantic_weight * semantic_score
+    )
     coverage = calculate_coverage(candidate_passages, matches)
 
     return {
@@ -268,22 +271,31 @@ def calculate_coverage(candidate_passages, matches):
     return round(len(matched) / len(candidate_passages), 4)
 
 
-def analyze_document_pair(candidate_text, source_text, threshold=0.50, top_k=10, lexical_weight=0.30, semantic_weight=0.70):
+def analyze_document_pair(
+    candidate_text,
+    source_text,
+    threshold=0.58,
+    top_k=10,
+    lexical_weight=0.30,
+    semantic_weight=0.70,
+    document_lexical_score=None,
+):
     candidate_passages = split_into_passages(candidate_text)
     source_passages = split_into_passages(source_text)
     matches = compare_passages(
         candidate_passages,
         source_passages,
-        threshold,
-        top_k,
-        lexical_weight,
-        semantic_weight,
+        semantic_threshold=threshold,
+        top_k=top_k,
+        lexical_weight=lexical_weight,
+        semantic_weight=semantic_weight,
     )
     scores = aggregate_passage_scores(
         matches,
         candidate_passages,
-        lexical_weight,
-        semantic_weight,
+        document_lexical_score=document_lexical_score,
+        lexical_weight=lexical_weight,
+        semantic_weight=semantic_weight,
     )
     return {
         "matches": matches,
