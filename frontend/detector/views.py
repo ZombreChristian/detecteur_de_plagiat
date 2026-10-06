@@ -407,19 +407,29 @@ def analyser(request):
     if mode not in ("plagiarism", "duplicate"):
         messages.error(request, "Mode d'analyse invalide.")
         return redirect("detector:analyser")
-    if not _validate_docx(uploaded):
-        messages.error(request, "Veuillez sélectionner un document DOCX valide.")
+    if not _validate_document(uploaded):
+        messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
+        return redirect("detector:analyser")
+    uploaded_path = _save_uploaded_document(uploaded)
+    try:
+        threshold = float(request.POST.get("threshold", "")) / 100.0
+        if not 0.01 <= threshold <= 1.0:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
         return redirect("detector:analyser")
     endpoint = "/api/detect/duplicate" if mode == "duplicate" else "/api/detect/plagiarism"
     start = time.perf_counter()
     try:
         response = requests.post(
             f"{settings.FASTAPI_URL}{endpoint}",
-            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            data={"threshold": threshold},
+            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))},
             timeout=600,
         )
         response.raise_for_status()
         result = response.json()
+        result["uploaded_path"] = uploaded_path
         duration = round((time.perf_counter() - start) * 1000)
         result["duration_ms"] = duration
         analysis = Analysis.objects.create(
