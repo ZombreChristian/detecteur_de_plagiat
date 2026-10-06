@@ -823,7 +823,7 @@ def export_excel(request):
         return HttpResponse("Aucune analyse à exporter.", status=404)
     result = analysis.result_json or {}
     wb = Workbook(); ws = wb.active; ws.title = "Analyse"
-    for row in [["Détecteur documentaire", "DOCSEC"], ["Document", analysis.document_name], ["Mode", analysis.get_mode_display()], ["Décision", analysis.decision], ["Score TF-IDF", analysis.tfidf_score], ["Score sémantique", analysis.semantic_score], ["Score hybride", analysis.hybrid_score], ["Score de nouveauté", analysis.novelty_score], ["Durée (ms)", analysis.duration_ms], ["Meilleure source", result.get("best_source", "")]]: ws.append(row)
+    for row in [["Détecteur documentaire", "DOCSEC"], ["Document", analysis.document_name], ["Mode", analysis.get_mode_display()], ["Décision", analysis.decision], ["Score TF-IDF", analysis.tfidf_score], ["Score sémantique", analysis.semantic_score], ["Score hybride", analysis.hybrid_score], ["Score de nouveauté", analysis.novelty_score], ["Durée (ms)", analysis.duration_ms], ["Document de comparaison", result.get("best_source", "")]]: ws.append(row)
     response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"); response["Content-Disposition"] = 'attachment; filename="rapport_analyse.xlsx"'; wb.save(response); return response
 
 
@@ -835,9 +835,9 @@ def export_pdf(request):
     if not analysis: return HttpResponse("Aucune analyse à exporter.", status=404)
     result = analysis.result_json or {}; buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36); styles = getSampleStyleSheet()
     story = [Paragraph("Rapport d'analyse documentaire — DOCSEC", styles["Title"]), Spacer(1, 12)]
-    data = [["Document", analysis.document_name], ["Type", analysis.get_mode_display()], ["Décision", analysis.decision], ["Score TF-IDF", str(analysis.tfidf_score)], ["Score sémantique", str(analysis.semantic_score)], ["Score hybride", str(analysis.hybrid_score)], ["Nouveauté", str(analysis.novelty_score)], ["Meilleure source", str(result.get("best_source", ""))]]
-    table = Table(data, colWidths=[150, 350]); table.setStyle(TableStyle([("BACKGROUND", (0,0), (0,-1), colors.HexColor("#eef2f7")), ("GRID", (0,0), (-1,-1), .5, colors.grey), ("VALIGN", (0,0), (-1,-1), "TOP"), ("PADDING", (0,0), (-1,-1), 7)])); story.append(table); story.append(Spacer(1, 18)); story.append(Paragraph("Sources proches", styles["Heading2"]))
-    for source in result.get("sources", [])[:10]: story.extend([Paragraph(f"{source.get('source','')} — score {source.get('hybrid_score','')}", styles["BodyText"]), Spacer(1, 5)])
+    data = [["Document", analysis.document_name], ["Type", analysis.get_mode_display()], ["Décision", analysis.decision], ["Score TF-IDF", str(analysis.tfidf_score)], ["Score sémantique", str(analysis.semantic_score)], ["Score hybride", str(analysis.hybrid_score)], ["Nouveauté", str(analysis.novelty_score)], ["Document de comparaison", str(result.get("best_source", ""))]]
+    table = Table(data, colWidths=[150, 350]); table.setStyle(TableStyle([("BACKGROUND", (0,0), (0,-1), colors.HexColor("#eef2f7")), ("GRID", (0,0), (-1,-1), .5, colors.grey), ("VALIGN", (0,0), (-1,-1), "TOP"), ("PADDING", (0,0), (-1,-1), 7)])); story.append(table); story.append(Spacer(1, 18)); story.append(Paragraph("Documents de comparaison", styles["Heading2"]))
+    for source in result.get("sources", [])[:10]: story.extend([Paragraph(f"{source.get('source','')} — indice de similarité {source.get('hybrid_score','')}", styles["BodyText"]), Spacer(1, 5)])
     doc.build(story); response = HttpResponse(buffer.getvalue(), content_type="application/pdf"); response["Content-Disposition"] = 'attachment; filename="rapport_analyse.pdf"'; return response
 
 
