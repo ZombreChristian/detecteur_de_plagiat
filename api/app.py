@@ -10,6 +10,7 @@ import time
 
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 from docx import Document
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -326,7 +327,10 @@ async def detect(kind: str, file: UploadFile = File(...)):
         path = Path(directory) / safe_name
         path.write_bytes(await file.read())
         candidate_text = read_docx(path)
-        result = run_detection(candidate_text, kind)
+        # run_detection utilise le Django ORM de façon synchrone.
+        # On l'exécute dans un thread pour éviter SynchronousOnlyOperation
+        # lorsque cet endpoint FastAPI est appelé depuis le contexte async.
+        result = await run_in_threadpool(run_detection, candidate_text, kind)
 
     result["duration_ms"] = round((time.perf_counter() - start) * 1000)
     return result
