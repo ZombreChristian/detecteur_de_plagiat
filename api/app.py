@@ -13,6 +13,10 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from docx import Document
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from dotenv import load_dotenv
+
+ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT / "frontend" / ".env")
 
 from src.indexing.reference_index import (
     ensure_reference_index,
