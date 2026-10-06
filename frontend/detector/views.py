@@ -203,10 +203,14 @@ def _get_uploaded_docx(request):
     return None
 
 
-def _validate_docx(uploaded):
+def _validate_document(uploaded):
     if not uploaded or not uploaded.name:
         return False
-    return uploaded.name.strip().lower().endswith(".docx")
+    return Path(uploaded.name).suffix.lower() in {".docx", ".pdf"}
+
+
+def _document_content_type(uploaded):
+    return "application/pdf" if Path(uploaded.name).suffix.lower() == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 @login_required
@@ -246,19 +250,27 @@ def dashboard(request):
 
 
 def _save_uploaded_document(uploaded):
-    """Enregistre le DOCX reçu afin de pouvoir le consulter depuis l'historique."""
-    media_root = Path(settings.BASE_DIR) / "media" / "documents"
+    """Conserve chaque document testé dans frontend/media/documents/."""
+    media_root = Path(settings.MEDIA_ROOT) / "documents"
     media_root.mkdir(parents=True, exist_ok=True)
     storage = FileSystemStorage(location=str(media_root))
     uploaded.seek(0)
-    return str(media_root / storage.save(uploaded.name, uploaded))
+    saved_name = storage.save(uploaded.name, uploaded)
+    uploaded.seek(0)
+    return f"documents/{saved_name}"
+
+
+def _document_url(relative_path):
+    if not relative_path:
+        return ""
+    return f"{settings.MEDIA_URL.rstrip('/')}/{relative_path.lstrip('/')}"
 
 
 def _read_saved_document(path):
-    """Lit un document DOCX précédemment enregistré et retourne son contenu."""
+    """Lit un document sauvegardé uniquement pour les besoins internes."""
     if not path:
         return ""
-    file_path = Path(path)
+    file_path = Path(settings.MEDIA_ROOT) / str(path).replace("/", os.sep)
     if not file_path.exists() or file_path.suffix.lower() != ".docx":
         return ""
     doc = DocxDocument(file_path)
@@ -294,11 +306,12 @@ def _read_document_from_corpus(filename, mode):
 def analysis_detail(request, pk):
     analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
     result = analysis.result_json or {}
-    document_text = _read_saved_document((analysis.result_json or {}).get("uploaded_path")) or _read_document_from_corpus(analysis.document_name, analysis.mode)
+    uploaded_path = result.get("uploaded_path", "")
     return render(request, "analysis_detail.html", {
         "analysis": analysis,
         "result": result,
-        "document_text": document_text,
+        "document_url": _document_url(uploaded_path),
+        "document_path": uploaded_path,
     })
 
 
