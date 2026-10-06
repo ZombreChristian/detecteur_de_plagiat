@@ -212,11 +212,25 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         )
 
         source_html = html.escape(source_text)
+        candidate_html = html.escape(candidate)
         unique_passages = []
         for match in detail["matches"]:
             passage = match["source_passage"]
             if passage and passage not in unique_passages:
                 unique_passages.append(passage)
+
+        candidate_passages = []
+        for match in detail["matches"]:
+            passage = match["candidate_passage"]
+            if passage and passage not in candidate_passages:
+                candidate_passages.append(passage)
+
+        for passage in sorted(candidate_passages, key=len, reverse=True):
+            escaped_passage = html.escape(passage)
+            candidate_html = candidate_html.replace(
+                escaped_passage,
+                f'<mark class="docsec-evidence">{escaped_passage}</mark>',
+            )
 
         for passage in sorted(unique_passages, key=len, reverse=True):
             escaped_passage = html.escape(passage)
@@ -227,6 +241,7 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
 
         passage_groups.append(
             {
+                "source_id": item["id"],
                 "source": item["source"],
                 "document_score": item["hybrid_score"],
                 "tfidf_score": item["tfidf_score"],
@@ -237,6 +252,7 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
                 "passages_source": detail["passages_source"],
                 "source_document": source_text,
                 "source_document_html": source_html,
+                "candidate_document_html": candidate_html,
             }
         )
 
@@ -247,6 +263,11 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         "lexical_weight": LEXICAL_WEIGHT,
         "semantic_weight": SEMANTIC_WEIGHT,
         "best_source": best["source"],
+        "best_source_id": best["id"],
+        "candidate_document_html": (
+            passage_groups[0]["candidate_document_html"]
+            if passage_groups else html.escape(candidate)
+        ),
         "tfidf_score": best["tfidf_score"],
         "semantic_score": best["semantic_score"],
         "hybrid_score": best["hybrid_score"],
