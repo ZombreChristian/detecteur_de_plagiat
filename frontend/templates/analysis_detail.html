@@ -45,7 +45,7 @@
 </div></section>{% endif %}
 {% if result.matches %}<section class="panel national-bar-green"><div class="panel-head"><h2>Synthèse des passages signalés</h2></div><div class="panel-body"><p class="muted">Les correspondances ci-dessus sont détaillées source par source. Les extraits proviennent directement des documents sources analysés.</p></div></section>{% endif %}
 <section class="panel national-bar-red">
-<div class="panel-head"><h2>Document analysé</h2><a class="btn btn-primary" href="{% url 'detector:download_annotated_document' analysis.id %}">Télécharger le document analysé</a></div>
+<div class="panel-head"><h2>Téléchargement du document</h2><a class="btn btn-primary" href="{% url 'detector:download_annotated_document' analysis.id %}">Télécharger le document analysé</a></div>
 <div class="panel-body">
 <p class="muted" style="margin:0">Le fichier téléchargé reprend le document analysé et met en rouge les passages signalés comme problématiques.</p>
 </div>
