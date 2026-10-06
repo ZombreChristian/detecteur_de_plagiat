@@ -85,10 +85,12 @@ def adjusted_hybrid_score(
     )
 
 
+PASSAGE_MATCH_MIN_SEMANTIC = 0.58
+
+
 def compare_passages(
     candidate_passages,
     source_passages,
-    semantic_threshold=0.58,
     top_k=10,
     lexical_weight=0.30,
     semantic_weight=0.70,
@@ -142,7 +144,7 @@ def compare_passages(
             if len(candidate_words) < 7 and semantic_score < 0.85:
                 continue
 
-            if semantic_score < semantic_threshold:
+            if semantic_score < PASSAGE_MATCH_MIN_SEMANTIC:
                 continue
 
             candidate_edges.append({
@@ -256,7 +258,6 @@ def calculate_coverage(candidate_passages, matches):
 def analyze_document_pair(
     candidate_text,
     source_text,
-    threshold=0.58,
     top_k=10,
     lexical_weight=0.30,
     semantic_weight=0.70,
@@ -268,7 +269,6 @@ def analyze_document_pair(
     matches = compare_passages(
         candidate_passages,
         source_passages,
-        semantic_threshold=threshold,
         top_k=top_k,
         lexical_weight=lexical_weight,
         semantic_weight=semantic_weight,
