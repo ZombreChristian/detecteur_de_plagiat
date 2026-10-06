@@ -1,15 +1,9 @@
-from functools import lru_cache
 import re
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
 
-MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-
-@lru_cache(maxsize=1)
-def get_model():
-    return SentenceTransformer(MODEL_NAME)
+from src.similarity.model_manager import get_model
 
 
 def normalize_passage(text):
@@ -47,27 +41,28 @@ def compare_passages(candidate_passages, source_passages, threshold=0.50, top_k=
         tfidf[:len(candidate_passages)],
         tfidf[len(candidate_passages):],
     )
+
     embeddings = get_model().encode(
         texts,
         normalize_embeddings=True,
         show_progress_bar=False,
+        convert_to_numpy=True,
     )
     semantic = np.matmul(
         embeddings[:len(candidate_passages)],
         embeddings[len(candidate_passages):].T,
     )
+    semantic = np.clip(semantic, 0.0, 1.0)
 
     matches = []
     for i, candidate in enumerate(candidate_passages):
-        combined = 0.35 * lexical[i] + 0.65 * semantic[i]
-        # Ignore very short generic headings unless lexical overlap is also strong.
+        combined = 0.30 * lexical[i] + 0.70 * semantic[i]
         candidate_words = normalize_passage(candidate).split()
         for j in np.argsort(combined)[::-1][:3]:
             score = float(combined[j])
             lexical_score = float(lexical[i, j])
             semantic_score = float(semantic[i, j])
             source = source_passages[j]
-            source_words = normalize_passage(source).split()
             if len(candidate_words) < 7 and score < 0.85:
                 continue
             if score >= threshold:
