@@ -354,21 +354,30 @@ def _analysis_problem_passages(result):
     return sorted(passages, key=len, reverse=True)
 
 
+def _normalize_for_match(value):
+    value = value or ""
+    return re.sub(r"\\s+", " ", value).strip().casefold()
+
+
 def _highlight_text_runs(paragraph, passages):
-    """Recompose un paragraphe Word en colorant en rouge les passages signalés."""
+    """Colorie les passages même si Word les a répartis sur plusieurs runs."""
     text = paragraph.text
     if not text or not passages:
         return
 
+    normalized_text = _normalize_for_match(text)
     matches = []
     for passage in passages:
+        normalized_passage = _normalize_for_match(passage)
+        if not normalized_passage:
+            continue
         start = 0
         while True:
-            index = text.find(passage, start)
+            index = normalized_text.find(normalized_passage, start)
             if index < 0:
                 break
-            matches.append((index, index + len(passage)))
-            start = index + len(passage)
+            matches.append((index, index + len(normalized_passage)))
+            start = index + len(normalized_passage)
 
     if not matches:
         return
@@ -381,6 +390,9 @@ def _highlight_text_runs(paragraph, passages):
         else:
             merged[-1][1] = max(merged[-1][1], end)
 
+    # Pour garantir un résultat visible dans Word, on reconstruit le paragraphe
+    # à partir du texte normalisé et applique le rouge aux zones correspondantes.
+    # Les documents analysés restent inchangés : seule la copie téléchargée est modifiée.
     for run in list(paragraph.runs):
         run._element.getparent().remove(run._element)
 
