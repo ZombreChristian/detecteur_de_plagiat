@@ -1,10 +1,13 @@
 import io
+from io import BytesIO
+import re
 import os
 import time
 import requests
 from pathlib import Path
 from django.core.files.storage import FileSystemStorage
 from docx import Document as DocxDocument
+from docx.shared import RGBColor
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, get_user_model, update_session_auth_hash
@@ -21,10 +24,13 @@ from django.db.models import Q
 from django.http import FileResponse, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from openpyxl import Workbook
+from pypdf import PdfReader
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.enums import TA_LEFT
 from .forms import (
     LoginForm,
     SignUpForm,
@@ -332,6 +338,212 @@ def _read_document_from_corpus(filename, mode):
                         parts.append(" | ".join(cells))
             return "\\n\\n".join(parts)
     return ""
+
+
+
+def _analysis_problem_passages(result):
+    """Retourne les passages du document candidat signalés par le moteur."""
+    passages = []
+    seen = set()
+    for group in result.get("matches", []) or []:
+        for match in group.get("matches", []) or []:
+            passage = (match.get("candidate_passage") or "").strip()
+            if passage and passage not in seen:
+                seen.add(passage)
+                passages.append(passage)
+    return sorted(passages, key=len, reverse=True)
+
+
+def _highlight_text_runs(paragraph, passages):
+    """Recompose un paragraphe Word en colorant en rouge les passages signalés."""
+    text = paragraph.text
+    if not text or not passages:
+        return
+
+    matches = []
+    for passage in passages:
+        start = 0
+        while True:
+            index = text.find(passage, start)
+            if index < 0:
+                break
+            matches.append((index, index + len(passage)))
+            start = index + len(passage)
+
+    if not matches:
+        return
+
+    matches.sort()
+    merged = []
+    for start, end in matches:
+        if not merged or start > merged[-1][1]:
+            merged.append([start, end])
+        else:
+            merged[-1][1] = max(merged[-1][1], end)
+
+    for run in list(paragraph.runs):
+        run._element.getparent().remove(run._element)
+
+    cursor = 0
+    for start, end in merged:
+        if start > cursor:
+            paragraph.add_run(text[cursor:start])
+        run = paragraph.add_run(text[start:end])
+        run.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
+        run.bold = True
+        cursor = end
+    if cursor < len(text):
+        paragraph.add_run(text[cursor:])
+
+
+def _highlight_docx(path, passages):
+    """Crée une copie Word annotée sans modifier le fichier original."""
+    document = DocxDocument(path)
+    for paragraph in document.paragraphs:
+        _highlight_text_runs(paragraph, passages)
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    _highlight_text_runs(paragraph, passages)
+
+    output = BytesIO()
+    document.save(output)
+    output.seek(0)
+    return output
+
+
+def _pdf_text(path):
+    reader = PdfReader(str(path))
+    return "\n\n".join(
+        (page.extract_text() or "").strip()
+        for page in reader.pages
+        if (page.extract_text() or "").strip()
+    )
+
+
+def _highlight_pdf(path, passages, title):
+    """Crée un PDF texte annoté en rouge à partir du document analysé."""
+    from xml.sax.saxutils import escape
+
+    output = BytesIO()
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=A4,
+        rightMargin=42,
+        leftMargin=42,
+        topMargin=42,
+        bottomMargin=42,
+        title=title,
+    )
+    normal = ParagraphStyle(
+        "AnnotatedNormal",
+        fontName="Helvetica",
+        fontSize=9.5,
+        leading=13,
+        alignment=TA_LEFT,
+        spaceAfter=8,
+    )
+    title_style = ParagraphStyle(
+        "AnnotatedTitle",
+        parent=normal,
+        fontSize=14,
+        leading=18,
+        spaceAfter=16,
+    )
+    story = [
+        Paragraph(
+            escape("TDRDOC-SCAN — Document analysé avec passages signalés"),
+            title_style,
+        )
+    ]
+
+    text = _pdf_text(path)
+    for block in re.split(r"\n{2,}", text):
+        block = block.strip()
+        if not block:
+            continue
+
+        cursor = 0
+        matches = []
+        for passage in passages:
+            start = 0
+            while True:
+                index = block.find(passage, start)
+                if index < 0:
+                    break
+                matches.append((index, index + len(passage)))
+                start = index + len(passage)
+
+        matches.sort()
+        merged = []
+        for start, end in matches:
+            if not merged or start > merged[-1][1]:
+                merged.append([start, end])
+            else:
+                merged[-1][1] = max(merged[-1][1], end)
+
+        pieces = []
+        for start, end in merged:
+            if start > cursor:
+                pieces.append(escape(block[cursor:start]))
+            pieces.append(f'<font color="#C00000"><b>{escape(block[start:end])}</b></font>')
+            cursor = end
+        if cursor < len(block):
+            pieces.append(escape(block[cursor:]))
+
+        story.append(Paragraph("".join(pieces), normal))
+
+    doc.build(story)
+    output.seek(0)
+    return output
+
+
+@login_required
+def download_annotated_document(request, pk):
+    """Télécharge le document analysé avec les passages problématiques en rouge."""
+    analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
+    result = analysis.result_json or {}
+    uploaded_path = result.get("uploaded_path", "")
+    if not uploaded_path:
+        messages.error(request, "Le document original de cette analyse n'est plus disponible.")
+        return redirect("detector:analysis_detail", pk=analysis.pk)
+
+    path = (Path(settings.MEDIA_ROOT) / str(uploaded_path).replace("/", os.sep)).resolve()
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    try:
+        path.relative_to(media_root)
+    except ValueError:
+        messages.error(request, "Le fichier demandé n'est pas autorisé.")
+        return redirect("detector:analysis_detail", pk=analysis.pk)
+
+    if not path.is_file():
+        messages.error(request, "Le document original de cette analyse n'est plus disponible.")
+        return redirect("detector:analysis_detail", pk=analysis.pk)
+
+    passages = _analysis_problem_passages(result)
+    stem = path.stem
+
+    if path.suffix.lower() == ".docx":
+        output = _highlight_docx(path, passages)
+        return FileResponse(
+            output,
+            as_attachment=True,
+            filename=f"{stem}_passages_signales.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+
+    if path.suffix.lower() == ".pdf":
+        output = _highlight_pdf(path, passages, f"{stem}_passages_signales")
+        return FileResponse(
+            output,
+            as_attachment=True,
+            filename=f"{stem}_passages_signales.pdf",
+            content_type="application/pdf",
+        )
+
+    messages.error(request, "Format de document non pris en charge.")
+    return redirect("detector:analysis_detail", pk=analysis.pk)
 
 
 @login_required
