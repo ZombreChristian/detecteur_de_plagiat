@@ -230,7 +230,7 @@ def compare_passages(
     return matches[:top_k]
 
 
-def aggregate_passage_scores(matches, candidate_passages):
+def aggregate_passage_scores(matches, candidate_passages, lexical_weight=0.30, semantic_weight=0.70):
     """Calcule les scores documentaires à partir des correspondances de passages.
 
     La similarité sémantique globale n'est plus calculée indépendamment des
@@ -250,7 +250,7 @@ def aggregate_passage_scores(matches, candidate_passages):
     semantic_scores = [float(match["semantic_score"]) for match in matches]
     lexical_score = float(np.mean(lexical_scores))
     semantic_score = float(np.mean(semantic_scores))
-    hybrid_score = float(0.30 * lexical_score + 0.70 * semantic_score)
+    hybrid_score = float(lexical_weight * lexical_score + semantic_weight * semantic_score)
     coverage = calculate_coverage(candidate_passages, matches)
 
     return {
@@ -268,11 +268,10 @@ def calculate_coverage(candidate_passages, matches):
     return round(len(matched) / len(candidate_passages), 4)
 
 
-def analyze_document_pair(candidate_text, source_text, threshold=0.50, top_k=10):
+def analyze_document_pair(candidate_text, source_text, threshold=0.50, top_k=10, lexical_weight=0.30, semantic_weight=0.70):
     candidate_passages = split_into_passages(candidate_text)
     source_passages = split_into_passages(source_text)
-    matches = compare_passages(candidate_passages, source_passages, threshold, top_k)
-    scores = aggregate_passage_scores(matches, candidate_passages)
+    matches = compare_passages(\n        candidate_passages,\n        source_passages,\n        threshold,\n        top_k,\n        lexical_weight,\n        semantic_weight,\n    )\n    scores = aggregate_passage_scores(\n        matches,\n        candidate_passages,\n        lexical_weight,\n        semantic_weight,\n    )
     return {
         "matches": matches,
         "coverage": scores["coverage"],
