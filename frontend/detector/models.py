@@ -1,8 +1,10 @@
 from django.conf import settings
 from django.db import models
 
+
 class StudyDocument(models.Model):
     TYPE_CHOICES = [("TDR", "TDR"), ("RAPPORT", "Rapport d'étude")]
+
     title = models.CharField(max_length=500)
     object = models.TextField(blank=True)
     geographic_scope = models.CharField(max_length=255, blank=True)
@@ -14,6 +16,17 @@ class StudyDocument(models.Model):
     status = models.CharField(max_length=100, blank=True)
     document_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     file_path = models.CharField(max_length=1000, blank=True)
+
+    # Données préparées pour la détection. Elles sont remplies uniquement
+    # pour les documents de référence indexés dans le corpus.
+    is_reference = models.BooleanField(default=False, db_index=True)
+    extracted_text = models.TextField(blank=True)
+    cleaned_text = models.TextField(blank=True)
+    embedding = models.JSONField(default=list, blank=True)
+    embedding_model = models.CharField(max_length=255, blank=True)
+    content_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    indexed_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -31,11 +44,13 @@ class StudyDocument(models.Model):
     def __str__(self):
         return self.title
 
+
 class WhitelistedPassage(models.Model):
     text = models.TextField(unique=True)
     reason = models.CharField(max_length=500, blank=True)
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
 
 class Analysis(models.Model):
     MODE_CHOICES = [("plagiarism", "Plagiat"), ("duplicate", "Doublon")]
