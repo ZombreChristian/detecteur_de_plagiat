@@ -29,7 +29,8 @@
         <form id="analysis-form" method="post" enctype="multipart/form-data">
           {% csrf_token %}
           <div class="field"><label>Type de contrôle</label><select id="analysis-mode" name="mode"><option value="duplicate">Doublon — TDR / objet d'étude</option><option value="plagiarism">Plagiat — rapport d'étude</option></select></div>
-          <div class="field"><label>Document à contrôler (.docx)</label><input id="document-input" type="file" name="document" accept=".docx" required></div>
+          <div class="field"><label>Document à contrôler (.docx ou .pdf)</label><input id="document-input" type="file" name="document" accept=".docx,.pdf" required></div>
+          <div class="field"><label for="threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="threshold" type="range" name="threshold" min="1" max="100" step="1" value="55" style="flex:1"><output id="threshold-value">55 %</output></div><small class="muted">Un score égal ou supérieur à ce seuil sera considéré comme SIMILAIRE.</small></div>
           <button id="submit-button" class="btn btn-primary" type="submit">Lancer la vérification</button>
         </form>
       </div>
@@ -48,6 +49,11 @@ const loading=document.getElementById('loading');
 const button=document.getElementById('submit-button');
 const input=document.getElementById('document-input');
 const mode=document.getElementById('analysis-mode');
+const threshold=document.getElementById('threshold');
+const thresholdValue=document.getElementById('threshold-value');
+function updateThreshold(){const value=mode.value==='duplicate'?70:55;threshold.value=value;thresholdValue.textContent=value+' %';}
+mode.addEventListener('change',updateThreshold);
+threshold.addEventListener('input',()=>thresholdValue.textContent=threshold.value+' %');
 const bar=document.getElementById('progress-bar');
 const percent=document.getElementById('loading-percent');
 const text=document.getElementById('loading-text');
