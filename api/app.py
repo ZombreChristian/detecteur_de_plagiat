@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import time
 import re
+import html
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from docx import Document
@@ -74,11 +75,37 @@ def run_detection(file_path, kind):
     threshold = THRESHOLDS[kind]
     best = ranked[0]
     passage_groups = []
-    # Les passages détaillés restent utiles pour le plagiat. Pour un TDR, l'écran métier présente surtout la décision et les scores.
-    if kind == "plagiarism":
-        for item in ranked[:5]:
-            detail = analyze_document_pair(candidate, read_docx(item["_path"]), threshold=0.50, top_k=5)
-            passage_groups.append({"source": item["source"], "document_score": item["hybrid_score"], "coverage": detail["coverage"], "matches": detail["matches"], "passages_candidate": detail["passages_candidate"], "passages_source": detail["passages_source"]})
+    # Les 5 sources les plus proches disposent toutes de leur analyse par passages,
+    # aussi bien pour les TDR (doublons) que pour les rapports (plagiat).
+    for item in ranked[:5]:
+        source_text = read_docx(item["_path"])
+        detail = analyze_document_pair(candidate, source_text, threshold=0.50, top_k=8)
+        source_html = html.escape(source_text)
+        # Les passages proviennent directement du document source : ils peuvent donc
+        # être retrouvés exactement dans son contenu et surlignés sans ambiguïté.
+        unique_passages = []
+        for match in detail["matches"]:
+            passage = match["source_passage"]
+            if passage and passage not in unique_passages:
+                unique_passages.append(passage)
+        for passage in sorted(unique_passages, key=len, reverse=True):
+            escaped_passage = html.escape(passage)
+            source_html = source_html.replace(
+                escaped_passage,
+                f'<mark class="docsec-evidence">{escaped_passage}</mark>',
+            )
+        passage_groups.append({
+            "source": item["source"],
+            "document_score": item["hybrid_score"],
+            "tfidf_score": item["tfidf_score"],
+            "semantic_score": item["semantic_score"],
+            "coverage": detail["coverage"],
+            "matches": detail["matches"],
+            "passages_candidate": detail["passages_candidate"],
+            "passages_source": detail["passages_source"],
+            "source_document": source_text,
+            "source_document_html": source_html,
+        })
     return {
         "mode": kind,
         "decision": decision(best["hybrid_score"], threshold),
@@ -95,7 +122,7 @@ def run_detection(file_path, kind):
 
 @app.get("/")
 def root():
-    return {"service": "detecteur_de_plagiat", "status": "ok", "version": "1.2.0"}
+    return {"service": "detecteur_de_plagiat", "status": "ok", "version": "1.3.0"}
 
 
 @app.get("/api/health")

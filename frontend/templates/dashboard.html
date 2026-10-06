@@ -41,19 +41,10 @@
         </div>
         <a class="see-all" href="{% url 'detector:resultats' %}">Voir l'historique</a>
       </div>
-      <div class="panel-body" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">
-        <article class="card">
-          <strong>Études au registre</strong>
-          <p class="muted" style="margin:8px 0 0;font-size:13px">Nombre total d'études enregistrées dans le registre, qu'elles soient représentées par un TDR, un rapport, ou les deux.</p>
-        </article>
-        <article class="card">
-          <strong>TDR référencés</strong>
-          <p class="muted" style="margin:8px 0 0;font-size:13px">Nombre de TDR disponibles. Ils constituent la référence utilisée par le module de détection de doublon lors de la programmation d'une nouvelle étude.</p>
-        </article>
-        <article class="card">
-          <strong>Rapports référencés</strong>
-          <p class="muted" style="margin:8px 0 0;font-size:13px">Nombre de rapports déjà déposés. Ils constituent le corpus de référence utilisé par le module de détection de plagiat à la réception des livrables.</p>
-        </article>
+      <div class="panel-body registry-stat-grid">
+        <article class="registry-stat-card"><span class="registry-stat-icon">◈</span><div><strong>{{ registry_total }}</strong><span>Études au registre</span><small>Nombre total d'études enregistrées.</small></div></article>
+        <article class="registry-stat-card"><span class="registry-stat-icon">T</span><div><strong>{{ registry_tdr }}</strong><span>TDR référencés</span><small>Références utilisées pour détecter les doublons.</small></div></article>
+        <article class="registry-stat-card"><span class="registry-stat-icon">R</span><div><strong>{{ registry_rapport }}</strong><span>Rapports référencés</span><small>Corpus utilisé pour contrôler le plagiat.</small></div></article>
       </div>
     </section>
   </div>

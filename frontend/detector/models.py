@@ -17,6 +17,17 @@ class StudyDocument(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        permissions = (
+            ("can_verify_tdr", "Vérifier un TDR / détecter un doublon"),
+            ("can_analyze_report", "Analyser un rapport / détecter le plagiat"),
+            ("can_view_history", "Consulter l'historique des analyses"),
+            ("can_export_results", "Exporter les résultats PDF / Excel"),
+            ("can_manage_registry", "Gérer le registre des études"),
+            ("can_manage_users", "Gérer les utilisateurs, rôles et permissions"),
+            ("can_manage_settings", "Gérer les paramètres de l'application"),
+        )
+
     def __str__(self):
         return self.title
 
