@@ -312,7 +312,7 @@ def compare_passages(
                 candidate, source, semantic_score, content_semantic_score
             )
 
-            if content_semantic < 0.38 and not (
+            if content_semantic_score < 0.38 and not (
                 semantic_score >= 0.93 and lexical_score >= 0.20
             ):
                 continue
@@ -320,7 +320,7 @@ def compare_passages(
             if topic_overlap < 0.08 and not (
                 semantic_score >= 0.90
                 and lexical_score >= 0.15
-                and content_semantic >= 0.50
+                and content_semantic_score >= 0.50
             ):
                 continue
 
