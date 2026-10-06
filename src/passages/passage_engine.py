@@ -8,44 +8,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 from src.similarity.model_manager import get_model
 
 
-# Formulations très fréquentes dans les TDR. Elles décrivent la façon de conduire
-# une étude mais ne suffisent pas, à elles seules, à établir que deux études
-# portent sur le même sujet.
-GENERIC_PREFIXES = (
-    "collect",
-    "analys",
-    "trait",
-    "restit",
-    "valid",
-    "methodolog",
-    "document",
-    "recommand",
-    "rapport",
-    "livr",
-    "suiv",
-    "comit",
-    "reun",
-    "entreti",
-    "enquet",
-    "questionnair",
-    "donne",
-    "resultat",
-    "conclusion",
-    "bibliograph",
-    "revue",
-    "echantillon",
-    "echantillonn",
-    "indicateur",
-    "tableau",
-    "graphique",
-    "calendrier",
-    "chronogramm",
-    "mission",
-    "prestataire",
-    "consultant",
-    "restitution",
-)
-
 FRENCH_STOPWORDS = {
     "alors", "au", "aucun", "aussi", "autre", "avec", "avoir", "avant",
     "aux", "car", "ce", "ceci", "cela", "ces", "cet", "cette", "comme",
@@ -57,14 +19,13 @@ FRENCH_STOPWORDS = {
     "sera", "seront", "ses", "soi", "soit", "sont", "sur", "ta", "te",
     "tes", "toi", "ton", "tous", "tout", "toute", "toutes", "un", "une",
     "vos", "votre", "vous", "y", "afin", "ainsi", "apres", "après",
-    "chez", "dont", "leurs", "peut", "peuvent", "plus", "moins", "tres",
-    "très", "doit", "doivent", "sera", "serait", "etre", "être",
+    "chez", "dont", "peut", "peuvent", "plus", "moins", "tres", "très",
+    "doit", "doivent", "sera", "serait", "etre", "être",
 }
 
 
 def normalize_passage(text):
-    text = re.sub(r"\s+", " ", text or "").strip().lower()
-    return text
+    return re.sub(r"\s+", " ", text or "").strip().lower()
 
 
 def _fold_text(text):
@@ -75,159 +36,22 @@ def _fold_text(text):
 def _topic_tokens(text):
     folded = _fold_text(normalize_passage(text))
     tokens = re.findall(r"[a-zà-ÿ]{4,}", folded)
-    result = set()
-    for token in tokens:
-        if token in FRENCH_STOPWORDS:
-            continue
-        if any(token.startswith(prefix) for prefix in GENERIC_PREFIXES):
-            continue
-        result.add(token)
-    return result
-
-
-def _generic_ratio(text):
-    folded = _fold_text(normalize_passage(text))
-    tokens = re.findall(r"[a-zà-ÿ]{4,}", folded)
-    if not tokens:
-        return 0.0
-    generic = sum(
-        1
-        for token in tokens
-        if token in FRENCH_STOPWORDS
-        or any(token.startswith(prefix) for prefix in GENERIC_PREFIXES)
-    )
-    return generic / len(tokens)
-
-
-def _topic_overlap(candidate, source):
-    candidate_topics = _topic_tokens(candidate)
-    source_topics = _topic_tokens(source)
-    if not candidate_topics or not source_topics:
-        return 0.0
-
-    intersection = len(candidate_topics & source_topics)
-    # F1 entre les deux ensembles de termes spécifiques : il évite qu'un
-    # document très long soit avantagé simplement parce qu'il contient plus de mots.
-    precision = intersection / len(candidate_topics)
-    recall = intersection / len(source_topics)
-    if precision + recall == 0:
-        return 0.0
-    return 2 * precision * recall / (precision + recall)
-
-
-def _content_text(text):
-    """Retourne uniquement les termes porteurs du sujet."""
-    return " ".join(sorted(_topic_tokens(text)))
-
-
-def _content_semantic_similarity(candidate, source):
-    """Compare les contenus thématiques de deux passages."""
-    candidate_content = _content_text(candidate)
-    source_content = _content_text(source)
-    if not candidate_content or not source_content:
-        return 0.0
-
-    embeddings = get_model().encode(
-        [candidate_content, source_content],
-        normalize_embeddings=True,
-        show_progress_bar=False,
-        convert_to_numpy=True,
-    )
-    return float(np.clip(np.dot(embeddings[0], embeddings[1]), 0.0, 1.0))
-
-
-def _passage_relevance(candidate, source, semantic_score, content_semantic=None):
-    """Évalue la pertinence thématique d'un match sémantique."""
-    topic = _topic_overlap(candidate, source)
-    generic = (_generic_ratio(candidate) + _generic_ratio(source)) / 2
-
-    if content_semantic is None:
-        content_semantic = _content_semantic_similarity(candidate, source)
-
-    content_factor = 0.55 + 0.45 * content_semantic
-    topic_factor = 0.62 + 0.38 * topic
-    generic_excess = max(0.0, generic - 0.30)
-    generic_factor = 1.0 - min(0.32, generic_excess * 0.90)
-
-    relevance = (
-        float(semantic_score)
-        * content_factor
-        * topic_factor
-        * generic_factor
-    )
-    return (
-        float(np.clip(relevance, 0.0, 1.0)),
-        topic,
-        generic,
-        float(content_semantic),
-    )
-
-
-def adjusted_hybrid_score(candidate, source, lexical, semantic, lexical_weight=0.30, semantic_weight=0.70):
-    """Calcule le score hybride utilisé pour le classement et la décision.
-
-    Les scores lexical et sémantique restent les mesures brutes affichées.
-    Le score hybride est corrigé uniquement pour éviter que des formulations
-    méthodologiques génériques produisent artificiellement une forte proximité.
-    """
-    base = lexical_weight * float(lexical) + semantic_weight * float(semantic)
-    topic = _topic_overlap(candidate, source)
-    generic = (_generic_ratio(candidate) + _generic_ratio(source)) / 2
-
-    # Les documents partageant un vocabulaire thématique spécifique conservent
-    # presque tout leur score. À l'inverse, une forte proximité essentiellement
-    # générique est progressivement réduite.
-    specificity = 0.60 + 0.40 * topic
-    generic_penalty = 1.0 - min(0.20, max(0.0, generic - 0.35) * 0.55)
-
-    adjusted = base * specificity * generic_penalty
-
-    # Une très forte similarité lexicale reste un signal solide : cette règle
-    # évite de dégrader les vrais doublons quasi identiques.
-    if lexical >= 0.88 and semantic >= 0.88:
-        adjusted = max(adjusted, base * 0.95)
-
-    return float(np.clip(adjusted, 0.0, 1.0))
-
-
-def _split_structured_paragraph(text):
-    """Découpe aussi les blocs qui contiennent plusieurs sections de TDR.
-
-    L'extraction DOCX peut supprimer les retours à la ligne entre des titres.
-    Sans cette étape, un bloc « Résultats attendus + Livrables + Sources » peut
-    être comparé à un bloc « Revue documentaire + Collecte + Analyse », ce qui
-    donne une fausse proximité sémantique alors que les sujets sont différents.
-    """
-    text = re.sub(r"\s+", " ", text or "").strip()
-    if not text:
-        return []
-
-    # Titres courants dans les TDR, y compris les titres numérotés.
-    heading = re.compile(
-        r"(?=(?:Résultats attendus\b|Livrables\b|Sources indicatives\b|"
-        r"Mandat du bureau d[’']études\b|Méthodologie\b|"
-        r"Revue documentaire\b|Collecte de données\b|Analyse\b|"
-        r"Restitution\b|Profil du consultant\b))",
-        flags=re.IGNORECASE,
-    )
-    pieces = [p.strip() for p in heading.split(text) if p.strip()]
-    return pieces or [text]
+    return {token for token in tokens if token not in FRENCH_STOPWORDS}
 
 
 def split_into_passages(text, max_chars=1200):
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", text or "") if p.strip()]
-    structured = []
-    for paragraph in paragraphs:
-        structured.extend(_split_structured_paragraph(paragraph))
+    paragraphs = [
+        p.strip()
+        for p in re.split(r"\n\s*\n+", text or "")
+        if p.strip()
+    ]
 
     passages = []
-    for paragraph in structured:
+    for paragraph in paragraphs:
         if len(paragraph) <= max_chars:
             passages.append(paragraph)
             continue
 
-        # Pour les sections longues, on conserve des groupes de phrases
-        # suffisamment courts pour éviter de mélanger plusieurs sujets.
         sentences = re.split(r"(?<=[.!?])\s+", paragraph)
         current = ""
         for sentence in sentences:
@@ -238,7 +62,27 @@ def split_into_passages(text, max_chars=1200):
                 current = f"{current} {sentence}".strip()
         if current:
             passages.append(current)
+
     return passages
+
+
+def adjusted_hybrid_score(
+    candidate,
+    source,
+    lexical,
+    semantic,
+    lexical_weight=0.30,
+    semantic_weight=0.70,
+):
+    """Score hybride simple : 30 % TF-IDF + 70 % sémantique."""
+    return float(
+        np.clip(
+            lexical_weight * float(lexical)
+            + semantic_weight * float(semantic),
+            0.0,
+            1.0,
+        )
+    )
 
 
 def compare_passages(
@@ -249,11 +93,22 @@ def compare_passages(
     lexical_weight=0.30,
     semantic_weight=0.70,
 ):
+    """
+    La similarité sémantique d'un passage est uniquement la cosine similarity
+    entre les embeddings du passage candidat et du passage source.
+
+    Le TF-IDF est calculé séparément et ne modifie pas le score sémantique.
+    """
     if not candidate_passages or not source_passages:
         return []
 
     texts = candidate_passages + source_passages
-    tfidf = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True).fit_transform(texts)
+
+    tfidf = TfidfVectorizer(
+        ngram_range=(1, 2),
+        sublinear_tf=True,
+    ).fit_transform(texts)
+
     lexical = cosine_similarity(
         tfidf[:len(candidate_passages)],
         tfidf[len(candidate_passages):],
@@ -265,34 +120,15 @@ def compare_passages(
         show_progress_bar=False,
         convert_to_numpy=True,
     )
+
     semantic = np.matmul(
         embeddings[:len(candidate_passages)],
         embeddings[len(candidate_passages):].T,
     )
     semantic = np.clip(semantic, 0.0, 1.0)
 
-    # Deuxième représentation : uniquement les termes porteurs du sujet.
-    # Elle est calculée une seule fois pour toute la comparaison afin d'éviter
-    # un nouvel encodage du modèle pour chaque paire candidate/source.
-    content_texts = [
-        _content_text(text) for text in candidate_passages + source_passages
-    ]
-    content_embeddings = get_model().encode(
-        content_texts,
-        normalize_embeddings=True,
-        show_progress_bar=False,
-        convert_to_numpy=True,
-    )
-    content_semantic = np.matmul(
-        content_embeddings[:len(candidate_passages)],
-        content_embeddings[len(candidate_passages):].T,
-    )
-    content_semantic = np.clip(content_semantic, 0.0, 1.0)
-
-    # Construire toutes les correspondances admissibles avant de les attribuer.
-    # Cela évite qu'un même passage méthodologique générique soit réutilisé
-    # plusieurs fois pour gonfler artificiellement la couverture.
     candidate_edges = []
+
     for i, candidate in enumerate(candidate_passages):
         candidate_words = normalize_passage(candidate).split()
         semantic_order = np.argsort(semantic[i])[::-1]
@@ -300,31 +136,13 @@ def compare_passages(
         for j in semantic_order[:5]:
             semantic_score = float(semantic[i, j])
             lexical_score = float(lexical[i, j])
-            source = source_passages[j]
 
+            # La sémantique décide de la correspondance du passage.
+            # Les passages très courts exigent une confiance plus forte.
             if len(candidate_words) < 7 and semantic_score < 0.85:
                 continue
+
             if semantic_score < semantic_threshold:
-                continue
-
-            content_semantic_score = float(content_semantic[i, j])
-            relevance, topic_overlap, generic_ratio, content_semantic_score = _passage_relevance(
-                candidate, source, semantic_score, content_semantic_score
-            )
-
-            if content_semantic_score < 0.38 and not (
-                semantic_score >= 0.93 and lexical_score >= 0.20
-            ):
-                continue
-
-            if topic_overlap < 0.08 and not (
-                semantic_score >= 0.90
-                and lexical_score >= 0.15
-                and content_semantic_score >= 0.50
-            ):
-                continue
-
-            if relevance < 0.54:
                 continue
 
             candidate_edges.append({
@@ -332,17 +150,11 @@ def compare_passages(
                 "source_index": int(j),
                 "tfidf_score": lexical_score,
                 "semantic_score": semantic_score,
-                "topic_overlap": topic_overlap,
-                "generic_ratio": generic_ratio,
-                "content_semantic_score": content_semantic_score,
-                "relevance_score": relevance,
             })
 
-    # Attribution un-à-un : un passage source ne peut expliquer qu'un seul
-    # passage candidat dans cette comparaison.
+    # Une correspondance ne peut utiliser deux fois le même passage.
     candidate_edges.sort(
         key=lambda item: (
-            item["relevance_score"],
             item["semantic_score"],
             item["tfidf_score"],
         ),
@@ -356,6 +168,7 @@ def compare_passages(
     for edge in candidate_edges:
         i = edge["candidate_index"]
         j = edge["source_index"]
+
         if i in used_candidates or j in used_sources:
             continue
 
@@ -364,19 +177,16 @@ def compare_passages(
             "source_passage": source_passages[j],
             "tfidf_score": round(edge["tfidf_score"], 4),
             "semantic_score": round(edge["semantic_score"], 4),
-            "topic_overlap": round(edge["topic_overlap"], 4),
-            "generic_ratio": round(edge["generic_ratio"], 4),
-            "content_semantic_score": round(edge["content_semantic_score"], 4),
-            "relevance_score": round(edge["relevance_score"], 4),
             "score": round(edge["semantic_score"], 4),
         })
+
         used_candidates.add(i)
         used_sources.add(j)
 
         if len(matches) >= top_k:
             break
 
-    matches.sort(key=lambda item: item["score"], reverse=True)
+    matches.sort(key=lambda item: item["semantic_score"], reverse=True)
     return matches
 
 
@@ -387,42 +197,40 @@ def aggregate_passage_scores(
     lexical_weight=0.30,
     semantic_weight=0.70,
 ):
-    """Combine un TF-IDF documentaire indépendant avec l'évidence sémantique
-    réellement couverte par les passages.
-
-    Le TF-IDF reste indépendant : il ne filtre pas les correspondances
-    sémantiques. La sémantique finale tient maintenant compte de la couverture,
-    afin qu'un seul passage générique ne puisse représenter tout le document.
-    """
+    """Calcule séparément la sémantique, le TF-IDF puis le score hybride."""
     coverage = calculate_coverage(candidate_passages, matches)
+
     if not matches:
+        lexical_score = float(
+            document_lexical_score if document_lexical_score is not None else 0.0
+        )
         return {
-            "tfidf_score": 0.0,
+            "tfidf_score": float(np.clip(lexical_score, 0.0, 1.0)),
             "semantic_score": 0.0,
             "hybrid_score": 0.0,
             "coverage": coverage,
         }
 
-    semantic_scores = np.array(
-        [float(match["semantic_score"]) for match in matches],
-        dtype=float,
-    )
-    semantic_mean = float(np.mean(semantic_scores))
+    semantic_mean = float(np.mean([
+        float(match["semantic_score"])
+        for match in matches
+    ]))
 
     if document_lexical_score is None:
-        lexical_scores = [float(match["tfidf_score"]) for match in matches]
-        lexical_score = float(np.mean(lexical_scores))
+        lexical_score = float(np.mean([
+            float(match["tfidf_score"])
+            for match in matches
+        ]))
     else:
         lexical_score = float(document_lexical_score)
 
-    # La racine carrée évite une pénalisation trop brutale des vrais doublons
-    # partiels/paraphrasés tout en empêchant un faible nombre de passages
-    # génériques de produire un score documentaire élevé.
+    # La couverture intervient uniquement dans le score sémantique du document.
     coverage_factor = float(np.sqrt(max(0.0, min(1.0, coverage))))
     semantic_score = semantic_mean * coverage_factor
 
-    hybrid_score = float(
-        lexical_weight * lexical_score + semantic_weight * semantic_score
+    hybrid_score = (
+        lexical_weight * lexical_score
+        + semantic_weight * semantic_score
     )
 
     return {
@@ -436,7 +244,12 @@ def aggregate_passage_scores(
 def calculate_coverage(candidate_passages, matches):
     if not candidate_passages:
         return 0.0
-    matched = {normalize_passage(m["candidate_passage"]) for m in matches}
+
+    matched = {
+        normalize_passage(match["candidate_passage"])
+        for match in matches
+    }
+
     return round(len(matched) / len(candidate_passages), 4)
 
 
@@ -451,6 +264,7 @@ def analyze_document_pair(
 ):
     candidate_passages = split_into_passages(candidate_text)
     source_passages = split_into_passages(source_text)
+
     matches = compare_passages(
         candidate_passages,
         source_passages,
@@ -459,6 +273,7 @@ def analyze_document_pair(
         lexical_weight=lexical_weight,
         semantic_weight=semantic_weight,
     )
+
     scores = aggregate_passage_scores(
         matches,
         candidate_passages,
@@ -466,6 +281,7 @@ def analyze_document_pair(
         lexical_weight=lexical_weight,
         semantic_weight=semantic_weight,
     )
+
     return {
         "matches": matches,
         "coverage": scores["coverage"],
