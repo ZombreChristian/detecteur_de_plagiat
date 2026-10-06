@@ -194,7 +194,6 @@ def compare_passages(
 
     matches = []
     for i, candidate in enumerate(candidate_passages):
-        raw_combined = lexical_weight * lexical[i] + semantic_weight * semantic[i]
         corrected = np.array(
             [
                 adjusted_hybrid_score(
@@ -224,7 +223,6 @@ def compare_passages(
                     "tfidf_score": round(lexical_score, 4),
                     "semantic_score": round(semantic_score, 4),
                     "score": round(score, 4),
-                    "raw_hybrid_score": round(float(raw_combined[j]), 4),
                 })
                 break
 
