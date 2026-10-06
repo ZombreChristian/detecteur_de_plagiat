@@ -736,6 +736,34 @@ def analyser(request):
 
 
 @login_required
+def delete_analysis(request, pk):
+    """Supprime une analyse de l'historique de l'utilisateur et son fichier testé."""
+    if not _require_permission(request, "can_view_history", "Votre profil ne dispose pas de l'accès à l'historique."):
+        return redirect("detector:dashboard")
+
+    analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
+
+    if request.method != "POST":
+        messages.error(request, "La suppression doit être confirmée.")
+        return redirect("detector:resultats")
+
+    uploaded_path = (analysis.result_json or {}).get("uploaded_path", "")
+    if uploaded_path:
+        path = (Path(settings.MEDIA_ROOT) / str(uploaded_path).replace("/", os.sep)).resolve()
+        media_root = Path(settings.MEDIA_ROOT).resolve()
+        try:
+            path.relative_to(media_root)
+            if path.is_file():
+                path.unlink()
+        except (ValueError, OSError):
+            pass
+
+    analysis.delete()
+    messages.success(request, "L'analyse a été supprimée de votre historique.")
+    return redirect("detector:resultats")
+
+
+@login_required
 def resultats(request):
     if not _require_permission(request, "can_view_history", "Votre profil ne dispose pas de l'accès à l'historique."):
         return redirect("detector:dashboard")
