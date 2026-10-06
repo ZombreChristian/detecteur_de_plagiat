@@ -59,25 +59,58 @@ GENERIC_TDR_TERMS = {
 }
 
 
+def _content_tokens(text):
+    """
+    Extrait les termes porteurs de contenu pour la validation thématique.
+
+    Cette étape est volontairement indépendante du TF-IDF et ne contient
+    aucun vocabulaire propre à un domaine (eau, santé, agriculture, etc.).
+    Les termes génériques de rédaction des TDR sont simplement retirés.
+    """
+    folded = _fold_text(normalize_passage(text))
+    tokens = re.findall(r"[a-z]{4,}", folded)
+
+    return {
+        token
+        for token in tokens
+        if token not in FRENCH_STOPWORDS
+        and token not in GENERIC_TDR_TERMS
+    }
+
+
 def _semantic_text(text):
     """
     Prépare le passage pour l'encodage sémantique en retirant les mots
     génériques de la rédaction des TDR. Le texte reste ensuite encodé
     par le modèle sémantique : aucun TF-IDF n'entre dans le score.
     """
-    folded = _fold_text(normalize_passage(text))
-    tokens = re.findall(r"[a-z]{3,}", folded)
-
-    content_tokens = [
-        token
-        for token in tokens
-        if token not in FRENCH_STOPWORDS and token not in GENERIC_TDR_TERMS
-    ]
+    content_tokens = _content_tokens(text)
 
     if len(content_tokens) >= 4:
-        return " ".join(content_tokens)
+        return " ".join(sorted(content_tokens))
 
     return normalize_passage(text)
+
+
+def _thematic_overlap(text_a, text_b):
+    """
+    Mesure le recouvrement du contenu thématique entre deux passages.
+
+    Ce score sert uniquement à accepter/rejeter un match de passage.
+    Il ne remplace pas la similarité sémantique et n'entre pas dans le
+    score final 30 % TF-IDF + 70 % sémantique.
+    """
+    tokens_a = _content_tokens(text_a)
+    tokens_b = _content_tokens(text_b)
+
+    if not tokens_a or not tokens_b:
+        return 0.0
+
+    common = tokens_a.intersection(tokens_b)
+
+    # Rapporté au plus petit ensemble : on vérifie qu'une part significative
+    # du contenu du passage le plus court est réellement partagée.
+    return float(len(common) / min(len(tokens_a), len(tokens_b)))
 
 
 def split_into_passages(text, max_chars=1200):
@@ -126,7 +159,18 @@ def adjusted_hybrid_score(
     )
 
 
-PASSAGE_MATCH_MIN_SEMANTIC = 0.58
+# Seuil interne : qualité minimale d'un rapprochement entre deux passages.
+# Il est indépendant du seuil de décision choisi par l'utilisateur.
+PASSAGE_MATCH_MIN_SEMANTIC = 0.68
+
+# Après la similarité sémantique, on vérifie que le contenu thématique
+# présente un recouvrement réel. Ce seuil ne modifie aucun score.
+PASSAGE_THEMATIC_MIN_OVERLAP = 0.20
+
+# Une très forte similarité sémantique peut correspondre à une paraphrase
+# utilisant des mots différents : dans ce cas, le recouvrement lexical
+# thématique n'est pas obligatoire.
+PASSAGE_STRONG_SEMANTIC = 0.82
 
 
 def compare_passages(
@@ -137,10 +181,17 @@ def compare_passages(
     semantic_weight=0.70,
 ):
     """
-    La similarité sémantique d'un passage est uniquement la cosine similarity
-    entre les embeddings du passage candidat et du passage source.
+    Pipeline de correspondance des passages :
 
-    Le TF-IDF est calculé séparément et ne modifie pas le score sémantique.
+    1. calcul de la similarité sémantique ;
+    2. filtrage par un seuil interne de ressemblance générale ;
+    3. validation du contenu thématique ;
+    4. acceptation/rejet du match.
+
+    Le TF-IDF reste totalement indépendant et ne modifie pas le score
+    sémantique. La validation thématique sert uniquement à éviter qu'une
+    ressemblance générale de rédaction des TDR soit considérée comme un
+    véritable rapprochement de contenu.
     """
     if not candidate_passages or not source_passages:
         return []
@@ -184,7 +235,7 @@ def compare_passages(
             semantic_score = float(semantic[i, j])
             lexical_score = float(lexical[i, j])
 
-            # La sémantique décide de la correspondance du passage.
+            # ETAPE 1 : similarité sémantique.
             # Les passages très courts exigent une confiance plus forte.
             if len(candidate_words) < 7 and semantic_score < 0.85:
                 continue
@@ -192,11 +243,30 @@ def compare_passages(
             if semantic_score < PASSAGE_MATCH_MIN_SEMANTIC:
                 continue
 
+            # ETAPE 2 : validation du contenu thématique.
+            # Cette mesure est uniquement un filtre de qualité du match.
+            thematic_score = _thematic_overlap(
+                candidate_passages[i],
+                source_passages[j],
+            )
+
+            # Une paraphrase très forte peut employer des termes différents.
+            # Dans ce cas, on accepte le match malgré un faible recouvrement
+            # lexical thématique.
+            thematic_match = (
+                thematic_score >= PASSAGE_THEMATIC_MIN_OVERLAP
+                or semantic_score >= PASSAGE_STRONG_SEMANTIC
+            )
+
+            if not thematic_match:
+                continue
+
             candidate_edges.append({
                 "candidate_index": int(i),
                 "source_index": int(j),
                 "tfidf_score": lexical_score,
                 "semantic_score": semantic_score,
+                "thematic_score": thematic_score,
             })
 
     # Une correspondance ne peut utiliser deux fois le même passage.
@@ -224,6 +294,7 @@ def compare_passages(
             "source_passage": source_passages[j],
             "tfidf_score": round(edge["tfidf_score"], 4),
             "semantic_score": round(edge["semantic_score"], 4),
+            "thematic_score": round(edge["thematic_score"], 4),
             "score": round(edge["semantic_score"], 4),
         })
 
