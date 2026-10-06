@@ -43,11 +43,12 @@
 </div></details>
 {% endfor %}
 </div></section>{% endif %}
-<section class="panel national-bar-red">
+{% if analysis.decision != "DIFFERENT" %}<section class="panel national-bar-red">
 <div class="panel-head"><h2>Téléchargement du document</h2><a class="btn btn-primary" href="{% url 'detector:download_annotated_document' analysis.id %}">Télécharger le document analysé</a></div>
 <div class="panel-body">
 <p class="muted" style="margin:0">Le fichier téléchargé reprend le document analysé et met en rouge les passages signalés comme problématiques.</p>
 </div>
+{% endif %}
 {% if analysis.mode == "duplicate" and analysis.decision == "DIFFERENT" %}<section class="panel national-bar-green"><div class="panel-head"><h2>Étape suivante</h2></div><div class="panel-body"><p class="muted">Ce TDR a été jugé différent. Vous pouvez maintenant déposer le rapport d’étude correspondant afin de lancer son contrôle de plagiat.</p><a class="btn btn-primary" href="{% url 'detector:upload_report_for_tdr' analysis.id %}">Déposer le rapport lié à ce TDR</a></div></section>{% endif %}
 </section>
 </div></main></div></body></html>
