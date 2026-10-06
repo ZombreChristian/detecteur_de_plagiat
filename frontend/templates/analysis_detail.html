@@ -5,7 +5,15 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TDRDOC-SCAN — Détail de l'analyse</title>
 <link rel="stylesheet" href="{% static 'css/app.css' %}" /><link rel="stylesheet" href="{% static 'css/institutional.css' %}">
-<script src="{% static 'js/theme.js' %}"></script></head>
+<script src="{% static 'js/theme.js' %}"></script><style>
+.document-reader{background:var(--surface,#fff);border:1px solid rgba(0,0,0,.10);border-radius:12px;padding:18px;line-height:1.7;white-space:pre-wrap;max-height:620px;overflow:auto}
+.document-reader mark.docsec-evidence{padding:2px 4px;border-radius:4px;background:#ffe66d;color:#171717;box-shadow:0 0 0 1px rgba(180,140,0,.2)}
+.document-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.document-reader-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
+.document-reader-title h3{margin:0}
+.source-open{font-size:12px}
+@media(max-width:900px){.document-grid{grid-template-columns:1fr}}
+</style></head>
 <body>
 <div class="console">
 <aside class="rail"><div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
@@ -30,9 +38,22 @@
 <summary><span><strong>{{ forloop.counter }}. {{ source.source }}</strong><small>Score hybride {{ source.hybrid_score|floatformat:3 }} · Sémantique {{ source.semantic_score|floatformat:3 }} · TF-IDF {{ source.tfidf_score|floatformat:3 }}</small></span><span class="source-chevron">⌄</span></summary>
 <div class="source-card-body">
 {% for group in result.matches %}{% if group.source == source.source %}
-<div class="source-overview"><span>Couverture des passages : <b>{{ group.coverage|floatformat:1 }}</b></span><span>{{ group.matches|length }} passage(s) signalé(s)</span></div>
+<div class="source-overview">
+<span>Couverture des passages : <b>{{ group.coverage|floatformat:1 }}</b></span>
+<span>{{ group.matches|length }} passage(s) signalé(s)</span>
+<a class="btn source-open" href="{% url 'detector:open_reference_document' group.source_id %}" target="_blank" rel="noopener">Ouvrir le document original</a>
+</div>
+<div class="document-grid">
+<div>
+<div class="document-reader-title"><h3>Document testé</h3><span class="muted">Passages similaires en jaune</span></div>
+<div class="document-reader">{{ group.candidate_document_html|safe }}</div>
+</div>
+<div>
+<div class="document-reader-title"><h3>Document de référence</h3><span class="muted">Passages correspondants en jaune</span></div>
+<div class="document-reader">{{ group.source_document_html|safe }}</div>
+</div>
+</div>
 {% for match in group.matches %}<div class="evidence-match"><div class="evidence-match-score">Correspondance {{ forloop.counter }} · score {{ match.score|floatformat:3 }}</div><div class="evidence-quote candidate"><span class="tag">PASSAGE DU DOCUMENT ANALYSÉ</span>{{ match.candidate_passage }}</div><div class="evidence-quote source"><span class="tag">PASSAGE CORRESPONDANT DANS LA SOURCE</span>{{ match.source_passage }}</div></div>{% empty %}<p class="muted">Aucun passage dépassant le seuil n'a été identifié dans cette source.</p>{% endfor %}
-<div class="source-document"><h3>Document source avec passages concernés</h3><div class="source-document-content">{{ group.source_document_html|safe }}</div></div>
 {% endif %}{% endfor %}
 </div></details>
 {% endfor %}
