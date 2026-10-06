@@ -115,16 +115,15 @@ def _topic_overlap(candidate, source):
     return 2 * precision * recall / (precision + recall)
 
 
-def _content_semantic_similarity(candidate, source):
-    """Compare uniquement le contenu thématique des deux passages.
+def _content_text(text):
+    """Retourne uniquement les termes porteurs du sujet."""
+    return " ".join(sorted(_topic_tokens(text)))
 
-    Les formulations de rapport (« données », « recommandations », « suivi »...)
-    peuvent produire de faux rapprochements. Elles sont retirées avant
-    l'encodage afin de comparer davantage le sujet réel, sans coder un domaine
-    métier particulier.
-    """
-    candidate_content = " ".join(sorted(_topic_tokens(candidate)))
-    source_content = " ".join(sorted(_topic_tokens(source)))
+
+def _content_semantic_similarity(candidate, source):
+    """Compare les contenus thématiques de deux passages."""
+    candidate_content = _content_text(candidate)
+    source_content = _content_text(source)
     if not candidate_content or not source_content:
         return 0.0
 
@@ -272,6 +271,24 @@ def compare_passages(
     )
     semantic = np.clip(semantic, 0.0, 1.0)
 
+    # Deuxième représentation : uniquement les termes porteurs du sujet.
+    # Elle est calculée une seule fois pour toute la comparaison afin d'éviter
+    # un nouvel encodage du modèle pour chaque paire candidate/source.
+    content_texts = [
+        _content_text(text) for text in candidate_passages + source_passages
+    ]
+    content_embeddings = get_model().encode(
+        content_texts,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+        convert_to_numpy=True,
+    )
+    content_semantic = np.matmul(
+        content_embeddings[:len(candidate_passages)],
+        content_embeddings[len(candidate_passages):].T,
+    )
+    content_semantic = np.clip(content_semantic, 0.0, 1.0)
+
     # Construire toutes les correspondances admissibles avant de les attribuer.
     # Cela évite qu'un même passage méthodologique générique soit réutilisé
     # plusieurs fois pour gonfler artificiellement la couverture.
@@ -290,9 +307,9 @@ def compare_passages(
             if semantic_score < semantic_threshold:
                 continue
 
-            content_semantic = _content_semantic_similarity(candidate, source)
-            relevance, topic_overlap, generic_ratio, content_semantic = _passage_relevance(
-                candidate, source, semantic_score, content_semantic
+            content_semantic_score = float(content_semantic[i, j])
+            relevance, topic_overlap, generic_ratio, content_semantic_score = _passage_relevance(
+                candidate, source, semantic_score, content_semantic_score
             )
 
             if content_semantic < 0.38 and not (
@@ -317,7 +334,7 @@ def compare_passages(
                 "semantic_score": semantic_score,
                 "topic_overlap": topic_overlap,
                 "generic_ratio": generic_ratio,
-                "content_semantic_score": content_semantic,
+                "content_semantic_score": content_semantic_score,
                 "relevance_score": relevance,
             })
 
