@@ -68,7 +68,13 @@ def _extract_dimension(text, dimension):
 
 
 def extract_context(text):
-    return {dimension: _extract_dimension(text, dimension) for dimension in CONTEXT_DIMENSIONS}
+    context = {dimension: _extract_dimension(text, dimension) for dimension in CONTEXT_DIMENSIONS}
+
+    # L'identité de l'étude ne doit pas dépendre uniquement de titres de
+    # sections. Les TDR réels sont parfois extraits en texte continu.
+    context["identite_etude"] = (text or "")[:3000]
+
+    return context
 
 
 def _semantic_similarity(model, left, right):
@@ -91,6 +97,13 @@ def analyze_context(candidate_text, source_text):
     dimensions = {}
     available_scores = []
 
+    identity_score = _semantic_similarity(
+        model,
+        candidate["identite_etude"],
+        source["identite_etude"],
+    )
+    identity_score = identity_score if identity_score is not None else 0.0
+
     for dimension in CONTEXT_DIMENSIONS:
         score = _semantic_similarity(model, candidate[dimension], source[dimension])
         if score is None:
@@ -110,25 +123,42 @@ def analyze_context(candidate_text, source_text):
         return {"score": 0.0, "verdict": "À EXAMINER", "confidence": "FAIBLE", "dimensions": dimensions}
 
     context_score = float(np.mean(available_scores))
+
     critical = [
         dimensions[name]["score"]
-        for name in ("objet", "objectifs")
+        for name in ("objet", "objectifs", "resultats")
         if dimensions[name]["score"] is not None
     ]
     critical_mean = float(np.mean(critical)) if critical else context_score
 
-    if context_score >= 0.68 and critical_mean >= 0.60:
+    # L'identité globale de l'étude est une preuve contextuelle supplémentaire.
+    # Elle est particulièrement importante lorsque le DOCX a perdu ses
+    # retours à la ligne pendant l'extraction.
+    combined_score = (
+        0.35 * identity_score
+        + 0.30 * critical_mean
+        + 0.35 * context_score
+    )
+
+    if identity_score >= 0.80 and critical_mean >= 0.62:
         verdict = "SIMILAIRE"
-        confidence = "FORTE" if context_score >= 0.78 else "MOYENNE"
-    elif context_score < 0.45 or critical_mean < 0.42:
+        confidence = "FORTE"
+    elif combined_score >= 0.68 and critical_mean >= 0.55:
+        verdict = "SIMILAIRE"
+        confidence = "MOYENNE"
+    elif identity_score < 0.52 and critical_mean < 0.45:
         verdict = "DIFFERENT"
-        confidence = "FORTE" if context_score < 0.35 else "MOYENNE"
+        confidence = "FORTE"
+    elif combined_score < 0.48:
+        verdict = "DIFFERENT"
+        confidence = "MOYENNE"
     else:
         verdict = "À EXAMINER"
         confidence = "MOYENNE"
 
     return {
-        "score": round(context_score, 4),
+        "score": round(combined_score, 4),
+        "identity_score": round(identity_score, 4),
         "verdict": verdict,
         "confidence": confidence,
         "dimensions": dimensions,
