@@ -36,7 +36,18 @@
 <div class="source-overview">
 <span>Couverture des passages : <b>{{ group.coverage|floatformat:1 }}</b></span>
 <span>{{ group.matches|length }} passage(s) signalé(s)</span>
-{% if group.contextual_analysis %}<span>Verdict contextuel : <b>{{ group.contextual_verdict }}</b> · Score contextuel {{ group.contextual_analysis.score|floatformat:3 }}</span>{% endif %}
+{% if group.contextual_analysis %}
+<span>Verdict contextuel : <b>{{ group.contextual_verdict }}</b> · Score contextuel {{ group.contextual_analysis.score|floatformat:3 }}</span>
+<div style="margin-top:8px;font-size:12px" class="muted">
+  Objet : {{ group.contextual_analysis.dimensions.objet.status }} ·
+  Zone : {{ group.contextual_analysis.dimensions.zone.status }} ·
+  Période : {{ group.contextual_analysis.dimensions.periode.status }} ·
+  Population : {{ group.contextual_analysis.dimensions.population.status }} ·
+  Objectifs : {{ group.contextual_analysis.dimensions.objectifs.status }} ·
+  Résultats : {{ group.contextual_analysis.dimensions.resultats.status }} ·
+  Méthodologie : {{ group.contextual_analysis.dimensions.methodologie.status }}
+</div>
+{% endif %}
 {% if group.source_id %}<a class="btn source-open" href="{% url 'detector:open_reference_document' group.source_id %}" target="_blank" rel="noopener">Ouvrir le document original</a>{% else %}<span class="muted source-open">Document original indisponible pour cette ancienne analyse</span>{% endif %}
 </div>
 {% for match in group.matches %}<div class="evidence-match"><div class="evidence-match-score">Correspondance {{ forloop.counter }} · score {{ match.score|floatformat:3 }}</div><div class="evidence-quote candidate"><span class="tag">PASSAGE DU DOCUMENT ANALYSÉ</span>{{ match.candidate_passage }}</div><div class="evidence-quote source"><span class="tag">PASSAGE CORRESPONDANT DANS LA SOURCE</span>{{ match.source_passage }}</div></div>{% empty %}<p class="muted">Aucun passage dépassant le seuil n'a été identifié dans cette source.</p>{% endfor %}
