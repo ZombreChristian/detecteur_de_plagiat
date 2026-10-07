@@ -78,6 +78,24 @@ def _content_tokens(text):
     }
 
 
+def _is_generic_tdr_passage(text):
+    """Identifie les blocs structurels qui ne décrivent pas le sujet de l'étude."""
+    folded = _fold_text(normalize_passage(text))
+    tokens = re.findall(r"[a-z]{4,}", folded)
+    if not tokens:
+        return False
+
+    generic_count = sum(
+        1 for token in tokens
+        if token in GENERIC_TDR_TERMS or token in FRENCH_STOPWORDS
+    )
+    content_tokens = _content_tokens(text)
+
+    generic_ratio = generic_count / len(tokens)
+    # On ne supprime que les passages très structurels et pauvres en contenu.
+    return generic_ratio >= 0.55 and len(content_tokens) < 12
+
+
 def _semantic_text(text):
     """
     Prépare le passage pour l'encodage sémantique en retirant les mots
@@ -256,6 +274,15 @@ def compare_passages(
                 candidate_passages[i],
                 source_passages[j],
             )
+
+            # Les blocs de structure administrative (livrables, budget,
+            # candidature, profil, coordination...) ne doivent pas devenir
+            # une preuve de doublon. Cette règle ne dépend d'aucun domaine.
+            if (
+                _is_generic_tdr_passage(candidate_passages[i])
+                and _is_generic_tdr_passage(source_passages[j])
+            ):
+                continue
 
             # Une paraphrase très forte peut employer des termes différents.
             # Dans ce cas, on accepte le match malgré un faible recouvrement
