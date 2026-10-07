@@ -267,6 +267,10 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
     best = ranked[0]
     passage_groups = []
 
+    # Qwen vérifie uniquement le 3e résultat du classement.
+    ai_target_id = ranked[2]["id"] if len(ranked) >= 3 else None
+    ai_calls = 0
+
     # L'analyse lourde des passages est limitée aux sources les plus proches.
     for item in ranked[:TOP_PASSAGE_SOURCES]:
         document = item["_document"]
@@ -311,34 +315,26 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         contextual = analyze_context(candidate, source_text)
 
         ai_judgment = None
-        # Réserver le LLM aux cas ambigus : forte similarité globale,
-        # même secteur et même zone, mais objet d'étude moins concordant.
-        dims = contextual.get("dimensions", {})
-        object_score = dims.get("objet", {}).get("score")
-        sector_score = dims.get("secteur", {}).get("score")
-        zone_score = dims.get("zone", {}).get("score")
-        ambiguous_identity = (
-            object_score is not None
-            and object_score < 0.68
-            and sector_score is not None
-            and sector_score >= 0.68
-            and zone_score is not None
-            and zone_score >= 0.68
-            and detail["hybrid_score"] >= max(threshold, 0.60)
-        )
-        ai_calls = sum(1 for group in passage_groups if group.get("ai_judgment"))
-        if OLLAMA_ENABLED and ambiguous_identity and ai_calls < AI_JUDGE_MAX_CALLS:
+        # Test volontaire : Qwen vérifie uniquement le 3e résultat.
+        if (
+            OLLAMA_ENABLED
+            and item["id"] == ai_target_id
+            and ai_calls < AI_JUDGE_MAX_CALLS
+        ):
             ai_judgment = judge_documents(
                 candidate,
                 source_text,
                 contextual_analysis=contextual,
                 technical_evidence={
+                    "rank": 3,
                     "tfidf_score": item["tfidf_score"],
                     "semantic_score": item["semantic_score"],
                     "hybrid_score": detail["hybrid_score"],
                     "coverage": detail["coverage"],
                 },
             )
+            if ai_judgment is not None:
+                ai_calls += 1
 
         passage_groups.append(
             {
@@ -374,10 +370,9 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
     # La preuve contextuelle intervient après les passages : elle permet à
     # l'IA d'écarter les faux rapprochements dus à la structure générique
     # des TDR, sans modifier les scores TF-IDF/sémantique calculés.
-    ai_rank = {"SIMILAIRE": 3, "A_EXAMINER": 2, "DIFFERENT": 1, None: 0}
+    # Le verdict Qwen du 3e résultat ne remplace pas le meilleur résultat global.
     evidence_groups.sort(
         key=lambda group: (
-            ai_rank.get(group.get("ai_verdict"), 0),
             group.get("contextual_verdict") == "SIMILAIRE",
             group.get("hybrid_score", 0.0),
         ),
