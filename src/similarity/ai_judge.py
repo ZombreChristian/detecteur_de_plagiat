@@ -86,9 +86,11 @@ def judge_documents(
 
     context = contextual_analysis or {}
     evidence = technical_evidence or {}
-    prompt = f"""{_SYSTEM_PROMPT}
+    prompt = f"""Ce document est le 3e résultat du classement automatique.
+Tu dois spécifiquement vérifier ce 3e résultat. Lis l'ensemble des deux documents avant de conclure.
 
 INDICES TECHNIQUES (ils ne remplacent pas ton jugement) :
+- rang dans le classement : {evidence.get("rank")}
 - similarité TF-IDF : {evidence.get("tfidf_score")}
 - similarité sémantique : {evidence.get("semantic_score")}
 - score hybride : {evidence.get("hybrid_score")}
@@ -98,13 +100,14 @@ INDICES TECHNIQUES (ils ne remplacent pas ton jugement) :
 DOCUMENT A — DOCUMENT CONTROLE :
 {_trim(candidate_text)}
 
-DOCUMENT B — DOCUMENT DE REFERENCE :
+DOCUMENT B — DOCUMENT DE REFERENCE (3e RESULTAT) :
 {_trim(source_text)}
 
-Lis les deux documents ensemble. Identifie leur objet réel et décide s'il
-s'agit réellement de la même étude. Les similitudes génériques ne doivent pas
-suffire à conclure SIMILAIRE.
-"""
+Lis les deux documents ensemble. Vérifie en priorité l'objet réel de l'étude.
+Le même secteur, la même zone, une méthodologie proche ou des passages administratifs
+similaires ne suffisent pas à conclure SIMILAIRE.
+Une reformulation peut rester SIMILAIRE si l'identité métier de l'étude est la même.
+
 
     try:
         response = requests.post(
