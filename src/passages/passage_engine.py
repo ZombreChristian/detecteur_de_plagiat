@@ -108,9 +108,16 @@ def _thematic_overlap(text_a, text_b):
 
     common = tokens_a.intersection(tokens_b)
 
-    # Rapporté au plus petit ensemble : on vérifie qu'une part significative
-    # du contenu du passage le plus court est réellement partagée.
-    return float(len(common) / min(len(tokens_a), len(tokens_b)))
+    if len(common) < 2:
+        return 0.0
+
+    # F-score lexical : on évite qu'un petit passage paraisse très proche
+    # uniquement parce que quelques mots génériques sont communs.
+    precision_a = len(common) / len(tokens_a)
+    precision_b = len(common) / len(tokens_b)
+    return float(
+        2 * precision_a * precision_b / (precision_a + precision_b)
+    ) if (precision_a + precision_b) else 0.0
 
 
 def split_into_passages(text, max_chars=1200):
@@ -254,8 +261,11 @@ def compare_passages(
             # Dans ce cas, on accepte le match malgré un faible recouvrement
             # lexical thématique.
             thematic_match = (
-                thematic_score >= PASSAGE_THEMATIC_MIN_OVERLAP
-                or semantic_score >= PASSAGE_STRONG_SEMANTIC
+                thematic_score >= 0.30
+                or (
+                    semantic_score >= PASSAGE_STRONG_SEMANTIC
+                    and thematic_score >= 0.15
+                )
             )
 
             if not thematic_match:
