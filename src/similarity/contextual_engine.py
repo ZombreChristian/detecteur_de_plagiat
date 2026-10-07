@@ -136,11 +136,14 @@ def _extract_dimension(text, dimension):
             selected.append(sentence)
 
     if dimension == "objet":
+        # L'objet doit représenter le sujet de l'étude, pas le contexte
+        # administratif commun à tous les TDR.
+        title_lines = lines[:2]
+        title_text = " ".join(title_lines).strip()
         selected = selected[:8]
-        if not selected:
-            # Les titres de TDR contiennent souvent l'objet sans utiliser
-            # explicitement le mot "objet".
-            selected = _sentences(prepared)[:5]
+        if title_text:
+            selected = [title_text] + selected
+        selected = list(dict.fromkeys(selected))
 
     return " ".join(selected)[:1800]
 
@@ -197,6 +200,35 @@ def _dimension_status(score):
     if score < 0.45:
         return "DIFFERENT"
     return "INCERTAIN"
+
+
+def _specific_tokens(text):
+    """Extrait les termes porteurs de sens sans vocabulaire métier codé en dur."""
+    normalized = _normalize(text)
+    tokens = set(re.findall(r"[a-z]{4,}", normalized))
+    generic = {
+        "etude", "etudes", "objectif", "objectifs", "objet", "diagnostic",
+        "analyse", "analyses", "methodologie", "donnees", "resultats",
+        "recommandation", "recommandations", "rapport", "mission",
+        "consultant", "consultants", "prestation", "prestations",
+        "livrable", "livrables", "suivi", "evaluation", "contraintes",
+        "contexte", "besoins", "proposition", "activites", "travaux",
+        "document", "documents", "information", "informations", "terrain",
+        "collecte", "produire", "production", "validation", "comite",
+        "comite", "parties", "prenantes", "reunions", "resultat",
+        "provisoire", "conclusion", "cadre", "programme", "programmes",
+        "interventions", "acteurs", "structures", "localites", "zones",
+    }
+    return tokens - generic
+
+
+def _specific_overlap(left, right):
+    left_tokens = _specific_tokens(left)
+    right_tokens = _specific_tokens(right)
+    if len(left_tokens) < 2 or len(right_tokens) < 2:
+        return None
+    union = left_tokens | right_tokens
+    return len(left_tokens & right_tokens) / len(union) if union else 0.0
 
 
 def analyze_context(candidate_text, source_text):
