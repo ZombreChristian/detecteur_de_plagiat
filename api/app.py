@@ -26,6 +26,7 @@ from src.indexing.reference_index import (
 )
 from src.passages.passage_engine import analyze_document_pair, adjusted_hybrid_score
 from src.similarity.contextual_engine import analyze_context
+from src.similarity.ai_judge import judge_documents, OLLAMA_ENABLED, OLLAMA_MODEL
 from src.preprocessing.clean_text import clean_text
 from src.similarity.model_manager import get_model, get_model_info
 
@@ -35,6 +36,7 @@ LEXICAL_WEIGHT = float(os.getenv("SIMILARITY_LEXICAL_WEIGHT", "0.30"))
 SEMANTIC_WEIGHT = float(os.getenv("SIMILARITY_SEMANTIC_WEIGHT", "0.70"))
 TOP_SOURCES = int(os.getenv("SIMILARITY_REFERENCE_TOP_K", "10"))
 TOP_PASSAGE_SOURCES = int(os.getenv("SIMILARITY_PASSAGE_TOP_K", "5"))
+AI_JUDGE_TOP_K = int(os.getenv("AI_JUDGE_TOP_K", "3"))
 
 if abs((LEXICAL_WEIGHT + SEMANTIC_WEIGHT) - 1.0) > 1e-6:
     raise RuntimeError("SIMILARITY_LEXICAL_WEIGHT + SIMILARITY_SEMANTIC_WEIGHT doit être égal à 1.0")
@@ -308,6 +310,20 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
 
         contextual = analyze_context(candidate, source_text)
 
+        ai_judgment = None
+        if len(passage_groups) < AI_JUDGE_TOP_K and OLLAMA_ENABLED:
+            ai_judgment = judge_documents(
+                candidate,
+                source_text,
+                contextual_analysis=contextual,
+                technical_evidence={
+                    "tfidf_score": item["tfidf_score"],
+                    "semantic_score": item["semantic_score"],
+                    "hybrid_score": detail["hybrid_score"],
+                    "coverage": detail["coverage"],
+                },
+            )
+
         passage_groups.append(
             {
                 "source_id": item["id"],
@@ -323,6 +339,9 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
                 "contextual_analysis": contextual,
                 "contextual_verdict": contextual["verdict"],
                 "contextual_confidence": contextual["confidence"],
+                "ai_judgment": ai_judgment,
+                "ai_verdict": ai_judgment.get("verdict") if ai_judgment else None,
+                "ai_confidence": ai_judgment.get("confidence") if ai_judgment else None,
                 "passages_candidate": detail["passages_candidate"],
                 "passages_source": detail["passages_source"],
                 "source_document": source_text,
@@ -339,8 +358,10 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
     # La preuve contextuelle intervient après les passages : elle permet à
     # l'IA d'écarter les faux rapprochements dus à la structure générique
     # des TDR, sans modifier les scores TF-IDF/sémantique calculés.
+    ai_rank = {"SIMILAIRE": 3, "A_EXAMINER": 2, "DIFFERENT": 1, None: 0}
     evidence_groups.sort(
         key=lambda group: (
+            ai_rank.get(group.get("ai_verdict"), 0),
             group.get("contextual_verdict") == "SIMILAIRE",
             group.get("hybrid_score", 0.0),
         ),
@@ -352,6 +373,22 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         score_decision = decision(best_evidence["hybrid_score"], threshold)
         contextual = best_evidence.get("contextual_analysis", {})
         context_verdict = best_evidence.get("contextual_verdict", "À EXAMINER")
+        ai_judgment = best_evidence.get("ai_judgment")
+        ai_verdict = best_evidence.get("ai_verdict")
+
+        # Si Ollama est disponible, son jugement global est l'arbitre final
+        # pour cette paire. Les moteurs numériques restent des preuves.
+        if ai_verdict == "SIMILAIRE":
+            final_decision = "SIMILAIRE"
+        elif ai_verdict == "DIFFERENT":
+            final_decision = "DIFFERENT"
+        elif ai_verdict == "A_EXAMINER":
+            final_decision = "À EXAMINER"
+        else:
+            final_decision = None
+
+        # Fallback complet vers la logique existante si le modèle local
+        # n'est pas installé, arrêté ou ne renvoie pas un JSON exploitable.
 
         # Le seuil reste la porte d'entrée de la décision, mais l'identité
         # contextuelle peut maintenant expliquer ou invalider une proximité
@@ -379,16 +416,17 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             )
         )
 
-        if score_decision == "DIFFERENT":
-            final_decision = "DIFFERENT"
-        elif hard_conflict:
-            final_decision = "DIFFERENT"
-        elif context_verdict == "À EXAMINER":
-            final_decision = "À EXAMINER"
-        elif context_verdict == "DIFFERENT":
-            final_decision = "À EXAMINER"
-        else:
-            final_decision = "SIMILAIRE"
+        if final_decision is None:
+            if score_decision == "DIFFERENT":
+                final_decision = "DIFFERENT"
+            elif hard_conflict:
+                final_decision = "DIFFERENT"
+            elif context_verdict == "À EXAMINER":
+                final_decision = "À EXAMINER"
+            elif context_verdict == "DIFFERENT":
+                final_decision = "À EXAMINER"
+            else:
+                final_decision = "SIMILAIRE"
 
         result_tfidf = best_evidence["tfidf_score"]
         result_semantic = best_evidence["semantic_score"]
@@ -439,6 +477,13 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             if best_evidence is not None
             else "Aucune analyse contextuelle disponible."
         ),
+        "ai_judgment": (
+            best_evidence.get("ai_judgment")
+            if best_evidence is not None
+            else None
+        ),
+        "ai_model": OLLAMA_MODEL if OLLAMA_ENABLED else None,
+        "ai_enabled": OLLAMA_ENABLED,
         "sources": displayed_sources[:TOP_SOURCES],
         "matches": passage_groups,
     }
