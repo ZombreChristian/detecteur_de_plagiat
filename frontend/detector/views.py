@@ -228,7 +228,7 @@ def dashboard(request):
     mode = request.GET.get("mode", "all")
     if q:
         base = base.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
-    if decision in ("SIMILAIRE", "DIFFERENT", "A EXAMINER"):
+    if decision in ("SIMILAIRE", "DIFFERENT", "À EXAMINER"):
         base = base.filter(decision=decision)
     if mode in ("duplicate", "plagiarism"):
         base = base.filter(mode=mode)
@@ -238,7 +238,7 @@ def dashboard(request):
     total = Analysis.objects.filter(user=request.user).count()
     similar = Analysis.objects.filter(user=request.user, decision="SIMILAIRE").count()
     different = Analysis.objects.filter(user=request.user, decision="DIFFERENT").count()
-    to_review = Analysis.objects.filter(user=request.user, decision="A EXAMINER").count()
+    to_review = Analysis.objects.filter(user=request.user, decision="À EXAMINER").count()
     tdr_checks = Analysis.objects.filter(user=request.user, mode="duplicate").count()
     report_checks = Analysis.objects.filter(user=request.user, mode="plagiarism").count()
     registry_total = StudyDocument.objects.count()
@@ -814,7 +814,7 @@ def resultats(request):
     mode = request.GET.get("mode", "all")
     if q:
         analyses = analyses.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
-    if decision in ("SIMILAIRE", "DIFFERENT", "A EXAMINER"):
+    if decision in ("SIMILAIRE", "DIFFERENT", "À EXAMINER"):
         analyses = analyses.filter(decision=decision)
     if mode in ("duplicate", "plagiarism"):
         analyses = analyses.filter(mode=mode)
