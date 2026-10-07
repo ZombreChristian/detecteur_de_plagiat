@@ -8,8 +8,8 @@ from typing import Any
 import requests
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:14b")
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "120"))
 OLLAMA_ENABLED = os.getenv("OLLAMA_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
 
 _SYSTEM_PROMPT = """Tu es le juge intelligent de TDRDOC-SCAN.
