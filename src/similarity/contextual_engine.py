@@ -293,7 +293,21 @@ def analyze_context(candidate_text, source_text):
         for name in ("objet", "zone")
         if dimensions[name]["score"] is not None
     ]
-    strong_identity_conflict = any(score < 0.45 for score in identity_conflicts)
+
+    # Une forte proximité de rédaction ne suffit pas si les termes
+    # spécifiques de l'objet ou de la zone ne se recouvrent pratiquement pas.
+    # Cette règle est générique : aucun secteur, produit ou ville n'est codé.
+    object_overlap = _specific_overlap(candidate["objet"], source["objet"])
+    zone_overlap = _specific_overlap(candidate["zone"], source["zone"])
+
+    specific_identity_conflict = (
+        (object_overlap is not None and object_overlap < 0.12)
+        or (zone_overlap is not None and zone_overlap < 0.12)
+    )
+    strong_identity_conflict = (
+        any(score < 0.45 for score in identity_conflicts)
+        or specific_identity_conflict
+    )
 
     if strong_identity_conflict:
         verdict = "DIFFERENT"
