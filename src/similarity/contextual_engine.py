@@ -13,6 +13,8 @@ from src.similarity.model_manager import get_model
 
 CONTEXT_DIMENSIONS = (
     "objet",
+    "secteur",
+    "activites",
     "zone",
     "periode",
     "population",
@@ -26,17 +28,21 @@ CONTEXT_DIMENSIONS = (
 # discriminants : deux TDR peuvent partager la même structure sans être le
 # même sujet.
 CONTEXT_WEIGHTS = {
-    "objet": 0.27,
-    "zone": 0.24,
-    "objectifs": 0.20,
-    "resultats": 0.15,
-    "population": 0.07,
-    "periode": 0.04,
-    "methodologie": 0.03,
+    "objet": 0.22,
+    "secteur": 0.18,
+    "activites": 0.06,
+    "zone": 0.20,
+    "objectifs": 0.16,
+    "resultats": 0.12,
+    "population": 0.03,
+    "periode": 0.02,
+    "methodologie": 0.01,
 }
 
 _LABELS = {
     "objet": ("objet", "theme", "thème", "problematique", "problématique"),
+    "secteur": ("secteur", "domaine", "filiere", "filière", "branche", "activité économique", "activité economique"),
+    "activites": ("activité", "activités", "composante", "composantes", "volet", "volets"),
     "zone": ("zone", "localisation", "territoire", "champ geographique", "champ géographique"),
     "periode": ("periode", "période", "duree", "durée", "calendrier", "horizon"),
     "population": ("population", "beneficiaires", "bénéficiaires", "public cible", "groupe cible"),
@@ -51,6 +57,15 @@ _DIMENSION_CUES = {
         "etude sur", "étude sur", "diagnostic de", "diagnostic sur",
         "mission porte sur", "mission consacree", "mission consacrée",
         "objet de l'etude", "objet de l’étude", "theme de l'etude", "thème de l’étude",
+    ),
+    "secteur": (
+        "secteur", "domaine", "filiere", "filière", "branche",
+        "secteur d'activité", "secteur d’activité", "domaine d'intervention",
+        "domaine d’intervention",
+    ),
+    "activites": (
+        "stockage", "transformation", "commercialisation", "production",
+        "distribution", "prestation", "services", "composante", "volet",
     ),
     "zone": (
         "zone", "zones", "localisation", "territoire", "territoires",
@@ -170,9 +185,12 @@ def extract_context(text):
     # domine toute la représentation.
     identity_parts = [
         context["objet"],
+        context["secteur"],
+        context["activites"],
         context["zone"],
         context["objectifs"],
         context["resultats"],
+        context["population"],
     ]
     identity_text = " ".join(part for part in identity_parts if part).strip()
     context["identite_etude"] = identity_text[:5000] or (text or "")[:3000]
@@ -290,7 +308,7 @@ def analyze_context(candidate_text, source_text):
     # doublon, même si la structure du TDR est très proche.
     identity_conflicts = [
         dimensions[name]["score"]
-        for name in ("objet", "zone")
+        for name in ("objet", "secteur", "zone")
         if dimensions[name]["score"] is not None
     ]
 
@@ -298,11 +316,14 @@ def analyze_context(candidate_text, source_text):
     # spécifiques de l'objet ou de la zone ne se recouvrent pratiquement pas.
     # Cette règle est générique : aucun secteur, produit ou ville n'est codé.
     object_overlap = _specific_overlap(candidate["objet"], source["objet"])
+    sector_overlap = _specific_overlap(candidate["secteur"], source["secteur"])
+    activity_overlap = _specific_overlap(candidate["activites"], source["activites"])
     zone_overlap = _specific_overlap(candidate["zone"], source["zone"])
 
     specific_identity_conflict = (
-        (object_overlap is not None and object_overlap < 0.12)
-        or (zone_overlap is not None and zone_overlap < 0.12)
+        (object_overlap is not None and object_overlap < 0.10)
+        or (sector_overlap is not None and sector_overlap < 0.10)
+        or (zone_overlap is not None and zone_overlap < 0.10)
     )
     strong_identity_conflict = (
         any(score < 0.45 for score in identity_conflicts)
@@ -338,6 +359,22 @@ def analyze_context(candidate_text, source_text):
     return {
         "score": round(float(combined_score), 4),
         "identity_score": round(float(identity_score), 4),
+        "context_score": round(float(context_score), 4),
+        "critical_mean": round(float(critical_mean), 4),
+        "specific_overlap": {
+            "objet": round(float(object_overlap), 4) if object_overlap is not None else None,
+            "secteur": round(float(sector_overlap), 4) if sector_overlap is not None else None,
+            "activites": round(float(activity_overlap), 4) if activity_overlap is not None else None,
+            "zone": round(float(zone_overlap), 4) if zone_overlap is not None else None,
+        },
+        "identity_profile": {
+            "objet": candidate["objet"],
+            "secteur": candidate["secteur"],
+            "activites": candidate["activites"],
+            "zone": candidate["zone"],
+            "objectifs": candidate["objectifs"],
+            "resultats": candidate["resultats"],
+        },
         "verdict": verdict,
         "confidence": confidence,
         "dimensions": dimensions,
