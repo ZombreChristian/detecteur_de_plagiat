@@ -36,7 +36,7 @@ LEXICAL_WEIGHT = float(os.getenv("SIMILARITY_LEXICAL_WEIGHT", "0.30"))
 SEMANTIC_WEIGHT = float(os.getenv("SIMILARITY_SEMANTIC_WEIGHT", "0.70"))
 TOP_SOURCES = int(os.getenv("SIMILARITY_REFERENCE_TOP_K", "10"))
 TOP_PASSAGE_SOURCES = int(os.getenv("SIMILARITY_PASSAGE_TOP_K", "5"))
-AI_JUDGE_TOP_K = int(os.getenv("AI_JUDGE_TOP_K", "5"))
+AI_JUDGE_MAX_CALLS = int(os.getenv("AI_JUDGE_MAX_CALLS", "1"))
 
 if abs((LEXICAL_WEIGHT + SEMANTIC_WEIGHT) - 1.0) > 1e-6:
     raise RuntimeError("SIMILARITY_LEXICAL_WEIGHT + SIMILARITY_SEMANTIC_WEIGHT doit être égal à 1.0")
@@ -311,7 +311,23 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         contextual = analyze_context(candidate, source_text)
 
         ai_judgment = None
-        if len(passage_groups) < AI_JUDGE_TOP_K and OLLAMA_ENABLED:
+        # Réserver le LLM aux cas ambigus : forte similarité globale,
+        # même secteur et même zone, mais objet d'étude moins concordant.
+        dims = contextual.get("dimensions", {})
+        object_score = dims.get("objet", {}).get("score")
+        sector_score = dims.get("secteur", {}).get("score")
+        zone_score = dims.get("zone", {}).get("score")
+        ambiguous_identity = (
+            object_score is not None
+            and object_score < 0.68
+            and sector_score is not None
+            and sector_score >= 0.68
+            and zone_score is not None
+            and zone_score >= 0.68
+            and detail["hybrid_score"] >= max(threshold, 0.60)
+        )
+        ai_calls = sum(1 for group in passage_groups if group.get("ai_judgment"))
+        if OLLAMA_ENABLED and ambiguous_identity and ai_calls < AI_JUDGE_MAX_CALLS:
             ai_judgment = judge_documents(
                 candidate,
                 source_text,
