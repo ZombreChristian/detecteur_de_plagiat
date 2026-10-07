@@ -370,7 +370,9 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
                     for name in ("objet", "secteur", "zone")
                 )
                 or any(
-                    overlaps.get(name) is not None
+                    dims.get(name, {}).get("score") is not None
+                    and dims.get(name, {}).get("score") < 0.45
+                    and overlaps.get(name) is not None
                     and overlaps.get(name) < 0.10
                     for name in ("objet", "secteur", "zone")
                 )
