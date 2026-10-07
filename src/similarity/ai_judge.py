@@ -107,7 +107,7 @@ Lis les deux documents ensemble. Vérifie en priorité l'objet réel de l'étude
 Le même secteur, la même zone, une méthodologie proche ou des passages administratifs
 similaires ne suffisent pas à conclure SIMILAIRE.
 Une reformulation peut rester SIMILAIRE si l'identité métier de l'étude est la même.
-
+"""
 
     try:
         response = requests.post(
