@@ -1,8 +1,7 @@
 """Analyse contextuelle des documents pour TDRDOC-SCAN.
 
-Le moteur utilise le modèle Sentence-Transformers déjà présent dans le projet.
-Il fournit une preuve contextuelle indépendante après l'identification des
-passages proches, sans modifier le TF-IDF ni le score sémantique des passages.
+Le moteur compare l'identité d'une étude et ses dimensions métier. Il reste
+indépendant du TF-IDF, du matching des passages et du seuil de décision.
 """
 import re
 import unicodedata
@@ -22,6 +21,20 @@ CONTEXT_DIMENSIONS = (
     "methodologie",
 )
 
+# Les quatre premières dimensions décrivent l'identité de l'étude.
+# La méthodologie, le calendrier et les éléments administratifs sont moins
+# discriminants : deux TDR peuvent partager la même structure sans être le
+# même sujet.
+CONTEXT_WEIGHTS = {
+    "objet": 0.27,
+    "zone": 0.24,
+    "objectifs": 0.20,
+    "resultats": 0.15,
+    "population": 0.07,
+    "periode": 0.04,
+    "methodologie": 0.03,
+}
+
 _LABELS = {
     "objet": ("objet", "theme", "thème", "problematique", "problématique"),
     "zone": ("zone", "localisation", "territoire", "champ geographique", "champ géographique"),
@@ -31,32 +44,6 @@ _LABELS = {
     "resultats": ("resultat", "résultat", "resultats", "résultats", "livrable", "produit attendu"),
     "methodologie": ("methodologie", "méthodologie", "approche", "methode", "méthode", "dispositif"),
 }
-
-
-def _normalize(text):
-    text = unicodedata.normalize("NFKD", text or "")
-    text = "".join(c for c in text if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", text).strip().lower()
-
-
-def _prepare_text(text):
-    """Réintroduit des séparateurs lorsque l'extraction DOCX les a perdus."""
-    text = text or ""
-    pattern = (
-        r"(?i)\\s+(?=(?:"
-        r"\\d+(?:\\.\\d+)*\\s*[.)-]\\s+|"
-        r"(?:contexte|justification|objectifs?|champ de l[’']étude|"
-        r"résultats? attendus?|méthodologie|approche|population|"
-        r"zone|localisation|livrables?|produits?|durée|calendrier|"
-        r"chronogramme|collecte|analyse|conclusion)\\b"
-        r"))"
-    )
-    return re.sub(pattern, "\\n", text)
-
-
-def _sentences(text):
-    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text or "") if s.strip()]
-
 
 _DIMENSION_CUES = {
     "objet": (
@@ -68,8 +55,8 @@ _DIMENSION_CUES = {
     "zone": (
         "zone", "zones", "localisation", "territoire", "territoires",
         "province", "provinces", "commune", "communes", "region", "région",
-        "localite", "localités", "localites", "champ geographique", "champ géographique",
-        "dans le ", "dans les ", "au niveau de ", "au ", "aux ",
+        "localite", "localités", "localites", "département", "departement",
+        "champ geographique", "champ géographique",
     ),
     "periode": (
         "annee", "année", "periode", "période", "duree", "durée",
@@ -95,6 +82,31 @@ _DIMENSION_CUES = {
         "collecte de données", "revue documentaire",
     ),
 }
+
+
+def _normalize(text):
+    text = unicodedata.normalize("NFKD", text or "")
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _prepare_text(text):
+    """Réintroduit des séparateurs lorsque l'extraction DOCX les a perdus."""
+    text = text or ""
+    pattern = (
+        r"(?i)\s+(?=(?:"
+        r"\d+(?:\.\d+)*\s*[.)-]\s+|"
+        r"(?:contexte|justification|objectifs?|champ de l[’']étude|"
+        r"résultats? attendus?|méthodologie|approche|population|"
+        r"zone|localisation|livrables?|produits?|durée|calendrier|"
+        r"chronogramme|collecte|analyse|conclusion)\b"
+        r"))"
+    )
+    return re.sub(pattern, "\n", text)
+
+
+def _sentences(text):
+    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text or "") if s.strip()]
 
 
 def _extract_dimension(text, dimension):
@@ -124,27 +136,43 @@ def _extract_dimension(text, dimension):
             selected.append(sentence)
 
     if dimension == "objet":
-        selected = selected[:6]
+        selected = selected[:8]
         if not selected:
-            selected = _sentences(prepared)[:4]
+            # Les titres de TDR contiennent souvent l'objet sans utiliser
+            # explicitement le mot "objet".
+            selected = _sentences(prepared)[:5]
 
     return " ".join(selected)[:1800]
 
 
 def extract_context(text):
-    context = {dimension: _extract_dimension(text, dimension) for dimension in CONTEXT_DIMENSIONS}
+    prepared = _prepare_text(text)
+    context = {
+        dimension: _extract_dimension(prepared, dimension)
+        for dimension in CONTEXT_DIMENSIONS
+    }
 
+    # La zone est particulièrement sensible : on ne considère plus des mots
+    # génériques comme "au" ou "dans le" comme des indices géographiques.
     zone_sentences = []
-    for sentence in _sentences(_prepare_text(text)):
+    for sentence in _sentences(prepared):
         folded = _normalize(sentence)
         if any(cue in folded for cue in _DIMENSION_CUES["zone"]):
             zone_sentences.append(sentence)
     if zone_sentences:
         context["zone"] = " ".join(zone_sentences)[:1800]
 
-    # L'identité de l'étude ne doit pas dépendre uniquement de titres de
-    # sections. Les TDR réels sont parfois extraits en texte continu.
-    context["identite_etude"] = (text or "")[:3000]
+    # Pour l'identité globale, on compare le début du TDR mais aussi les
+    # sections métier extraites. Cela évite qu'un long bloc méthodologique
+    # domine toute la représentation.
+    identity_parts = [
+        context["objet"],
+        context["zone"],
+        context["objectifs"],
+        context["resultats"],
+    ]
+    identity_text = " ".join(part for part in identity_parts if part).strip()
+    context["identite_etude"] = identity_text[:5000] or (text or "")[:3000]
 
     return context
 
@@ -161,13 +189,55 @@ def _semantic_similarity(model, left, right):
     return float(np.clip(np.dot(vectors[0], vectors[1]), 0.0, 1.0))
 
 
+def _dimension_status(score):
+    if score is None:
+        return "NON_DETERMINE"
+    if score >= 0.68:
+        return "SIMILAIRE"
+    if score < 0.45:
+        return "DIFFERENT"
+    return "INCERTAIN"
+
+
 def analyze_context(candidate_text, source_text):
     """Compare les dimensions contextuelles sans modifier les scores existants."""
     candidate = extract_context(candidate_text)
     source = extract_context(source_text)
     model = get_model()
     dimensions = {}
-    available_scores = []
+
+    for dimension in CONTEXT_DIMENSIONS:
+        score = _semantic_similarity(model, candidate[dimension], source[dimension])
+        dimensions[dimension] = {
+            "score": round(score, 4) if score is not None else None,
+            "status": _dimension_status(score),
+        }
+
+    available = {
+        name: data["score"]
+        for name, data in dimensions.items()
+        if data["score"] is not None
+    }
+    if not available:
+        return {
+            "score": 0.0,
+            "verdict": "À EXAMINER",
+            "confidence": "FAIBLE",
+            "dimensions": dimensions,
+        }
+
+    weight_total = sum(CONTEXT_WEIGHTS[name] for name in available)
+    context_score = sum(
+        CONTEXT_WEIGHTS[name] * score for name, score in available.items()
+    ) / weight_total
+
+    critical_names = ("objet", "zone", "objectifs", "resultats")
+    critical_scores = [
+        dimensions[name]["score"]
+        for name in critical_names
+        if dimensions[name]["score"] is not None
+    ]
+    critical_mean = float(np.mean(critical_scores)) if critical_scores else context_score
 
     identity_score = _semantic_similarity(
         model,
@@ -176,52 +246,43 @@ def analyze_context(candidate_text, source_text):
     )
     identity_score = identity_score if identity_score is not None else 0.0
 
-    for dimension in CONTEXT_DIMENSIONS:
-        score = _semantic_similarity(model, candidate[dimension], source[dimension])
-        if score is None:
-            dimensions[dimension] = {"score": None, "status": "NON_DETERMINE"}
-            continue
-        available_scores.append(score)
-        dimensions[dimension] = {
-            "score": round(score, 4),
-            "status": (
-                "SIMILAIRE" if score >= 0.68
-                else "DIFFERENT" if score < 0.45
-                else "INCERTAIN"
-            ),
-        }
-
-    if not available_scores:
-        return {"score": 0.0, "verdict": "À EXAMINER", "confidence": "FAIBLE", "dimensions": dimensions}
-
-    context_score = float(np.mean(available_scores))
-
-    critical = [
-        dimensions[name]["score"]
-        for name in ("objet", "objectifs", "resultats")
-        if dimensions[name]["score"] is not None
-    ]
-    critical_mean = float(np.mean(critical)) if critical else context_score
-
-    # L'identité globale de l'étude est une preuve contextuelle supplémentaire.
-    # Elle est particulièrement importante lorsque le DOCX a perdu ses
-    # retours à la ligne pendant l'extraction.
+    # Les dimensions d'identité dominent. La méthodologie et les éléments
+    # administratifs ne peuvent donc plus faire monter fortement le verdict.
     combined_score = (
-        0.35 * identity_score
-        + 0.30 * critical_mean
-        + 0.35 * context_score
+        0.55 * context_score
+        + 0.30 * identity_score
+        + 0.15 * critical_mean
     )
 
-    if identity_score >= 0.80 and critical_mean >= 0.62:
-        verdict = "SIMILAIRE"
-        confidence = "FORTE"
-    elif combined_score >= 0.68 and critical_mean >= 0.55:
-        verdict = "SIMILAIRE"
-        confidence = "MOYENNE"
-    elif identity_score < 0.52 and critical_mean < 0.45:
+    # Une divergence forte sur l'objet ou la zone est une preuve contre le
+    # doublon, même si la structure du TDR est très proche.
+    identity_conflicts = [
+        dimensions[name]["score"]
+        for name in ("objet", "zone")
+        if dimensions[name]["score"] is not None
+    ]
+    strong_identity_conflict = any(score < 0.45 for score in identity_conflicts)
+
+    if strong_identity_conflict:
         verdict = "DIFFERENT"
         confidence = "FORTE"
-    elif combined_score < 0.48:
+    elif (
+        identity_score >= 0.80
+        and context_score >= 0.68
+        and critical_mean >= 0.62
+    ):
+        verdict = "SIMILAIRE"
+        confidence = "FORTE"
+    elif (
+        combined_score >= 0.68
+        and context_score >= 0.62
+        and critical_mean >= 0.55
+    ):
+        verdict = "SIMILAIRE"
+        confidence = "MOYENNE"
+    elif combined_score < 0.48 or (
+        identity_score < 0.52 and critical_mean < 0.45
+    ):
         verdict = "DIFFERENT"
         confidence = "MOYENNE"
     else:
@@ -229,8 +290,8 @@ def analyze_context(candidate_text, source_text):
         confidence = "MOYENNE"
 
     return {
-        "score": round(combined_score, 4),
-        "identity_score": round(identity_score, 4),
+        "score": round(float(combined_score), 4),
+        "identity_score": round(float(identity_score), 4),
         "verdict": verdict,
         "confidence": confidence,
         "dimensions": dimensions,
