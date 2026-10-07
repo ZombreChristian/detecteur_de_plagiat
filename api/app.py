@@ -190,6 +190,54 @@ def decision(score, threshold):
     return "SIMILAIRE" if score >= threshold else "DIFFERENT"
 
 
+def _contextual_explanation(contextual):
+    """Produit une explication courte et lisible de l'identité de l'étude."""
+    dimensions = contextual.get("dimensions", {})
+    labels = {
+        "objet": "objet",
+        "secteur": "secteur",
+        "activites": "activités",
+        "zone": "zone géographique",
+        "objectifs": "objectifs",
+        "resultats": "résultats attendus",
+    }
+    similar = [
+        labels[name]
+        for name, data in dimensions.items()
+        if name in labels and data.get("status") == "SIMILAIRE"
+    ]
+    different = [
+        labels[name]
+        for name, data in dimensions.items()
+        if name in labels and data.get("status") == "DIFFERENT"
+    ]
+
+    if contextual.get("verdict") == "SIMILAIRE":
+        if similar:
+            return (
+                "Les deux documents présentent une identité d'étude fortement "
+                f"concordante sur {', '.join(similar)}. "
+                "Les différences de formulation ou de structure ne suffisent pas "
+                "à remettre en cause cette proximité."
+            )
+        return "L'analyse contextuelle indique une forte proximité de l'identité de l'étude."
+
+    if contextual.get("verdict") == "DIFFERENT":
+        if different:
+            return (
+                "L'analyse contextuelle relève une divergence importante sur "
+                f"{', '.join(different)}. La similarité de structure ou de formulation "
+                "ne suffit donc pas à considérer les deux études comme identiques."
+            )
+        return "L'analyse contextuelle ne confirme pas une identité commune d'étude."
+
+    return (
+        "Les documents présentent des éléments communs, mais l'identité de l'étude "
+        "reste insuffisamment établie pour une décision automatique."
+    )
+
+
+
 def run_detection(candidate_text: str, kind: str, threshold: float | None = None):
     candidate = clean_text(candidate_text)
     if not candidate:
@@ -302,13 +350,44 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
 
     if best_evidence is not None:
         score_decision = decision(best_evidence["hybrid_score"], threshold)
+        contextual = best_evidence.get("contextual_analysis", {})
         context_verdict = best_evidence.get("contextual_verdict", "À EXAMINER")
-        if context_verdict == "DIFFERENT":
+
+        # Le seuil reste la porte d'entrée de la décision, mais l'identité
+        # contextuelle peut maintenant expliquer ou invalider une proximité
+        # purement textuelle. Une divergence contextuelle ambiguë ne transforme
+        # plus automatiquement un score élevé en DIFFERENT : elle passe par
+        # À EXAMINER. Seule une contradiction forte et explicite est bloquante.
+        overlaps = contextual.get("specific_overlap", {})
+        dims = contextual.get("dimensions", {})
+        hard_conflict = (
+            context_verdict == "DIFFERENT"
+            and contextual.get("confidence") == "FORTE"
+            and (
+                any(
+                    dims.get(name, {}).get("score") is not None
+                    and dims.get(name, {}).get("score") < 0.45
+                    for name in ("objet", "secteur", "zone")
+                )
+                or any(
+                    overlaps.get(name) is not None
+                    and overlaps.get(name) < 0.10
+                    for name in ("objet", "secteur", "zone")
+                )
+            )
+        )
+
+        if score_decision == "DIFFERENT":
+            final_decision = "DIFFERENT"
+        elif hard_conflict:
             final_decision = "DIFFERENT"
         elif context_verdict == "À EXAMINER":
             final_decision = "À EXAMINER"
+        elif context_verdict == "DIFFERENT":
+            final_decision = "À EXAMINER"
         else:
-            final_decision = score_decision
+            final_decision = "SIMILAIRE"
+
         result_tfidf = best_evidence["tfidf_score"]
         result_semantic = best_evidence["semantic_score"]
         result_hybrid = best_evidence["hybrid_score"]
@@ -348,6 +427,16 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         "semantic_score": result_semantic,
         "hybrid_score": result_hybrid,
         "novelty_score": round(max(0.0, 1 - result_hybrid), 4),
+        "contextual_analysis": (
+            best_evidence["contextual_analysis"]
+            if best_evidence is not None
+            else None
+        ),
+        "contextual_explanation": (
+            _contextual_explanation(best_evidence["contextual_analysis"])
+            if best_evidence is not None
+            else "Aucune analyse contextuelle disponible."
+        ),
         "sources": displayed_sources[:TOP_SOURCES],
         "matches": passage_groups,
     }
