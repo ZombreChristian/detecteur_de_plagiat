@@ -42,15 +42,16 @@ def _normalize(text):
 def _prepare_text(text):
     """Réintroduit des séparateurs lorsque l'extraction DOCX les a perdus."""
     text = text or ""
-    text = re.sub(
-        r"(?i)\s+(?=(?:\d+(?:\.\d+)*\s*[.)-]\s+|(?:contexte|justification|"
-        r"objectifs?|champ de l[’']étude|résultats? attendus?|méthodologie|"
-        r"approche|population|zone|localisation|livrables?|produits?|"
-        r"durée|calendrier|chronogramme|collecte|analyse|conclusion)\b)",
-        "\\n",
-        text,
+    pattern = (
+        r"(?i)\\s+(?=(?:"
+        r"\\d+(?:\\.\\d+)*\\s*[.)-]\\s+|"
+        r"(?:contexte|justification|objectifs?|champ de l[’']étude|"
+        r"résultats? attendus?|méthodologie|approche|population|"
+        r"zone|localisation|livrables?|produits?|durée|calendrier|"
+        r"chronogramme|collecte|analyse|conclusion)\\b"
+        r"))"
     )
-    return text
+    return re.sub(pattern, "\\n", text)
 
 
 def _sentences(text):
