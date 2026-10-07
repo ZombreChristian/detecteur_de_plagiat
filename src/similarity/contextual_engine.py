@@ -320,13 +320,32 @@ def analyze_context(candidate_text, source_text):
     activity_overlap = _specific_overlap(candidate["activites"], source["activites"])
     zone_overlap = _specific_overlap(candidate["zone"], source["zone"])
 
+    # Un faible recouvrement lexical n'est PAS une contradiction à lui seul :
+    # une reformulation peut changer presque tous les mots tout en conservant
+    # exactement la même identité. Il devient contradictoire seulement lorsque
+    # la sémantique de la dimension est elle-même faible.
     specific_identity_conflict = (
-        (object_overlap is not None and object_overlap < 0.10)
-        or (sector_overlap is not None and sector_overlap < 0.10)
-        or (zone_overlap is not None and zone_overlap < 0.10)
+        (
+            dimensions["objet"]["score"] is not None
+            and dimensions["objet"]["score"] < 0.45
+            and object_overlap is not None
+            and object_overlap < 0.10
+        )
+        or (
+            dimensions["secteur"]["score"] is not None
+            and dimensions["secteur"]["score"] < 0.45
+            and sector_overlap is not None
+            and sector_overlap < 0.10
+        )
+        or (
+            dimensions["zone"]["score"] is not None
+            and dimensions["zone"]["score"] < 0.45
+            and zone_overlap is not None
+            and zone_overlap < 0.10
+        )
     )
     strong_identity_conflict = (
-        any(score < 0.45 for score in identity_conflicts)
+        any(score < 0.40 for score in identity_conflicts)
         or specific_identity_conflict
     )
 
