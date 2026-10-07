@@ -39,12 +39,66 @@ def _normalize(text):
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
+def _prepare_text(text):
+    """Réintroduit des séparateurs lorsque l'extraction DOCX les a perdus."""
+    text = text or ""
+    text = re.sub(
+        r"(?i)\s+(?=(?:\d+(?:\.\d+)*\s*[.)-]\s+|(?:contexte|justification|"
+        r"objectifs?|champ de l[’']étude|résultats? attendus?|méthodologie|"
+        r"approche|population|zone|localisation|livrables?|produits?|"
+        r"durée|calendrier|chronogramme|collecte|analyse|conclusion)\b)",
+        "\\n",
+        text,
+    )
+    return text
+
+
 def _sentences(text):
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text or "") if s.strip()]
 
 
+_DIMENSION_CUES = {
+    "objet": (
+        "etude portant", "étude portant", "etude consacree", "étude consacrée",
+        "etude sur", "étude sur", "diagnostic de", "diagnostic sur",
+        "mission porte sur", "mission consacree", "mission consacrée",
+        "objet de l'etude", "objet de l’étude", "theme de l'etude", "thème de l’étude",
+    ),
+    "zone": (
+        "zone", "zones", "localisation", "territoire", "territoires",
+        "province", "provinces", "commune", "communes", "region", "région",
+        "localite", "localités", "localites", "champ geographique", "champ géographique",
+        "dans le ", "dans les ", "au niveau de ", "au ", "aux ",
+    ),
+    "periode": (
+        "annee", "année", "periode", "période", "duree", "durée",
+        "calendrier", "chronogramme", "jours", "semaine", "mois",
+    ),
+    "population": (
+        "population cible", "public cible", "groupe cible", "beneficiaires",
+        "bénéficiaires", "acteurs concernés", "acteurs concernes", "menages",
+        "ménages", "producteurs", "structures ciblees", "structures ciblées",
+    ),
+    "objectifs": (
+        "objectif general", "objectif général", "objectifs specifiques",
+        "objectifs spécifiques", "objectif spécifique", "but de l'etude",
+        "but de l’étude", "finalite de l'etude", "finalité de l’étude",
+    ),
+    "resultats": (
+        "resultats attendus", "résultats attendus", "produits attendus",
+        "livrables", "produits livrables", "permettra de produire",
+    ),
+    "methodologie": (
+        "methodologie", "méthodologie", "approche méthodologique",
+        "approche retenue", "methode", "méthode", "collecte de donnees",
+        "collecte de données", "revue documentaire",
+    ),
+}
+
+
 def _extract_dimension(text, dimension):
-    lines = [line.strip() for line in re.split(r"\n+", text or "") if line.strip()]
+    prepared = _prepare_text(text)
+    lines = [line.strip() for line in re.split(r"\n+", prepared) if line.strip()]
     labels = tuple(_normalize(x) for x in _LABELS[dimension])
     hits = []
 
@@ -59,16 +113,33 @@ def _extract_dimension(text, dimension):
         return " ".join(hits)[:1800]
 
     selected = []
-    for sentence in _sentences(text):
+    cues = tuple(_normalize(x) for x in _DIMENSION_CUES[dimension])
+    for sentence in _sentences(prepared):
         folded = _normalize(sentence)
-        if any(re.search(rf"\b{re.escape(label)}\b", folded) for label in labels):
+        if (
+            any(re.search(rf"\b{re.escape(label)}\b", folded) for label in labels)
+            or any(cue in folded for cue in cues)
+        ):
             selected.append(sentence)
+
+    if dimension == "objet":
+        selected = selected[:6]
+        if not selected:
+            selected = _sentences(prepared)[:4]
 
     return " ".join(selected)[:1800]
 
 
 def extract_context(text):
     context = {dimension: _extract_dimension(text, dimension) for dimension in CONTEXT_DIMENSIONS}
+
+    zone_sentences = []
+    for sentence in _sentences(_prepare_text(text)):
+        folded = _normalize(sentence)
+        if any(cue in folded for cue in _DIMENSION_CUES["zone"]):
+            zone_sentences.append(sentence)
+    if zone_sentences:
+        context["zone"] = " ".join(zone_sentences)[:1800]
 
     # L'identité de l'étude ne doit pas dépendre uniquement de titres de
     # sections. Les TDR réels sont parfois extraits en texte continu.
