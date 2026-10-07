@@ -25,6 +25,7 @@ from src.indexing.reference_index import (
     load_reference_documents,
 )
 from src.passages.passage_engine import analyze_document_pair, adjusted_hybrid_score
+from src.similarity.contextual_engine import analyze_context
 from src.preprocessing.clean_text import clean_text
 from src.similarity.model_manager import get_model, get_model_info
 
@@ -257,6 +258,8 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
                 f'<mark class="docsec-evidence">{escaped_passage}</mark>',
             )
 
+        contextual = analyze_context(candidate, source_text)
+
         passage_groups.append(
             {
                 "source_id": item["id"],
@@ -269,6 +272,9 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
                 "hybrid_score": detail["hybrid_score"],
                 "coverage": detail["coverage"],
                 "matches": detail["matches"],
+                "contextual_analysis": contextual,
+                "contextual_verdict": contextual["verdict"],
+                "contextual_confidence": contextual["confidence"],
                 "passages_candidate": detail["passages_candidate"],
                 "passages_source": detail["passages_source"],
                 "source_document": source_text,
@@ -282,11 +288,27 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
     # Le TF-IDF ne sert jamais de filtre pour accepter/refuser une correspondance
     # sémantique.
     evidence_groups = [group for group in passage_groups if group.get("matches")]
-    evidence_groups.sort(key=lambda group: group.get("hybrid_score", 0.0), reverse=True)
+    # La preuve contextuelle intervient après les passages : elle permet à
+    # l'IA d'écarter les faux rapprochements dus à la structure générique
+    # des TDR, sans modifier les scores TF-IDF/sémantique calculés.
+    evidence_groups.sort(
+        key=lambda group: (
+            group.get("contextual_verdict") == "SIMILAIRE",
+            group.get("hybrid_score", 0.0),
+        ),
+        reverse=True,
+    )
     best_evidence = evidence_groups[0] if evidence_groups else None
 
     if best_evidence is not None:
-        final_decision = decision(best_evidence["hybrid_score"], threshold)
+        score_decision = decision(best_evidence["hybrid_score"], threshold)
+        context_verdict = best_evidence.get("contextual_verdict", "À EXAMINER")
+        if context_verdict == "DIFFERENT":
+            final_decision = "DIFFERENT"
+        elif context_verdict == "À EXAMINER":
+            final_decision = "À EXAMINER"
+        else:
+            final_decision = score_decision
         result_tfidf = best_evidence["tfidf_score"]
         result_semantic = best_evidence["semantic_score"]
         result_hybrid = best_evidence["hybrid_score"]
@@ -312,6 +334,7 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         "mode": kind,
         "decision": final_decision,
         "threshold": threshold,
+        "threshold_percent": round(threshold * 100, 2),
         "lexical_weight": LEXICAL_WEIGHT,
         "semantic_weight": SEMANTIC_WEIGHT,
         "best_source": result_source,
