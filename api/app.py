@@ -331,10 +331,10 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             }
         )
 
-    # La décision et les scores affichés utilisent une preuve mixte :
-    # TF-IDF documentaire indépendant + sémantique issue des passages.
-    # Le TF-IDF ne sert jamais de filtre pour accepter/refuser une correspondance
-    # sémantique.
+    # Le score documentaire affiché provient des correspondances de passages :
+    # TF-IDF = analyse lexicale, sémantique = similarité des passages retenus,
+    # hybride = combinaison 30 % lexicale + 70 % sémantique.
+    # Le verdict final est ensuite confirmé ou infirmé par l'analyse contextuelle IA.
     evidence_groups = [group for group in passage_groups if group.get("matches")]
     # La preuve contextuelle intervient après les passages : elle permet à
     # l'IA d'écarter les faux rapprochements dus à la structure générique
@@ -379,16 +379,16 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             )
         )
 
+        # Le score documentaire vérifie d'abord qu'une correspondance
+        # suffisamment forte existe par rapport au seuil choisi.
+        # Ensuite, l'IA contextuelle tranche sur l'identité réelle de l'étude.
+        # Ainsi, une forte ressemblance de formulation ne suffit pas à conclure
+        # à un doublon si l'objet, la zone ou une autre dimension essentielle
+        # de l'étude est différente.
         if score_decision == "DIFFERENT":
             final_decision = "DIFFERENT"
-        elif hard_conflict:
-            final_decision = "DIFFERENT"
-        elif context_verdict == "À EXAMINER":
-            final_decision = "À EXAMINER"
-        elif context_verdict == "DIFFERENT":
-            final_decision = "À EXAMINER"
         else:
-            final_decision = "SIMILAIRE"
+            final_decision = context_verdict
 
         result_tfidf = best_evidence["tfidf_score"]
         result_semantic = best_evidence["semantic_score"]
