@@ -64,35 +64,27 @@ class PasswordRecoveryForm(forms.Form):
         last_name = (cleaned.get("last_name") or "").strip()
         first_name = (cleaned.get("first_name") or "").strip()
         email = (cleaned.get("email") or "").strip()
-
         if not last_name or not first_name or not email:
             return cleaned
-
         user = User.objects.filter(
             last_name__iexact=last_name,
             first_name__iexact=first_name,
             email__iexact=email,
             is_active=True,
         ).first()
-
         if not user:
             raise forms.ValidationError(
                 "Aucun compte actif ne correspond à ces nom, prénom et adresse e-mail."
             )
-
         self.user = user
         return cleaned
 
 
 class AdminUserCreateForm(UserCreationForm):
-    ROLE_CHOICES = (
-        ("user", "Utilisateur"),
-        ("admin", "Administrateur"),
-    )
+    """Création d'un compte. Le rôle est choisi dans la base Group par l'écran d'administration."""
     first_name = forms.CharField(label="Prénom", required=False)
     last_name = forms.CharField(label="Nom", required=False)
     email = forms.EmailField(label="Adresse e-mail", required=False)
-    role = forms.ChoiceField(label="Rôle", choices=ROLE_CHOICES, initial="user")
     is_active = forms.BooleanField(label="Compte actif", required=False, initial=True)
 
     class Meta:
@@ -102,7 +94,6 @@ class AdminUserCreateForm(UserCreationForm):
             "first_name",
             "last_name",
             "email",
-            "role",
             "is_active",
             "password1",
             "password2",
@@ -110,7 +101,7 @@ class AdminUserCreateForm(UserCreationForm):
 
     def save(self, commit=True):
         user = super().save(commit=False)
-        user.is_staff = self.cleaned_data["role"] == "admin"
+        user.is_staff = False
         user.is_active = self.cleaned_data["is_active"]
         if commit:
             user.save()
@@ -146,17 +137,8 @@ class StudyDocumentForm(forms.ModelForm):
     class Meta:
         model = StudyDocument
         fields = (
-            "title",
-            "document_type",
-            "object",
-            "geographic_scope",
-            "sector",
-            "expected_results",
-            "commissioning_entity",
-            "year",
-            "budget",
-            "status",
-            "file_path",
+            "title", "document_type", "object", "geographic_scope", "sector",
+            "expected_results", "commissioning_entity", "year", "budget", "status", "file_path",
         )
         widgets = {
             "title": forms.TextInput(attrs={"placeholder": "Titre de l'étude"}),
