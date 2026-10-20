@@ -15,8 +15,27 @@ def _admin_only(request):
     return True
 
 
+def _functional_permissions():
+    return list(
+        Permission.objects.filter(
+            content_type__app_label="detector",
+            codename__startswith="can_",
+        ).order_by("codename")
+    )
+
+
+def _ensure_default_admin_permissions():
+    """Garantit que le rôle Administrateur possède toutes les permissions fonctionnelles."""
+    admin_role, _ = Group.objects.get_or_create(name="Administrateur")
+    permissions = _functional_permissions()
+    if permissions and not admin_role.permissions.filter(codename__startswith="can_").exists():
+        admin_role.permissions.set(permissions)
+    return admin_role
+
+
 def _admin_context():
     User = get_user_model()
+    _ensure_default_admin_permissions()
     return {
         "admin_users_count": User.objects.count(),
         "admin_roles_count": Group.objects.count(),
@@ -113,13 +132,9 @@ def administration_permissions(request):
     if not _admin_only(request):
         return redirect("detector:dashboard")
 
+    admin_role = _ensure_default_admin_permissions()
     roles = list(Group.objects.prefetch_related("permissions").order_by("name"))
-    permissions = list(
-        Permission.objects.filter(
-            content_type__app_label="detector",
-            codename__startswith="can_",
-        ).order_by("codename")
-    )
+    permissions = _functional_permissions()
 
     if request.method == "POST":
         role = get_object_or_404(Group, pk=request.POST.get("group_id"))
@@ -132,4 +147,5 @@ def administration_permissions(request):
         **_admin_context(),
         "roles": roles,
         "permissions": permissions,
+        "administrator_role": admin_role,
     })
