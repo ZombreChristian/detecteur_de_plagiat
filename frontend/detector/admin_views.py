@@ -21,7 +21,8 @@ def _functional_permissions():
 def _ensure_default_admin_permissions():
     admin_role, _ = Group.objects.get_or_create(name="Administrateur")
     permissions = _functional_permissions()
-    if permissions and set(admin_role.permissions.values_list("id", flat=True)) != {p.id for p in permissions}:
+    expected = {p.id for p in permissions}
+    if set(admin_role.permissions.values_list("id", flat=True)) != expected:
         admin_role.permissions.set(permissions)
     return admin_role
 
@@ -71,8 +72,7 @@ def administration_users(request):
     if request.method=="POST":
         form=AdminUserCreateForm(request.POST)
         if form.is_valid():
-            role_id=request.POST.get("group_id","").strip()
-            role=get_object_or_404(Group,pk=role_id) if role_id else None
+            role_id=request.POST.get("group_id","").strip(); role=get_object_or_404(Group,pk=role_id) if role_id else None
             user=form.save(); user.groups.set([role] if role else []); user.is_staff=bool(role and role.name=="Administrateur"); user.save(update_fields=["is_staff"])
             messages.success(request,f"Le compte « {user.username} » a été créé avec le rôle « {role.name if role else 'Aucun rôle'} »."); return redirect("detector:administration_users")
     else: form=AdminUserCreateForm()
