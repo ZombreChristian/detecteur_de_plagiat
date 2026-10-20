@@ -1,0 +1,135 @@
+from django.contrib import messages
+from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import Group, Permission
+from django.db.models import Q
+from django.shortcuts import get_object_or_404, redirect, render
+
+from .forms import AdminUserCreateForm
+
+
+def _admin_only(request):
+    if not request.user.is_staff:
+        messages.error(request, "Accès réservé aux administrateurs.")
+        return False
+    return True
+
+
+def _admin_context():
+    User = get_user_model()
+    return {
+        "admin_users_count": User.objects.count(),
+        "admin_roles_count": Group.objects.count(),
+        "admin_active_count": User.objects.filter(is_active=True).count(),
+    }
+
+
+@login_required
+def administration(request):
+    if not _admin_only(request):
+        return redirect("detector:dashboard")
+    return render(request, "administration.html", _admin_context())
+
+
+@login_required
+def administration_roles(request):
+    if not _admin_only(request):
+        return redirect("detector:dashboard")
+
+    if request.method == "POST":
+        name = request.POST.get("role_name", "").strip()
+        if not name:
+            messages.error(request, "Le nom du rôle est obligatoire.")
+        elif Group.objects.filter(name__iexact=name).exists():
+            messages.error(request, "Ce rôle existe déjà.")
+        else:
+            Group.objects.create(name=name)
+            messages.success(request, f"Le rôle « {name} » a été créé.")
+        return redirect("detector:administration_roles")
+
+    roles = Group.objects.prefetch_related("user_set", "permissions").order_by("name")
+    return render(request, "administration_roles.html", {
+        **_admin_context(),
+        "roles": roles,
+    })
+
+
+@login_required
+def administration_role_delete(request, pk):
+    if not _admin_only(request):
+        return redirect("detector:dashboard")
+    role = get_object_or_404(Group, pk=pk)
+    if role.name in ("Utilisateur", "Administrateur"):
+        messages.error(request, "Les rôles système Utilisateur et Administrateur ne peuvent pas être supprimés.")
+    elif request.method == "POST":
+        role_name = role.name
+        role.delete()
+        messages.success(request, f"Le rôle « {role_name} » a été supprimé.")
+    return redirect("detector:administration_roles")
+
+
+@login_required
+def administration_users(request):
+    if not _admin_only(request):
+        return redirect("detector:dashboard")
+
+    User = get_user_model()
+    q = request.GET.get("q", "").strip()
+    users = User.objects.prefetch_related("groups", "user_permissions").order_by("-is_active", "username")
+    if q:
+        users = users.filter(
+            Q(username__icontains=q)
+            | Q(first_name__icontains=q)
+            | Q(last_name__icontains=q)
+            | Q(email__icontains=q)
+        )
+
+    if request.method == "POST":
+        form = AdminUserCreateForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            group_id = request.POST.get("group_id")
+            if group_id:
+                role = get_object_or_404(Group, pk=group_id)
+                user.groups.set([role])
+                user.is_staff = role.name == "Administrateur"
+                user.save(update_fields=["is_staff"])
+            messages.success(request, f"Le compte « {user.username} » a été créé.")
+            return redirect("detector:administration_users")
+    else:
+        form = AdminUserCreateForm()
+
+    return render(request, "administration_users.html", {
+        **_admin_context(),
+        "users": users,
+        "q": q,
+        "create_user_form": form,
+        "roles": Group.objects.order_by("name"),
+    })
+
+
+@login_required
+def administration_permissions(request):
+    if not _admin_only(request):
+        return redirect("detector:dashboard")
+
+    roles = list(Group.objects.prefetch_related("permissions").order_by("name"))
+    permissions = list(
+        Permission.objects.filter(
+            content_type__app_label="detector",
+            codename__startswith="can_",
+        ).order_by("codename")
+    )
+
+    if request.method == "POST":
+        role = get_object_or_404(Group, pk=request.POST.get("group_id"))
+        selected = set(request.POST.getlist("permissions"))
+        role.permissions.set([p for p in permissions if p.codename in selected])
+        messages.success(request, f"Les permissions du rôle « {role.name} » ont été mises à jour.")
+        return redirect("detector:administration_permissions")
+
+    return render(request, "administration_permissions_global.html", {
+        **_admin_context(),
+        "roles": roles,
+        "permissions": permissions,
+    })
