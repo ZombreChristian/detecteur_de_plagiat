@@ -110,7 +110,7 @@
                 <th>Document</th>
                 <th>Type</th>
                 <th>Décision</th>
-                <th style="text-align:right">Score hybride</th>
+                <th style="text-align:right">Indice de similarité</th><th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -133,6 +133,9 @@
                   {% endif %}
                 </td>
                 <td class="num">{{ item.hybrid_score|floatformat:3 }}</td>
+<td>
+  <a class="btn" href="{% url 'detector:delete_analysis' item.id %}">Retirer</a>
+</td>
               </tr>
               {% endfor %}
             </tbody>

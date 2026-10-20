@@ -1,9 +1,13 @@
 import io
+from io import BytesIO
+import re
+import os
 import time
 import requests
 from pathlib import Path
 from django.core.files.storage import FileSystemStorage
 from docx import Document as DocxDocument
+from docx.shared import RGBColor
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, get_user_model, update_session_auth_hash
@@ -17,13 +21,16 @@ from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from openpyxl import Workbook
+from pypdf import PdfReader
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.enums import TA_LEFT
 from .forms import (
     LoginForm,
     SignUpForm,
@@ -203,10 +210,14 @@ def _get_uploaded_docx(request):
     return None
 
 
-def _validate_docx(uploaded):
+def _validate_document(uploaded):
     if not uploaded or not uploaded.name:
         return False
-    return uploaded.name.strip().lower().endswith(".docx")
+    return Path(uploaded.name).suffix.lower() in {".docx", ".pdf"}
+
+
+def _document_content_type(uploaded):
+    return "application/pdf" if Path(uploaded.name).suffix.lower() == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 @login_required
@@ -217,7 +228,7 @@ def dashboard(request):
     mode = request.GET.get("mode", "all")
     if q:
         base = base.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
-    if decision in ("SIMILAIRE", "DIFFERENT", "A EXAMINER"):
+    if decision in ("SIMILAIRE", "DIFFERENT", "À EXAMINER"):
         base = base.filter(decision=decision)
     if mode in ("duplicate", "plagiarism"):
         base = base.filter(mode=mode)
@@ -227,7 +238,7 @@ def dashboard(request):
     total = Analysis.objects.filter(user=request.user).count()
     similar = Analysis.objects.filter(user=request.user, decision="SIMILAIRE").count()
     different = Analysis.objects.filter(user=request.user, decision="DIFFERENT").count()
-    to_review = Analysis.objects.filter(user=request.user, decision="A EXAMINER").count()
+    to_review = Analysis.objects.filter(user=request.user, decision="À EXAMINER").count()
     tdr_checks = Analysis.objects.filter(user=request.user, mode="duplicate").count()
     report_checks = Analysis.objects.filter(user=request.user, mode="plagiarism").count()
     registry_total = StudyDocument.objects.count()
@@ -246,19 +257,58 @@ def dashboard(request):
 
 
 def _save_uploaded_document(uploaded):
-    """Enregistre le DOCX reçu afin de pouvoir le consulter depuis l'historique."""
-    media_root = Path(settings.BASE_DIR) / "media" / "documents"
+    """Conserve chaque document testé dans frontend/media/documents/."""
+    media_root = Path(settings.MEDIA_ROOT) / "documents"
     media_root.mkdir(parents=True, exist_ok=True)
     storage = FileSystemStorage(location=str(media_root))
     uploaded.seek(0)
-    return str(media_root / storage.save(uploaded.name, uploaded))
+    saved_name = storage.save(uploaded.name, uploaded)
+    uploaded.seek(0)
+    return f"documents/{saved_name}"
+
+
+def _document_url(relative_path):
+    if not relative_path:
+        return ""
+    return f"{settings.MEDIA_URL.rstrip('/')}/{relative_path.lstrip('/')}"
+
+def _safe_reference_path(document):
+    """Retourne le chemin absolu d'une référence uniquement si elle reste dans le projet."""
+    if not document or not document.file_path:
+        return None
+    root = Path(settings.BASE_DIR).resolve().parent
+    candidate = (root / document.file_path).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() else None
+
+
+@login_required
+def open_reference_document(request, pk):
+    """Ouvre/télécharge le document de référence depuis le registre."""
+    document = get_object_or_404(StudyDocument, pk=pk, is_reference=True)
+    path = _safe_reference_path(document)
+    if not path:
+        messages.error(request, "Le fichier de référence n'est plus disponible.")
+        return redirect("detector:dashboard")
+
+    content_type = "application/pdf" if path.suffix.lower() == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    return FileResponse(
+        path.open("rb"),
+        as_attachment=False,
+        filename=path.name,
+        content_type=content_type,
+    )
+
 
 
 def _read_saved_document(path):
-    """Lit un document DOCX précédemment enregistré et retourne son contenu."""
+    """Lit un document sauvegardé uniquement pour les besoins internes."""
     if not path:
         return ""
-    file_path = Path(path)
+    file_path = Path(settings.MEDIA_ROOT) / str(path).replace("/", os.sep)
     if not file_path.exists() or file_path.suffix.lower() != ".docx":
         return ""
     doc = DocxDocument(file_path)
@@ -290,15 +340,275 @@ def _read_document_from_corpus(filename, mode):
     return ""
 
 
+
+def _analysis_problem_passages(result):
+    """Retourne les passages du document candidat signalés par le moteur."""
+    passages = []
+    seen = set()
+    for group in result.get("matches", []) or []:
+        for match in group.get("matches", []) or []:
+            passage = (match.get("candidate_passage") or "").strip()
+            if passage and passage not in seen:
+                seen.add(passage)
+                passages.append(passage)
+    return sorted(passages, key=len, reverse=True)
+
+
+def _normalized_with_map(text):
+    """Normalise le texte tout en conservant la correspondance avec les positions originales."""
+    normalized = []
+    positions = []
+    previous_space = False
+    for index, char in enumerate(text or ""):
+        if char.isspace():
+            if not previous_space:
+                normalized.append(" ")
+                positions.append(index)
+            previous_space = True
+            continue
+        normalized.append(char.casefold())
+        positions.append(index)
+        previous_space = False
+
+    while normalized and normalized[0] == " ":
+        normalized.pop(0)
+        positions.pop(0)
+    while normalized and normalized[-1] == " ":
+        normalized.pop()
+        positions.pop()
+
+    return "".join(normalized), positions
+
+
+def _highlight_text_runs(paragraph, passages):
+    """Colorie les portions réellement retrouvées dans le paragraphe Word."""
+    text = paragraph.text
+    if not text or not passages:
+        return
+
+    normalized_text, positions = _normalized_with_map(text)
+    fragments = []
+
+    # Les passages du moteur peuvent couvrir plusieurs paragraphes Word.
+    # On recherche donc aussi leurs phrases/fragments à l'intérieur de chaque
+    # paragraphe, plutôt que d'exiger que tout le passage soit sur une seule ligne.
+    for passage in passages:
+        normalized_passage, _ = _normalized_with_map(passage)
+        if not normalized_passage:
+            continue
+
+        candidates = [normalized_passage]
+        for fragment in re.split(r"[.!?;:]+", passage):
+            fragment_norm, _ = _normalized_with_map(fragment)
+            if len(fragment_norm) >= 45:
+                candidates.append(fragment_norm)
+
+        # Fragments de secours pour les passages très longs ou coupés entre
+        # plusieurs paragraphes.
+        if len(normalized_passage) > 140:
+            for start in range(0, len(normalized_passage) - 59, 60):
+                chunk = normalized_passage[start:start + 100].strip()
+                if len(chunk) >= 45:
+                    candidates.append(chunk)
+
+        for candidate in candidates:
+            start = 0
+            while candidate:
+                index = normalized_text.find(candidate, start)
+                if index < 0:
+                    break
+                end = index + len(candidate) - 1
+                if index < len(positions) and end < len(positions):
+                    fragments.append((positions[index], positions[end] + 1))
+                start = index + max(1, len(candidate))
+
+    if not fragments:
+        return
+
+    fragments.sort()
+    merged = []
+    for start, end in fragments:
+        if not merged or start > merged[-1][1]:
+            merged.append([start, end])
+        else:
+            merged[-1][1] = max(merged[-1][1], end)
+
+    for run in list(paragraph.runs):
+        run._element.getparent().remove(run._element)
+
+    cursor = 0
+    for start, end in merged:
+        if start > cursor:
+            paragraph.add_run(text[cursor:start])
+        run = paragraph.add_run(text[start:end])
+        run.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
+        run.bold = True
+        cursor = end
+
+    if cursor < len(text):
+        paragraph.add_run(text[cursor:])
+
+
+def _highlight_docx(path, passages):
+    """Crée une copie Word annotée sans modifier le fichier original."""
+    document = DocxDocument(path)
+    for paragraph in document.paragraphs:
+        _highlight_text_runs(paragraph, passages)
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    _highlight_text_runs(paragraph, passages)
+
+    output = BytesIO()
+    document.save(output)
+    output.seek(0)
+    return output
+
+
+def _pdf_text(path):
+    reader = PdfReader(str(path))
+    return "\n\n".join(
+        (page.extract_text() or "").strip()
+        for page in reader.pages
+        if (page.extract_text() or "").strip()
+    )
+
+
+def _highlight_pdf(path, passages, title):
+    """Crée un PDF texte annoté en rouge à partir du document analysé."""
+    from xml.sax.saxutils import escape
+
+    output = BytesIO()
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=A4,
+        rightMargin=42,
+        leftMargin=42,
+        topMargin=42,
+        bottomMargin=42,
+        title=title,
+    )
+    normal = ParagraphStyle(
+        "AnnotatedNormal",
+        fontName="Helvetica",
+        fontSize=9.5,
+        leading=13,
+        alignment=TA_LEFT,
+        spaceAfter=8,
+    )
+    title_style = ParagraphStyle(
+        "AnnotatedTitle",
+        parent=normal,
+        fontSize=14,
+        leading=18,
+        spaceAfter=16,
+    )
+    story = [
+        Paragraph(
+            escape("TDRDOC-SCAN — Document analysé avec passages signalés"),
+            title_style,
+        )
+    ]
+
+    text = _pdf_text(path)
+    for block in re.split(r"\n{2,}", text):
+        block = block.strip()
+        if not block:
+            continue
+
+        cursor = 0
+        matches = []
+        for passage in passages:
+            start = 0
+            while True:
+                index = block.find(passage, start)
+                if index < 0:
+                    break
+                matches.append((index, index + len(passage)))
+                start = index + len(passage)
+
+        matches.sort()
+        merged = []
+        for start, end in matches:
+            if not merged or start > merged[-1][1]:
+                merged.append([start, end])
+            else:
+                merged[-1][1] = max(merged[-1][1], end)
+
+        pieces = []
+        for start, end in merged:
+            if start > cursor:
+                pieces.append(escape(block[cursor:start]))
+            pieces.append(f'<font color="#C00000"><b>{escape(block[start:end])}</b></font>')
+            cursor = end
+        if cursor < len(block):
+            pieces.append(escape(block[cursor:]))
+
+        story.append(Paragraph("".join(pieces), normal))
+
+    doc.build(story)
+    output.seek(0)
+    return output
+
+
+@login_required
+def download_annotated_document(request, pk):
+    """Télécharge le document analysé avec les passages problématiques en rouge."""
+    analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
+    result = analysis.result_json or {}
+    uploaded_path = result.get("uploaded_path", "")
+    if not uploaded_path:
+        messages.error(request, "Le document original de cette analyse n'est plus disponible.")
+        return redirect("detector:analysis_detail", pk=analysis.pk)
+
+    path = (Path(settings.MEDIA_ROOT) / str(uploaded_path).replace("/", os.sep)).resolve()
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    try:
+        path.relative_to(media_root)
+    except ValueError:
+        messages.error(request, "Le fichier demandé n'est pas autorisé.")
+        return redirect("detector:analysis_detail", pk=analysis.pk)
+
+    if not path.is_file():
+        messages.error(request, "Le document original de cette analyse n'est plus disponible.")
+        return redirect("detector:analysis_detail", pk=analysis.pk)
+
+    passages = _analysis_problem_passages(result)
+    stem = path.stem
+
+    if path.suffix.lower() == ".docx":
+        output = _highlight_docx(path, passages)
+        return FileResponse(
+            output,
+            as_attachment=True,
+            filename=f"{stem}_passages_signales.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+
+    if path.suffix.lower() == ".pdf":
+        output = _highlight_pdf(path, passages, f"{stem}_passages_signales")
+        return FileResponse(
+            output,
+            as_attachment=True,
+            filename=f"{stem}_passages_signales.pdf",
+            content_type="application/pdf",
+        )
+
+    messages.error(request, "Format de document non pris en charge.")
+    return redirect("detector:analysis_detail", pk=analysis.pk)
+
+
 @login_required
 def analysis_detail(request, pk):
     analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
     result = analysis.result_json or {}
-    document_text = _read_saved_document((analysis.result_json or {}).get("uploaded_path")) or _read_document_from_corpus(analysis.document_name, analysis.mode)
+    uploaded_path = result.get("uploaded_path", "")
     return render(request, "analysis_detail.html", {
         "analysis": analysis,
         "result": result,
-        "document_text": document_text,
+        "document_url": _document_url(uploaded_path),
+        "document_path": uploaded_path,
     })
 
 
@@ -310,19 +620,29 @@ def reception(request):
         return render(request, "reception.html")
     mode = request.POST.get("mode", "tdr")
     uploaded = _get_uploaded_docx(request)
-    if not _validate_docx(uploaded):
-        messages.error(request, "Veuillez sélectionner un document DOCX valide.")
+    if not _validate_document(uploaded):
+        messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
+        return redirect("detector:reception")
+    uploaded_path = _save_uploaded_document(uploaded)
+    try:
+        threshold = float(request.POST.get("threshold", "")) / 100.0
+        if not 0.01 <= threshold <= 1.0:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
         return redirect("detector:reception")
     endpoint = "/api/detect/duplicate" if mode == "tdr" else "/api/detect/plagiarism"
     start = time.perf_counter()
     try:
         response = requests.post(
             f"{settings.FASTAPI_URL}{endpoint}",
-            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            data={"threshold": threshold},
+            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))},
             timeout=600,
         )
         response.raise_for_status()
         result = response.json()
+        result["uploaded_path"] = uploaded_path
         duration = round((time.perf_counter() - start) * 1000)
         result["duration_ms"] = duration
         analysis = Analysis.objects.create(
@@ -336,15 +656,10 @@ def reception(request):
         request.session["last_analysis_id"] = analysis.id
         request.session["last_document_name"] = uploaded.name
         if mode == "tdr" and result.get("decision") == "DIFFERENT":
-            saved_path = _save_uploaded_document(uploaded)
-            StudyDocument.objects.create(
-                title=Path(uploaded.name).stem,
-                document_type="TDR",
-                file_path=saved_path,
-                status="TDR validé / étude en cours",
-            )
+            # L'upload sert à l'analyse uniquement : il ne devient pas
+            # automatiquement un document de référence dans PostgreSQL.
             request.session["validated_tdr_name"] = uploaded.name
-            messages.success(request, "TDR accepté : aucune similarité suffisante n'a été trouvée. Le rapport associé peut maintenant être réceptionné.")
+            messages.success(request, "TDR accepté : aucune similarité suffisante n'a été trouvée. Le document n'a pas été ajouté automatiquement au registre.")
             return redirect("detector:reception")
         if mode == "tdr" and result.get("decision") == "SIMILAIRE":
             messages.error(request, "TDR non retenu : un document similaire existe déjà dans la base.")
@@ -365,25 +680,30 @@ def upload_report_for_tdr(request, pk):
     if request.method == "GET":
         return render(request, "report_upload.html", {"tdr": tdr})
     uploaded = _get_uploaded_docx(request)
-    if not _validate_docx(uploaded):
-        messages.error(request, "Veuillez sélectionner un rapport DOCX valide.")
+    if not _validate_document(uploaded):
+        messages.error(request, "Veuillez sélectionner un rapport Word (.docx) ou PDF (.pdf) valide.")
+        return redirect("detector:upload_report_for_tdr", pk=tdr.pk)
+    uploaded_path = _save_uploaded_document(uploaded)
+    try:
+        threshold = float(request.POST.get("threshold", "")) / 100.0
+        if not 0.01 <= threshold <= 1.0:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
         return redirect("detector:upload_report_for_tdr", pk=tdr.pk)
     start = time.perf_counter()
     try:
         response = requests.post(
             f"{settings.FASTAPI_URL}/api/detect/plagiarism",
-            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            data={"threshold": threshold},
+            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))},
             timeout=600,
         )
         response.raise_for_status()
         result = response.json()
-        result["uploaded_path"] = _save_uploaded_document(uploaded)
-        StudyDocument.objects.create(
-            title=Path(uploaded.name).stem,
-            document_type="RAPPORT",
-            file_path=result["uploaded_path"],
-            status="Rapport reçu et contrôlé",
-        )
+        # Le rapport est un candidat de comparaison : son analyse est
+        # conservée dans l'historique, sans enrichissement automatique du registre.
+        result["uploaded_path"] = uploaded_path
         result["linked_tdr_analysis_id"] = tdr.id
         result["linked_tdr_name"] = tdr.document_name
         duration = round((time.perf_counter() - start) * 1000)
@@ -414,19 +734,29 @@ def analyser(request):
     if mode not in ("plagiarism", "duplicate"):
         messages.error(request, "Mode d'analyse invalide.")
         return redirect("detector:analyser")
-    if not _validate_docx(uploaded):
-        messages.error(request, "Veuillez sélectionner un document DOCX valide.")
+    if not _validate_document(uploaded):
+        messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
+        return redirect("detector:analyser")
+    uploaded_path = _save_uploaded_document(uploaded)
+    try:
+        threshold = float(request.POST.get("threshold", "")) / 100.0
+        if not 0.01 <= threshold <= 1.0:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
         return redirect("detector:analyser")
     endpoint = "/api/detect/duplicate" if mode == "duplicate" else "/api/detect/plagiarism"
     start = time.perf_counter()
     try:
         response = requests.post(
             f"{settings.FASTAPI_URL}{endpoint}",
-            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+            data={"threshold": threshold},
+            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))},
             timeout=600,
         )
         response.raise_for_status()
         result = response.json()
+        result["uploaded_path"] = uploaded_path
         duration = round((time.perf_counter() - start) * 1000)
         result["duration_ms"] = duration
         analysis = Analysis.objects.create(
@@ -447,6 +777,33 @@ def analyser(request):
 
 
 @login_required
+def delete_analysis(request, pk):
+    """Supprime une analyse de l'historique de l'utilisateur et son fichier testé."""
+    if not _require_permission(request, "can_view_history", "Votre profil ne dispose pas de l'accès à l'historique."):
+        return redirect("detector:dashboard")
+
+    analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
+
+    if request.method != "POST":
+        return render(request, "analysis_delete_confirm.html", {"analysis": analysis})
+
+    uploaded_path = (analysis.result_json or {}).get("uploaded_path", "")
+    if uploaded_path:
+        path = (Path(settings.MEDIA_ROOT) / str(uploaded_path).replace("/", os.sep)).resolve()
+        media_root = Path(settings.MEDIA_ROOT).resolve()
+        try:
+            path.relative_to(media_root)
+            if path.is_file():
+                path.unlink()
+        except (ValueError, OSError):
+            pass
+
+    analysis.delete()
+    messages.success(request, "L'analyse a été supprimée de votre historique.")
+    return redirect("detector:resultats")
+
+
+@login_required
 def resultats(request):
     if not _require_permission(request, "can_view_history", "Votre profil ne dispose pas de l'accès à l'historique."):
         return redirect("detector:dashboard")
@@ -457,7 +814,7 @@ def resultats(request):
     mode = request.GET.get("mode", "all")
     if q:
         analyses = analyses.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
-    if decision in ("SIMILAIRE", "DIFFERENT", "A EXAMINER"):
+    if decision in ("SIMILAIRE", "DIFFERENT", "À EXAMINER"):
         analyses = analyses.filter(decision=decision)
     if mode in ("duplicate", "plagiarism"):
         analyses = analyses.filter(mode=mode)
@@ -482,7 +839,7 @@ def export_excel(request):
         return HttpResponse("Aucune analyse à exporter.", status=404)
     result = analysis.result_json or {}
     wb = Workbook(); ws = wb.active; ws.title = "Analyse"
-    for row in [["Détecteur documentaire", "DOCSEC"], ["Document", analysis.document_name], ["Mode", analysis.get_mode_display()], ["Décision", analysis.decision], ["Score TF-IDF", analysis.tfidf_score], ["Score sémantique", analysis.semantic_score], ["Score hybride", analysis.hybrid_score], ["Score de nouveauté", analysis.novelty_score], ["Durée (ms)", analysis.duration_ms], ["Meilleure source", result.get("best_source", "")]]: ws.append(row)
+    for row in [["Détecteur documentaire", "DOCSEC"], ["Document", analysis.document_name], ["Mode", analysis.get_mode_display()], ["Décision", analysis.decision], ["Score TF-IDF", analysis.tfidf_score], ["Score sémantique", analysis.semantic_score], ["Score hybride", analysis.hybrid_score], ["Score de nouveauté", analysis.novelty_score], ["Durée (ms)", analysis.duration_ms], ["Document de comparaison", result.get("best_source", "")]]: ws.append(row)
     response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"); response["Content-Disposition"] = 'attachment; filename="rapport_analyse.xlsx"'; wb.save(response); return response
 
 
@@ -494,9 +851,9 @@ def export_pdf(request):
     if not analysis: return HttpResponse("Aucune analyse à exporter.", status=404)
     result = analysis.result_json or {}; buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36); styles = getSampleStyleSheet()
     story = [Paragraph("Rapport d'analyse documentaire — DOCSEC", styles["Title"]), Spacer(1, 12)]
-    data = [["Document", analysis.document_name], ["Type", analysis.get_mode_display()], ["Décision", analysis.decision], ["Score TF-IDF", str(analysis.tfidf_score)], ["Score sémantique", str(analysis.semantic_score)], ["Score hybride", str(analysis.hybrid_score)], ["Nouveauté", str(analysis.novelty_score)], ["Meilleure source", str(result.get("best_source", ""))]]
-    table = Table(data, colWidths=[150, 350]); table.setStyle(TableStyle([("BACKGROUND", (0,0), (0,-1), colors.HexColor("#eef2f7")), ("GRID", (0,0), (-1,-1), .5, colors.grey), ("VALIGN", (0,0), (-1,-1), "TOP"), ("PADDING", (0,0), (-1,-1), 7)])); story.append(table); story.append(Spacer(1, 18)); story.append(Paragraph("Sources proches", styles["Heading2"]))
-    for source in result.get("sources", [])[:10]: story.extend([Paragraph(f"{source.get('source','')} — score {source.get('hybrid_score','')}", styles["BodyText"]), Spacer(1, 5)])
+    data = [["Document", analysis.document_name], ["Type", analysis.get_mode_display()], ["Décision", analysis.decision], ["Score TF-IDF", str(analysis.tfidf_score)], ["Score sémantique", str(analysis.semantic_score)], ["Score hybride", str(analysis.hybrid_score)], ["Nouveauté", str(analysis.novelty_score)], ["Document de comparaison", str(result.get("best_source", ""))]]
+    table = Table(data, colWidths=[150, 350]); table.setStyle(TableStyle([("BACKGROUND", (0,0), (0,-1), colors.HexColor("#eef2f7")), ("GRID", (0,0), (-1,-1), .5, colors.grey), ("VALIGN", (0,0), (-1,-1), "TOP"), ("PADDING", (0,0), (-1,-1), 7)])); story.append(table); story.append(Spacer(1, 18)); story.append(Paragraph("Documents de comparaison", styles["Heading2"]))
+    for source in result.get("sources", [])[:10]: story.extend([Paragraph(f"{source.get('source','')} — indice de similarité {source.get('hybrid_score','')}", styles["BodyText"]), Spacer(1, 5)])
     doc.build(story); response = HttpResponse(buffer.getvalue(), content_type="application/pdf"); response["Content-Disposition"] = 'attachment; filename="rapport_analyse.pdf"'; return response
 
 

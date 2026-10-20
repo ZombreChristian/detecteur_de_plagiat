@@ -1,0 +1,43 @@
+{% load static %}
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TDRDOC-SCAN — Confirmer le retrait</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}">
+<link rel="stylesheet" href="{% static 'css/institutional.css' %}">
+<script src="{% static 'js/theme.js' %}"></script>
+</head>
+<body>
+<div class="console">
+  <aside class="rail">
+    <div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
+    <nav class="rail-nav">
+      <a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">⌂</span><span>Tableau de bord</span></a>
+      <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">✓</span><span>Vérifier un TDR</span></a>
+      <a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico">＋</span><span>Nouvelle analyse</span></a>
+      <a class="rail-link active" href="{% url 'detector:resultats' %}"><span class="ico">◷</span><span>Historique</span></a>
+    </nav>
+    <div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div>
+  </aside>
+  <main class="main">
+    <div class="ctxbar"><div><h1>Retirer une analyse</h1><div class="lede">Confirmation de l'action</div></div></div>
+    <div class="page-pad">
+      <section class="panel national-bar-red">
+        <div class="panel-head"><h2>Confirmer le retrait de l'historique</h2></div>
+        <div class="panel-body">
+          <p>Voulez-vous retirer cette analyse de votre historique ?</p>
+          <p><strong>{{ analysis.document_name }}</strong></p>
+          <p class="muted">Cette action supprimera également le fichier testé conservé pour cette analyse. Elle est irréversible.</p>
+          <form method="post" style="display:flex;gap:10px;flex-wrap:wrap">
+            {% csrf_token %}
+            <button class="btn btn-primary" type="submit">Confirmer le retrait</button>
+            <a class="btn" href="{% url 'detector:resultats' %}">Annuler</a>
+          </form>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>
