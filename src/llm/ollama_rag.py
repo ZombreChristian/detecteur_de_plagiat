@@ -16,9 +16,9 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 OLLAMA_TIMEOUT = max(300.0, float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "300")))
 # Qwen3 tourne localement avec un contexte souvent limite a 4096 tokens.
 # Borner le prompt evite d'envoyer plusieurs dizaines de milliers de caracteres.
-RAG_REFERENCE_TOP_K = min(5, max(1, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "4"))))
-MAX_CANDIDATE_CHARS = min(9000, max(3000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "8000"))))
-MAX_REFERENCE_CHARS = min(3000, max(1200, int(os.getenv("TDR_RAG_REFERENCE_MAX_CHARS", "2400"))))
+RAG_REFERENCE_TOP_K = min(3, max(1, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "3"))))
+MAX_CANDIDATE_CHARS = min(6500, max(3000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "6500"))))
+MAX_REFERENCE_CHARS = min(1800, max(1200, int(os.getenv("TDR_RAG_REFERENCE_MAX_CHARS", "1800"))))
 
 
 class OllamaRAGError(RuntimeError):
