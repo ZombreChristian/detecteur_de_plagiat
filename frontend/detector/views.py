@@ -1094,6 +1094,7 @@ def tdr_rag_independent(request):
         return render(request, "tdr_rag_independent.html")
 
     uploaded_path = _save_uploaded_document(uploaded)
+    started_at = time.perf_counter()
     try:
         uploaded.seek(0)
         response = requests.post(
@@ -1107,7 +1108,8 @@ def tdr_rag_independent(request):
         response.raise_for_status()
         result = response.json()
         result["uploaded_path"] = uploaded_path
-        result["duration_ms"] = None
+        duration_ms = round((time.perf_counter() - started_at) * 1000)
+        result["duration_ms"] = duration_ms
         analysis = Analysis.objects.create(
             user=request.user,
             document_name=uploaded.name,
@@ -1118,11 +1120,12 @@ def tdr_rag_independent(request):
             tfidf_score=None,
             novelty_score=None,
             result_json=result,
+            duration_ms=duration_ms,
             status="success",
         )
         messages.success(
             request,
-            "Analyse RAG indépendante terminée. Toutes les références TDR indexées ont été examinées."
+            "Analyse RAG terminée. Consultez les documents de référence examinés et les justificatifs dans le détail du résultat."
         )
         return redirect("detector:analysis_detail", pk=analysis.pk)
     except requests.RequestException as exc:
