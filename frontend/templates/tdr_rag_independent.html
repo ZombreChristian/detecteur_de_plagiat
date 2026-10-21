@@ -1,0 +1,44 @@
+{% load static %}
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TDRDOC-SCAN — Analyse TDR RAG indépendante</title>
+<style>
+:root{color-scheme:light;--ink:#17212b;--muted:#5e6a75;--line:#dce3e8;--paper:#fff;--bg:#f3f6f8;--accent:#167347}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+.flag{height:7px;background:linear-gradient(to bottom,#e32636 0 33.33%,#f5d442 33.33% 66.66%,#16834a 66.66%)}header{background:var(--paper);border-bottom:1px solid var(--line);padding:20px clamp(20px,5vw,72px);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.brand{font-weight:800;letter-spacing:.04em}.tag{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+a{color:inherit}main{max-width:920px;margin:42px auto;padding:0 20px}.panel{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:clamp(22px,4vw,42px);box-shadow:0 10px 32px #17212b0b}
+h1{font-size:clamp(1.7rem,4vw,2.4rem);line-height:1.15;margin:8px 0 14px}p{color:var(--muted)}.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:24px 0}.step{border:1px solid var(--line);border-radius:12px;padding:14px}.step strong{display:block;margin-bottom:4px}.step span{color:var(--muted);font-size:.9rem}
+label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:block;width:100%;padding:18px;border:1px dashed #aab8c2;border-radius:10px;background:#fbfcfd}button{margin-top:20px;border:0;border-radius:9px;padding:13px 20px;background:#17212b;color:#fff;font-size:1rem;font-weight:700;cursor:pointer}button:hover{background:#334653}.note{border-left:4px solid var(--accent);background:#edf7f1;padding:13px 16px;border-radius:0 8px 8px 0;font-size:.93rem;color:#254c39}.messages{margin-bottom:18px}.message{padding:12px 14px;background:#fff4e5;border:1px solid #eed4ad;border-radius:8px;margin:8px 0}.back{color:var(--muted);text-decoration:none}.back:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="flag"></div>
+<header><div><div class="brand">TDRDOC-SCAN</div><div class="tag">Analyse autonome des TDR</div></div><a class="back" href="{% url 'detector:dashboard' %}">← Tableau de bord</a></header>
+<main>
+{% if messages %}<div class="messages">{% for message in messages %}<div class="message">{{ message }}</div>{% endfor %}</div>{% endif %}
+<section class="panel">
+<div class="tag">Moteur RAG indépendant</div>
+<h1>Vérifier si une étude existe déjà</h1>
+<p>Déposez un TDR. L'IA le compare aux études TDR déjà indexées dans la base documentaire, puis explique sa conclusion.</p>
+<div class="note"><strong>Pas de nombre fixe de références.</strong> Le moteur parcourt toutes les références TDR indexées. Elles sont analysées par lots techniques, puis Qwen établit une conclusion globale. Les documents téléversés ne sont pas ajoutés automatiquement à l'index.</div>
+<div class="steps">
+<div class="step"><strong>1. Extraire</strong><span>Lecture du contenu du TDR Word ou PDF.</span></div>
+<div class="step"><strong>2. Rechercher</strong><span>Recherche dans toutes les références TDR indexées de PostgreSQL.</span></div>
+<div class="step"><strong>3. Comparer avec l'IA</strong><span>Qwen examine les similitudes et différences de fond.</span></div>
+<div class="step"><strong>4. Conclure</strong><span>Verdict motivé et référence retenue, si pertinente.</span></div>
+</div>
+<form method="post" enctype="multipart/form-data">
+{% csrf_token %}
+<label for="tdr_document">Document TDR à analyser</label>
+<input id="tdr_document" name="tdr_document" type="file" accept=".docx,.pdf" required>
+<p>Formats acceptés : Word (.docx) et PDF (.pdf). La durée dépend du nombre de références indexées et des performances de Qwen.</p>
+<button type="submit">Lancer l'analyse RAG complète</button>
+</form>
+</section>
+</main>
+</body>
+</html>
