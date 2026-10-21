@@ -7,6 +7,7 @@
   <nav class="rail-nav">
     <a class="rail-link active" href="{% url 'detector:dashboard' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span><span>Tableau de bord</span></a>
     <a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="m10 15 2 2 4-4"></path></svg></span><span>Vérifier un TDR</span></a>
+    <a class="rail-link" href="{% url 'detector:tdr_rag_independent' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"></path><circle cx="12" cy="12" r="8"></circle></svg></span><span>Analyse TDR — RAG complet</span></a>
     <a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M8 12h8"></path></svg></span><span>Nouvelle analyse</span></a>
     <a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span><span>Historique</span></a>
     <a class="rail-link" href="{% url 'detector:account_settings' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span><span>Mon compte</span></a>
@@ -15,7 +16,7 @@
   <div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div>
 </aside>
 <main class="main">
-  <div class="ctxbar"><div><h1>Tableau de bord</h1><div class="lede">Vue d'ensemble du registre et de vos vérifications récentes</div></div><div class="actions"><a class="btn" href="{% url 'detector:reception' %}">Vérifier un TDR</a><a class="btn btn-primary" href="{% url 'detector:analyser' %}">Nouvelle analyse</a></div></div>
+  <div class="ctxbar"><div><h1>Tableau de bord</h1><div class="lede">Vue d'ensemble du registre et de vos vérifications récentes</div></div><div class="actions"><a class="btn" href="{% url 'detector:reception' %}">Vérifier un TDR</a><a class="btn" href="{% url 'detector:tdr_rag_independent' %}">Analyse TDR — RAG complet</a><a class="btn btn-primary" href="{% url 'detector:analyser' %}">Nouvelle analyse</a></div></div>
   {% if not has_admin %}
   <section class="panel admin-recovery-banner">
     <div class="panel-body">
