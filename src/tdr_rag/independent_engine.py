@@ -252,7 +252,6 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "recommendation": str(final.get("recommendation", ""))[:2000],
             "references_examined": len(ranked),
             "batches_examined": len(batch_findings),
-            "references_examined": len(ranked),
             "evidence": [
                 {"source": item["reference"], "point": item["findings"], "justification": ""}
                 for item in batch_findings if item["relevant"] and item["reference"]
