@@ -55,6 +55,25 @@
 </div></details>
 {% endfor %}
 </div></section>{% endif %}
+{% if analysis.mode == "duplicate" and result.rag_analysis.retrieval_candidates %}
+<section class="panel national-bar-red">
+<div class="panel-head"><div><h2>Documents consultés par l'analyse</h2><div class="muted" style="font-size:12px;margin-top:4px">Ouvrez les documents pour vérifier les éléments comparés par Qwen. Les documents affichés sont des références examinées, pas nécessairement des études réalisées.</div></div></div>
+<div class="panel-body source-evidence-list">
+{% for candidate in result.rag_analysis.retrieval_candidates %}
+<article class="source-card">
+<div class="source-card-body">
+<strong>{{ candidate.title|default:candidate.filename }}</strong>
+{% if candidate.title and candidate.filename %}<p class="muted" style="margin:4px 0 8px;font-size:12px">{{ candidate.filename }}</p>{% endif %}
+{% if candidate.filename == result.rag_analysis.matched_reference or candidate.title == result.rag_analysis.matched_reference %}
+<span class="status status-alert">Référence retenue par Qwen</span>
+{% endif %}
+{% if candidate.source_id %}<p style="margin:10px 0 0"><a class="btn source-open" href="{% url 'detector:open_reference_document' candidate.source_id %}" target="_blank" rel="noopener">Ouvrir le document original</a></p>{% else %}<p class="muted">Le fichier original n'est pas disponible pour cette référence.</p>{% endif %}
+</div>
+</article>
+{% endfor %}
+</div>
+</section>
+{% endif %}
 {% if analysis.mode == "duplicate" and analysis.decision == "DIFFERENT" %}<section class="panel national-bar-green"><div class="panel-head"><h2>Étape suivante</h2></div><div class="panel-body"><p class="muted">Ce TDR a été jugé différent. Vous pouvez maintenant déposer le rapport d’étude correspondant afin de lancer son contrôle de plagiat.</p><a class="btn btn-primary" href="{% url 'detector:upload_report_for_tdr' analysis.id %}">Déposer le rapport lié à ce TDR</a></div></section>{% endif %}
 </section>
 </div></main></div></body></html>
