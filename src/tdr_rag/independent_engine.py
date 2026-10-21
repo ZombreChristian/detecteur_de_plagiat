@@ -74,6 +74,30 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
         ) from exc
 
 
+def extract_tdr_document(path: Path) -> str:
+    """Extraction autonome du TDR candidat, sans passer par l'ancien moteur."""
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        from pypdf import PdfReader
+        reader = PdfReader(str(path))
+        return "\\n\\n".join(
+            (page.extract_text() or "").strip()
+            for page in reader.pages
+            if (page.extract_text() or "").strip()
+        )
+    if suffix == ".docx":
+        from docx import Document
+        document = Document(str(path))
+        parts = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
+        for table in document.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells]
+                if any(cells):
+                    parts.append(" | ".join(cells))
+        return "\\n\\n".join(parts)
+    raise IndependentTDRError("Format non pris en charge. Utilisez un fichier DOCX ou PDF.")
+
+
 def _excerpt(text: str, limit: int) -> str:
     text = re.sub(r"\n{3,}", "\n\n", (text or "")).strip()
     if len(text) <= limit:
