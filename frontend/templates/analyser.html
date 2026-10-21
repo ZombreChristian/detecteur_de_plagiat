@@ -30,6 +30,7 @@
           {% csrf_token %}
           <div class="field"><label>Type de contrôle</label><select id="analysis-mode" name="mode"><option value="duplicate">Doublon — TDR / objet d'étude</option><option value="plagiarism">Plagiat — rapport d'étude</option></select></div>
           <div class="field"><label>Document à contrôler (.docx ou .pdf)</label><input id="document-input" type="file" name="document" accept=".docx,.pdf" required></div>
+          <div id="tdr-rag-info" class="notice" style="margin:12px 0;padding:12px;border-radius:8px;border:1px solid var(--line,#ddd)"><strong>Analyse RAG avec Qwen3:8B</strong><p class="muted" style="margin:6px 0 0;font-size:13px;line-height:1.5">Le TDR sera comparé aux documents de référence récupérés dans la base. Qwen3 via Ollama produira le verdict final sans seuil de similarité.</p></div>
           <div class="field" id="threshold-field"><label for="threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="threshold" type="range" name="threshold" min="1" max="100" step="1" value="55" style="flex:1"><output id="threshold-value">55 %</output></div><small class="muted">Un score égal ou supérieur à ce seuil sera considéré comme SIMILAIRE.</small></div>
           <button id="submit-button" class="btn btn-primary" type="submit">Lancer la vérification</button>
         </form>
@@ -52,9 +53,11 @@ const mode=document.getElementById('analysis-mode');
 const thresholdField=document.getElementById('threshold-field');
 const threshold=document.getElementById('threshold');
 const thresholdValue=document.getElementById('threshold-value');
+const tdrRagInfo=document.getElementById('tdr-rag-info');
 function updateThreshold(){
   const isDuplicate=mode.value==='duplicate';
   thresholdField.hidden=isDuplicate;
+  tdrRagInfo.hidden=!isDuplicate;
   threshold.disabled=isDuplicate;
   threshold.required=!isDuplicate;
   if(isDuplicate){
@@ -77,9 +80,9 @@ form.addEventListener('submit',function(){
   title.textContent=isDuplicate?'Vérification du TDR en cours':'Contrôle du rapport en cours';
   const stages=isDuplicate?[
     'Lecture du document et extraction du contenu.',
-    'Calcul de la similarité lexicale (TF-IDF).',
-    'Analyse sémantique et recherche des TDR proches.',
-    'Calcul du score hybride et prise de décision.'
+    'Recherche des références déjà indexées dans PostgreSQL.',
+    'Transmission du TDR et des références récupérées à Qwen3.',
+    'Arbitrage contextuel local et génération du verdict expliqué.'
   ]:[
     'Lecture du rapport et extraction du contenu.',
     'Recherche de recouvrements textuels.',
