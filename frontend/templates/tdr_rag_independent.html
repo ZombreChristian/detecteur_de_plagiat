@@ -47,8 +47,8 @@
 <section class="panel national-bar-red">
 <div class="panel-head"><div><div class="engine-kicker muted">Moteur de comparaison documentaire</div><h2>Vérifier si une étude existe déjà</h2></div></div>
 <div class="panel-body">
-<p class="muted">Déposez un TDR au format Word ou PDF. Qwen compare son contenu aux références TDR indexées dans PostgreSQL et explique si un document correspondant, proche ou non pertinent est présent dans le registre.</p>
-<div class="notice"><strong>Comment fonctionne l'analyse ?</strong><p class="muted" style="margin:6px 0 0">La recherche lexicale et sémantique sélectionne les cinq références les plus prometteuses. Ces scores servent uniquement à retrouver des documents ; Qwen examine ensuite leur contenu et formule le verdict. Un TDR présent dans le registre ne prouve pas, à lui seul, que l'étude a été exécutée.</p></div>
+<p class="muted">Déposez un TDR au format Word ou PDF. Qwen compare son contenu aux TDR et rapports d'étude de référence indexés dans PostgreSQL et explique si un document correspondant, proche ou non pertinent est présent dans le registre.</p>
+<div class="notice"><strong>Comment fonctionne l'analyse ?</strong><p class="muted" style="margin:6px 0 0">La recherche lexicale et sémantique sélectionne les cinq références les plus prometteuses. Ces scores servent uniquement à retrouver des documents ; Qwen examine ensuite leur contenu et formule le verdict. Un TDR présent dans le registre ne prouve pas, à lui seul, que l'étude a été exécutée ; un rapport d'étude constitue un document distinct à consulter.</p></div>
 <form id="tdr-analysis-form" method="post" enctype="multipart/form-data">
 {% csrf_token %}
 <label for="tdr_document">Document TDR à analyser</label>
@@ -95,7 +95,7 @@
   const stages = [
     {at:0, pct:5, title:"1/8 — Réception du document…", detail:"Le fichier sélectionné est envoyé au serveur."},
     {at:2, pct:15, title:"2/8 — Extraction du texte…", detail:"Lecture du PDF ou du document Word et récupération du texte exploitable."},
-    {at:5, pct:25, title:"3/8 — Chargement des références…", detail:"Chargement des TDR de référence déjà indexés dans PostgreSQL."},
+    {at:5, pct:25, title:"3/8 — Chargement des références…", detail:"Chargement des TDR et rapports d'étude de référence déjà indexés dans PostgreSQL."},
     {at:10, pct:40, title:"4/8 — Recherche des similarités…", detail:"Classement lexical et sémantique du corpus (30 % lexical, 70 % sémantique)."},
     {at:16, pct:52, title:"5/8 — Sélection des 5 références…", detail:"Les cinq documents les mieux classés sont transmis à l'analyse approfondie."},
     {at:22, pct:72, title:"6/8 — Analyse par Qwen…", detail:"Qwen compare l'objet, les objectifs, les activités, la zone, la méthode et les livrables."},
