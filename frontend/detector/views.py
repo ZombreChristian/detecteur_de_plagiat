@@ -603,6 +603,44 @@ def download_annotated_document(request, pk):
 def analysis_detail(request, pk):
     analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
     result = analysis.result_json or {}
+
+    # Anciennes analyses : masquer les libellés internes de rang que Qwen a parfois
+    # repris dans son texte, sans modifier le résultat enregistré ni les titres des fichiers.
+    rag = result.get("rag_analysis")
+    if isinstance(rag, dict):
+        def clean_reference_labels(value):
+            if not isinstance(value, str):
+                return value
+            value = re.sub(
+                r"(?i)\\b(?:les\\s+)?TDR\\s+des\\s+candidats de recherche\\s+1\\s+et\\s+2\\b",
+                "les documents de référence examinés",
+                value,
+            )
+            value = re.sub(
+                r"(?i)\\bcandidats de recherche\\s+1\\s+et\\s+2\\b",
+                "documents de référence examinés",
+                value,
+            )
+            value = re.sub(
+                r"(?i)\\bTDR\\s+1\\s+et\\s+2\\b",
+                "documents de référence examinés",
+                value,
+            )
+            return value
+
+        for key in ("explanation", "recommendation"):
+            if key in rag:
+                rag[key] = clean_reference_labels(rag[key])
+        for key in ("common_points", "differences", "evidence_from_reference"):
+            if isinstance(rag.get(key), list):
+                rag[key] = [clean_reference_labels(item) for item in rag[key]]
+        if isinstance(rag.get("evidence"), list):
+            for item in rag["evidence"]:
+                if isinstance(item, dict):
+                    for key in ("point", "justification"):
+                        if key in item:
+                            item[key] = clean_reference_labels(item[key])
+
     uploaded_path = result.get("uploaded_path", "")
     return render(request, "analysis_detail.html", {
         "analysis": analysis,
