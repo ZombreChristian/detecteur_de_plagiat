@@ -96,7 +96,7 @@ function attachProgress(form,file,button,isReport){
     const timer=setInterval(function(){
       p=Math.min(p+3+Math.floor(Math.random()*5),96);
       fill.style.width=p+'%';pct.textContent=p+' %';
-      const next=p<25?0:p<52?1:p<80?2:3;
+      const next=Math.min(Math.floor(p/12.5),7);
       if(next!==stage){stage=next;txt.textContent=stages[stage];}
     },450);
     window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
