@@ -19,7 +19,7 @@ OLLAMA_NUM_CTX = max(2048, int(os.getenv("OLLAMA_NUM_CTX", "4096")))
 OLLAMA_NUM_BATCH = min(256, max(32, int(os.getenv("OLLAMA_NUM_BATCH", "128"))))
 # Qwen3 tourne localement avec un contexte souvent limite a 4096 tokens.
 # Borner le prompt evite d'envoyer plusieurs dizaines de milliers de caracteres.
-RAG_REFERENCE_TOP_K = min(3, max(1, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "2"))))
+RAG_REFERENCE_TOP_K = min(3, max(1, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "3"))))
 MAX_CANDIDATE_CHARS = min(6500, max(3000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "5200"))))
 MAX_REFERENCE_CHARS = min(1800, max(900, int(os.getenv("TDR_RAG_REFERENCE_MAX_CHARS", "1200"))))
 MAX_OUTPUT_TOKENS = min(700, max(250, int(os.getenv("TDR_RAG_MAX_OUTPUT_TOKENS", "450"))))
