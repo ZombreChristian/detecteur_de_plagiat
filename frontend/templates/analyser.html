@@ -30,7 +30,7 @@
           {% csrf_token %}
           <div class="field"><label>Type de contrôle</label><select id="analysis-mode" name="mode"><option value="duplicate">Doublon — TDR / objet d'étude</option><option value="plagiarism">Plagiat — rapport d'étude</option></select></div>
           <div class="field"><label>Document à contrôler (.docx ou .pdf)</label><input id="document-input" type="file" name="document" accept=".docx,.pdf" required></div>
-          <div id="tdr-rag-info" class="notice" style="margin:12px 0;padding:12px;border-radius:8px;border:1px solid var(--line,#ddd)"><strong>Analyse RAG avec Qwen3:8B</strong><p class="muted" style="margin:6px 0 0;font-size:13px;line-height:1.5">Le TDR sera comparé aux documents de référence récupérés dans la base. Qwen3 via Ollama produira le verdict final sans seuil de similarité.</p></div>
+          <div id="tdr-rag-info" class="notice" style="margin:12px 0;padding:12px;border-radius:8px;border:1px solid var(--line,#ddd)"><strong>Analyse RAG avec Qwen3:8B</strong><p class="muted" style="margin:6px 0 0;font-size:13px;line-height:1.5">Le TDR sera analysé par le moteur RAG complet : recherche des TDR et rapports de référence, comparaison du contenu par Qwen3 via Ollama, verdict expliqué et accès aux documents justificatifs. Aucun seuil de similarité n'est demandé.</p></div>
           <div class="field" id="threshold-field"><label for="threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="threshold" type="range" name="threshold" min="1" max="100" step="1" value="55" style="flex:1"><output id="threshold-value">55 %</output></div><small class="muted">Un score égal ou supérieur à ce seuil sera considéré comme SIMILAIRE.</small></div>
           <button id="submit-button" class="btn btn-primary" type="submit">Lancer la vérification</button>
         </form>
@@ -79,10 +79,14 @@ form.addEventListener('submit',function(){
   const isDuplicate=mode.value==='duplicate';
   title.textContent=isDuplicate?'Vérification du TDR en cours':'Contrôle du rapport en cours';
   const stages=isDuplicate?[
-    'Lecture du document et extraction du contenu.',
-    'Recherche des références déjà indexées dans PostgreSQL.',
-    'Transmission du TDR et des références récupérées à Qwen3.',
-    'Arbitrage contextuel local et génération du verdict expliqué.'
+    'Réception et extraction du TDR.',
+    'Chargement des TDR et rapports de référence.',
+    'Recherche lexicale et sémantique des documents proches.',
+    'Sélection des références les plus pertinentes.',
+    'Comparaison du contenu par Qwen3 via Ollama.',
+    'Évaluation des objectifs, méthodes, zones et livrables.',
+    'Préparation du verdict et des justifications.',
+    'Enregistrement du résultat et des références consultables.'
   ]:[
     'Lecture du rapport et extraction du contenu.',
     'Recherche de recouvrements textuels.',
