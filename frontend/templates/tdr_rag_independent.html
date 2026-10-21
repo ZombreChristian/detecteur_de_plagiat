@@ -6,24 +6,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TDRDOC-SCAN — Analyse TDR RAG indépendante</title>
 <style>
-:root{color-scheme:light;--ink:#17212b;--muted:#5e6a75;--line:#dce3e8;--paper:#fff;--bg:#f3f6f8;--accent:#167347}
+:root{color-scheme:light;--ink:#17212b;--muted:#5e6a75;--line:#dce3e8;--paper:#fff;--bg:#f3f6f8;--accent:#2767a8;--accent-soft:#edf4fb}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
 .flag{height:7px;background:linear-gradient(to bottom,#e32636 0 33.33%,#f5d442 33.33% 66.66%,#16834a 66.66%)}header{background:var(--paper);border-bottom:1px solid var(--line);padding:20px clamp(20px,5vw,72px);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .brand{font-weight:800;letter-spacing:.04em}.tag{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 a{color:inherit}main{max-width:920px;margin:42px auto;padding:0 20px}.panel{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:clamp(22px,4vw,42px);box-shadow:0 10px 32px #17212b0b}
 h1{font-size:clamp(1.7rem,4vw,2.4rem);line-height:1.15;margin:8px 0 14px}p{color:var(--muted)}.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:24px 0}.step{border:1px solid var(--line);border-radius:12px;padding:14px}.step strong{display:block;margin-bottom:4px}.step span{color:var(--muted);font-size:.9rem}
-label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:block;width:100%;padding:18px;border:1px dashed #aab8c2;border-radius:10px;background:#fbfcfd}button{margin-top:20px;border:0;border-radius:9px;padding:13px 20px;background:#17212b;color:#fff;font-size:1rem;font-weight:700;cursor:pointer}button:hover{background:#334653}.note{border-left:4px solid var(--accent);background:#edf7f1;padding:13px 16px;border-radius:0 8px 8px 0;font-size:.93rem;color:#254c39}.messages{margin-bottom:18px}.message{padding:12px 14px;background:#fff4e5;border:1px solid #eed4ad;border-radius:8px;margin:8px 0}.back{color:var(--muted);text-decoration:none}.back:hover{text-decoration:underline}
+label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:block;width:100%;padding:18px;border:1px dashed #aab8c2;border-radius:10px;background:#fbfcfd}button{margin-top:20px;border:0;border-radius:9px;padding:13px 20px;background:#17212b;color:#fff;font-size:1rem;font-weight:700;cursor:pointer}button:hover{background:#334653}button:disabled{opacity:.65;cursor:wait}.note{border-left:4px solid var(--accent);background:var(--accent-soft);padding:13px 16px;border-radius:0 8px 8px 0;font-size:.93rem;color:#243f5d}.messages{margin-bottom:18px}.message{padding:12px 14px;background:#fff4e5;border:1px solid #eed4ad;border-radius:8px;margin:8px 0}.back{color:var(--muted);text-decoration:none}.back:hover{text-decoration:underline}
 .progress-panel{display:none;margin-top:24px;padding:20px;border:1px solid var(--line);border-radius:12px;background:#fbfcfd}
 .progress-panel.active{display:block}.progress-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;font-weight:700}
 .progress-track{height:12px;overflow:hidden;background:#e5eaee;border-radius:999px}
-.progress-fill{height:100%;width:3%;background:#16834a;border-radius:999px;transition:width .5s ease}
+.progress-fill{height:100%;width:3%;background:var(--accent);border-radius:999px;transition:width .5s ease}
+.progress-fill.waiting{background:linear-gradient(90deg,#2767a8 0%,#8db6df 50%,#2767a8 100%);background-size:200% 100%;animation:progress-shimmer 1.6s linear infinite}
+@keyframes progress-shimmer{from{background-position:100% 0}to{background-position:-100% 0}}
 .progress-status{margin:12px 0 4px;color:var(--ink);font-weight:650}
 .progress-detail{font-size:.9rem;color:var(--muted);margin:0}
+.progress-note{font-size:.8rem;color:var(--muted);margin-top:8px}
 .progress-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:18px}
 .progress-step{padding:10px 8px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:.82rem;text-align:center}
-.progress-step.current{border-color:#16834a;background:#edf7f1;color:#20563b;font-weight:700}
-.progress-step.done{border-color:#a9d4bc;color:#20563b}
+.progress-step.current{border-color:var(--accent);background:var(--accent-soft);color:#214f7d;font-weight:700}
+.progress-step.done{border-color:#b9cfe4;color:#214f7d;background:#f7faff}
+.progress-error{display:none;margin-top:12px;padding:12px;border:1px solid #e8c4c4;background:#fff6f6;color:#842c2c;border-radius:8px}
 @media(max-width:600px){.progress-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.progress-fill.waiting{animation:none}.progress-fill{transition:none}}
 </style>
 </head>
 <body>
@@ -35,7 +40,7 @@ label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:b
 <div class="tag">Moteur RAG indépendant</div>
 <h1>Vérifier si une étude existe déjà</h1>
 <p>Déposez un TDR. L'IA le compare aux études TDR déjà indexées dans la base documentaire, puis explique sa conclusion.</p>
-<div class="note"><strong>Pas de nombre fixe de références.</strong> Le moteur classe toutes les références avec une recherche lexicale et sémantique, puis Qwen analyse en profondeur les 3 documents les plus pertinents pour établir un seul verdict global. Les documents téléversés ne sont pas ajoutés automatiquement à l'index.</div>
+<div class="note"><strong>Comment fonctionne l'analyse ?</strong> Le moteur classe les références indexées avec une recherche lexicale (30 %) et sémantique (70 %), puis Qwen analyse en profondeur les 3 documents les plus pertinents pour établir un seul verdict global. Les documents téléversés ne sont pas ajoutés automatiquement à l'index.</div>
 <div class="steps">
 <div class="step"><strong>1. Extraire</strong><span>Lecture du contenu du TDR Word ou PDF.</span></div>
 <div class="step"><strong>2. Rechercher</strong><span>Classement lexical et sémantique de toute la base, puis sélection des 3 meilleurs candidats.</span></div>
@@ -51,9 +56,10 @@ label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:b
 </form>
 <section id="progress-panel" class="progress-panel" role="status" aria-live="polite">
   <div class="progress-heading"><span>Analyse en cours</span><span id="elapsed-time">00:00</span></div>
-  <div class="progress-track" role="progressbar" aria-label="Avancement indicatif de l'analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow="3"><div id="progress-fill" class="progress-fill"></div></div>
+  <div class="progress-track" role="progressbar" aria-label="Progression indicative de l'analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow="3"><div id="progress-fill" class="progress-fill waiting"></div></div>
   <p id="progress-status" class="progress-status">Préparation du document…</p>
-  <p id="progress-detail" class="progress-detail">Les 8 étapes du traitement sont listées ci-dessous. Leur avancement est actuellement estimé et n'est pas encore relié aux événements réels du serveur.</p>
+  <p id="progress-detail" class="progress-detail">Le traitement peut prendre plusieurs minutes selon la taille de la base et le temps de réponse de Qwen.</p>
+  <p class="progress-note">Les étapes affichées donnent une estimation visuelle basée sur le temps écoulé. Le serveur ne transmet pas encore le pourcentage réel de chaque opération.</p>
   <div class="progress-steps">
     <div class="progress-step current" data-step="0">1. Réception du document</div>
     <div class="progress-step" data-step="1">2. Extraction du texte</div>
@@ -61,9 +67,10 @@ label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:b
     <div class="progress-step" data-step="3">4. Recherche des similarités</div>
     <div class="progress-step" data-step="4">5. Sélection des 3 références</div>
     <div class="progress-step" data-step="5">6. Analyse par Qwen</div>
-    <div class="progress-step" data-step="6">7. Détermination du verdict</div>
+    <div class="progress-step" data-step="6">7. Préparation du verdict</div>
     <div class="progress-step" data-step="7">8. Enregistrement du résultat</div>
   </div>
+  <div id="progress-error" class="progress-error" role="alert"></div>
 </section>
 <script>
 (() => {
@@ -72,50 +79,99 @@ label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:b
   const button = document.getElementById("analyze-button");
   const panel = document.getElementById("progress-panel");
   const fill = document.getElementById("progress-fill");
+  const bar = panel.querySelector('[role="progressbar"]');
   const status = document.getElementById("progress-status");
   const detail = document.getElementById("progress-detail");
   const elapsed = document.getElementById("elapsed-time");
+  const errorBox = document.getElementById("progress-error");
   const steps = Array.from(document.querySelectorAll(".progress-step"));
   let startedAt = 0;
   let timer = null;
+  let currentIndex = 0;
   const stages = [
-    {at:0, pct:5, title:"1/8 — Réception du document…", detail:"Le serveur reçoit le fichier DOCX ou PDF."},
-    {at:2, pct:15, title:"2/8 — Extraction du texte…", detail:"Le texte et les éléments lisibles du TDR sont extraits."},
-    {at:5, pct:25, title:"3/8 — Chargement des références…", detail:"Chargement des TDR déjà indexés depuis PostgreSQL."},
-    {at:10, pct:40, title:"4/8 — Recherche des similarités…", detail:"Classement de toute la base : 30 % lexical et 70 % sémantique."},
-    {at:16, pct:50, title:"5/8 — Sélection des 3 références…", detail:"Les trois TDR les plus pertinents sont retenus pour l'analyse approfondie."},
-    {at:22, pct:70, title:"6/8 — Analyse par Qwen…", detail:"Qwen compare le TDR déposé aux trois références sélectionnées."},
-    {at:45, pct:85, title:"7/8 — Détermination du verdict…", detail:"Une seule conclusion globale est préparée parmi les quatre cas prévus."},
-    {at:60, pct:95, title:"8/8 — Enregistrement du résultat…", detail:"Le résultat est enregistré dans l'historique puis affiché."}
+    {at:0, pct:5, title:"1/8 — Réception du document…", detail:"Le fichier sélectionné est envoyé au serveur."},
+    {at:2, pct:15, title:"2/8 — Extraction du texte…", detail:"Lecture du PDF ou du document Word et récupération du texte exploitable."},
+    {at:5, pct:25, title:"3/8 — Chargement des références…", detail:"Chargement des TDR de référence déjà indexés dans PostgreSQL."},
+    {at:10, pct:40, title:"4/8 — Recherche des similarités…", detail:"Classement lexical et sémantique du corpus (30 % lexical, 70 % sémantique)."},
+    {at:16, pct:52, title:"5/8 — Sélection des 3 références…", detail:"Les trois documents les mieux classés sont transmis à l'analyse approfondie."},
+    {at:22, pct:72, title:"6/8 — Analyse par Qwen…", detail:"Qwen compare l'objet, les objectifs, les activités, la zone, la méthode et les livrables."},
+    {at:45, pct:88, title:"7/8 — Préparation du verdict…", detail:"Le moteur prépare une conclusion globale et ses explications."},
+    {at:60, pct:95, title:"8/8 — Finalisation du résultat…", detail:"Le résultat est enregistré dans l'historique."}
   ];
+  function renderStage(index) {
+    currentIndex = Math.max(currentIndex, Math.min(index, stages.length - 1));
+    const stage = stages[currentIndex];
+    fill.style.width = stage.pct + "%";
+    bar.setAttribute("aria-valuenow", String(stage.pct));
+    status.textContent = stage.title;
+    detail.textContent = stage.detail;
+    steps.forEach((node, i) => {
+      node.classList.toggle("current", i === currentIndex);
+      node.classList.toggle("done", i < currentIndex);
+    });
+  }
   function tick() {
     const seconds = Math.floor((Date.now() - startedAt) / 1000);
     elapsed.textContent = String(Math.floor(seconds / 60)).padStart(2,"0") + ":" + String(seconds % 60).padStart(2,"0");
     let index = 0;
     stages.forEach((stage, i) => { if (seconds >= stage.at) index = i; });
-    const stage = stages[index];
-    fill.style.width = stage.pct + "%";
-    panel.querySelector('[role="progressbar"]').setAttribute("aria-valuenow", String(stage.pct));
-    status.textContent = stage.title;
-    detail.textContent = stage.detail + " Progression indicative : les étapes sont affichées selon le temps écoulé, car le serveur ne transmet pas encore leur état réel.";
-    steps.forEach((node, i) => {
-      node.classList.toggle("current", i === index);
-      node.classList.toggle("done", i < index);
-    });
+    renderStage(index);
   }
-  form.addEventListener("submit", (event) => {
-    if (!file.files || !file.files.length) return;
+  form.addEventListener("submit", async (event) => {
+    if (!file.files || !file.files.length || button.disabled) return;
     event.preventDefault();
+    const formData = new FormData(form);
     if (timer) clearInterval(timer);
     panel.classList.add("active");
+    errorBox.style.display = "none";
     button.disabled = true;
     button.textContent = "Analyse en cours…";
     file.disabled = true;
     startedAt = Date.now();
+    currentIndex = 0;
     tick();
     timer = setInterval(tick, 1000);
-    // Soumission HTML native après affichage du panneau, sans bloquer le navigateur.
-    window.setTimeout(() => HTMLFormElement.prototype.submit.call(form), 50);
+    panel.scrollIntoView({behavior:"smooth", block:"nearest"});
+    try {
+      const response = await fetch(form.action || window.location.href, {
+        method: "POST",
+        body: formData,
+        credentials: "same-origin",
+        headers: {"X-Requested-With":"XMLHttpRequest"}
+      });
+      const html = await response.text();
+      if (!response.ok) throw new Error("Le serveur a répondu avec le statut " + response.status + ".");
+      if (response.redirected && response.url && new URL(response.url).pathname !== window.location.pathname) {
+        if (timer) clearInterval(timer);
+        elapsed.textContent = elapsed.textContent + " · terminé";
+        fill.classList.remove("waiting");
+        fill.style.width = "100%";
+        bar.setAttribute("aria-valuenow", "100");
+        status.textContent = "Analyse terminée — ouverture des résultats…";
+        detail.textContent = "Le verdict a été produit et enregistré.";
+        steps.forEach(node => { node.classList.remove("current"); node.classList.add("done"); });
+        window.setTimeout(() => { window.location.assign(response.url); }, 450);
+        return;
+      }
+      // Si Django renvoie la page avec un message d'erreur ou de validation,
+      // on affiche sa réponse au lieu de laisser le formulaire bloqué.
+      if (timer) clearInterval(timer);
+      document.open();
+      document.write(html);
+      document.close();
+    } catch (error) {
+      if (timer) clearInterval(timer);
+      fill.classList.remove("waiting");
+      fill.style.width = "100%";
+      bar.setAttribute("aria-valuenow", "100");
+      status.textContent = "L'analyse n'a pas pu être terminée.";
+      detail.textContent = "Vérifiez la connexion au serveur puis réessayez.";
+      errorBox.textContent = error.message || "Une erreur inattendue est survenue.";
+      errorBox.style.display = "block";
+      button.disabled = false;
+      button.textContent = "Réessayer l'analyse";
+      file.disabled = false;
+    }
   });
 })();
 </script>
