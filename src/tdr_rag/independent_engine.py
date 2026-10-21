@@ -24,11 +24,12 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
 OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
-# Lot de traitement technique seulement : toutes les références sont parcourues.
-BATCH_SIZE = 2
-REFERENCE_CHARS = 1400
-CANDIDATE_CHARS = 6500
-OUTPUT_TOKENS = 400
+# Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
+# uniquement sur les trois références les mieux classées.
+RAG_TOP_K = 3
+REFERENCE_CHARS = 3200
+CANDIDATE_CHARS = 9000
+OUTPUT_TOKENS = 1200
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
@@ -152,25 +153,41 @@ def _load_all_indexed_tdr():
 
 
 def _rank_all_references(candidate: str, rows):
+    """Classe tout le corpus avec TF-IDF lexical (30 %) et cosinus sémantique (70 %)."""
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
     from src.similarity.model_manager import get_model
+
+    reference_texts = [
+        (row.cleaned_text or row.extracted_text or row.title or "").strip()
+        for row in rows
+    ]
+    vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True)
+    try:
+        matrix = vectorizer.fit_transform([candidate] + reference_texts)
+        lexical_scores = cosine_similarity(matrix[0:1], matrix[1:]).ravel()
+    except ValueError:
+        lexical_scores = np.zeros(len(rows), dtype=np.float32)
+
     model = get_model()
     candidate_vector = model.encode(
         [candidate], normalize_embeddings=True, show_progress_bar=False,
         convert_to_numpy=True,
     )[0]
     ranked = []
-    for row in rows:
+    for index, row in enumerate(rows):
         vector = np.asarray(row.embedding, dtype=np.float32)
         norm = float(np.linalg.norm(vector))
-        if not norm:
-            continue
-        score = float(np.dot(vector / norm, candidate_vector))
-        ranked.append((score, row))
-    ranked.sort(key=lambda pair: pair[0], reverse=True)
+        semantic = float(np.dot(vector / norm, candidate_vector)) if norm else 0.0
+        semantic = max(0.0, min(1.0, semantic))
+        lexical = max(0.0, min(1.0, float(lexical_scores[index])))
+        hybrid = 0.30 * lexical + 0.70 * semantic
+        ranked.append((hybrid, lexical, semantic, row))
+    ranked.sort(key=lambda item: item[0], reverse=True)
     return ranked
 
-
 def analyze_tdr_independently(candidate_text: str) -> dict:
+    """Classe le corpus, puis demande à Qwen un seul verdict fondé sur les 3 meilleurs TDR."""
     candidate = (candidate_text or "").strip()
     if len(candidate) < 80:
         raise IndependentTDRError("Le TDR contient trop peu de texte exploitable.")
@@ -181,92 +198,64 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "Préparez l'index avant de lancer l'analyse."
         )
 
+    # Le classement lexical + sémantique parcourt le corpus, mais ne sollicite pas
+    # le LLM pour chaque référence. Seuls les trois meilleurs candidats passent au RAG.
     ranked = _rank_all_references(candidate, rows)
     if not ranked:
         raise IndependentTDRError("Aucune référence TDR exploitable n'a été trouvée.")
-
-    # Chaque document indexé est analysé, en lots de taille technique limitée.
-    # Le nombre total de références n'est pas prédéfini ni plafonné.
-    system_batch = (
-        "Tu es un analyste expert des termes de référence. Compare le TDR candidat "
-        "aux références fournies. Les scores de recherche ne sont pas des verdicts. "
-        "Évalue l'identité réelle de l'étude : objet, problème, objectifs, activités, "
-        "population, zone, période, méthode et livrables. N'invente rien. "
-        "Réponds uniquement en JSON avec les clés: relevant (bool), findings (string), "
-        "reference (string), similarities (array de chaînes), differences (array de chaînes)."
-    )
-    batch_findings = []
+    selected = ranked[:RAG_TOP_K]
     candidate_excerpt = _excerpt(candidate, CANDIDATE_CHARS)
-    for start in range(0, len(ranked), BATCH_SIZE):
-        batch = ranked[start:start + BATCH_SIZE]
-        reference_blocks = []
-        for score, row in batch:
-            reference_blocks.append(
-                f"RÉFÉRENCE: {row.title}\nFICHIER: {Path(row.file_path).name}\n"
-                f"PERTINENCE DE RECHERCHE (indicative): {score:.3f}\n"
-                f"CONTENU:\n{_excerpt(row.extracted_text or row.cleaned_text, REFERENCE_CHARS)}"
-            )
-        analysis = _ollama_json(
-            system_batch,
-            "TDR CANDIDAT:\n" + candidate_excerpt + "\n\n"
-            + "\n\n--- RÉFÉRENCE SUIVANTE ---\n\n".join(reference_blocks),
-            tokens=700,
+
+    reference_blocks = []
+    for rank, (hybrid, lexical, semantic, row) in enumerate(selected, start=1):
+        reference_blocks.append(
+            f"CANDIDAT DE RECHERCHE {rank}\n"
+            f"TITRE: {row.title}\nFICHIER: {Path(row.file_path).name}\n"
+            f"SCORES DE RÉCUPÉRATION (indicatifs seulement): lexical={lexical:.3f}, "
+            f"sémantique={semantic:.3f}, combiné={hybrid:.3f}\n"
+            f"CONTENU DU TDR DE RÉFÉRENCE:\n"
+            f"{_excerpt(row.extracted_text or row.cleaned_text, REFERENCE_CHARS)}"
         )
-        batch_findings.append({
-            "reference": str(analysis.get("reference", ""))[:300],
-            "relevant": bool(analysis.get("relevant", False)),
-            "findings": str(analysis.get("findings", ""))[:900],
-            "similarities": [str(x)[:300] for x in analysis.get("similarities", [])[:6]],
-            "differences": [str(x)[:300] for x in analysis.get("differences", [])[:6]],
-        })
 
-    # Réduction hiérarchique des résultats pour garder le contexte borné,
-    # sans supprimer de lots ni plafonner le nombre de documents comparés.
-    reduction_system = (
-        "Synthétise fidèlement les constats fournis sur des comparaisons de TDR. "
-        "Conserve les noms exacts des références, les similitudes substantielles, "
-        "les différences de zone et les incertitudes. N'émets pas le verdict final. "
-        "Réponds en JSON avec une clé summary contenant une synthèse concise."
-    )
-    summaries = [json.dumps(item, ensure_ascii=False) for item in batch_findings]
-    while len(summaries) > 6:
-        reduced = []
-        for pos in range(0, len(summaries), 6):
-            group = summaries[pos:pos + 6]
-            summary = _ollama_json(
-                reduction_system,
-                "Synthétise ces constats sans inventer et conserve les noms de références :\n"
-                + "\n\n".join(group),
-                tokens=600,
-            )
-            reduced.append(str(summary.get("summary", ""))[:1800])
-        summaries = reduced
-
-    final_system = (
-        "Tu es l'arbitre final d'une vérification de TDR. Les résultats fournis "
-        "synthétisent les comparaisons de toutes les références indexées. Décide selon "
-        "les preuves, pas selon les scores. CAS_1 si même étude ou quasi-identique; "
-        "CAS_2 si correspondance partielle substantielle mais différences importantes; "
-        "CAS_3 si objectifs/étude comparables mais zone géographique différente; "
-        "CAS_4 si aucune référence réellement pertinente. Si les preuves sont ambiguës, "
-        "ne prétends pas à une certitude et explique les limites dans recommendation. "
-        "Réponds uniquement en JSON: case_id, decision, explanation, matched_reference, "
-        "confidence, common_points (array), differences (array), recommendation."
+    system_prompt = (
+        "Tu es un expert chargé de déterminer si une étude correspondant au TDR "
+        "candidat a déjà été réalisée. Trois références ont été sélectionnées par "
+        "recherche lexicale et sémantique dans la base. Analyse réellement le contenu "
+        "des trois documents, leurs objectifs, objet, activités, zone, population, "
+        "période, méthode et livrables. Les scores ne sont PAS des preuves ni des verdicts. "
+        "Ne conclus pas qu'une étude existe simplement parce qu'un document est classé "
+        "premier. Choisis un seul verdict final parmi : "
+        "CAS_1_CORRESPONDANCE_FORTE (même étude ou quasi-identique), "
+        "CAS_2_CORRESPONDANCE_PARTIELLE (recouvrement substantiel mais différence importante), "
+        "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE (étude comparable mais zone géographique différente), "
+        "CAS_4_AUCUNE_ETUDE_PERTINENTE (aucune des références ne démontre une étude pertinente). "
+        "Si aucune des trois références n'est réellement pertinente, choisis CAS_4. "
+        "N'invente aucun fait. Ne donne PAS trois verdicts et ne présente PAS les trois "
+        "documents comme trois résultats. Rends uniquement le verdict global et, si une "
+        "référence soutient ce verdict, son nom exact. Réponds uniquement avec un objet "
+        "JSON valide ayant les clés case_id, decision, explanation, matched_reference, "
+        "confidence, common_points (tableau), differences (tableau), recommendation."
     )
     final = _ollama_json(
-        final_system,
-        "TDR CANDIDAT:\n" + candidate_excerpt + "\n\n"
-        "SYNTHÈSE DES COMPARAISONS AVEC TOUTES LES RÉFÉRENCES INDEXÉES:\n"
-        + "\n\n".join(summaries),
-        tokens=1000,
+        system_prompt,
+        "TDR CANDIDAT À ÉVALUER:\n" + candidate_excerpt
+        + "\n\nLES TROIS RÉFÉRENCES À EXAMINER AVANT DE CONCLURE:\n"
+        + "\n\n--- DOCUMENT SUIVANT ---\n\n".join(reference_blocks),
+        tokens=1200,
     )
+
     case_id = str(final.get("case_id", "CAS_4_AUCUNE_ETUDE_PERTINENTE"))
     if case_id not in CASES:
         case_id = "CAS_4_AUCUNE_ETUDE_PERTINENTE"
     reference_name = str(final.get("matched_reference", "")).strip()
-    allowed_names = {Path(row.file_path).name for _, row in ranked} | {row.title for _, row in ranked}
+    allowed_names = {
+        name
+        for _, _, _, row in selected
+        for name in (Path(row.file_path).name, row.title)
+    }
     if reference_name not in allowed_names or case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
         reference_name = ""
+
     case_titles = {
         "CAS_1_CORRESPONDANCE_FORTE": "Correspondance forte — étude probablement déjà réalisée",
         "CAS_2_CORRESPONDANCE_PARTIELLE": "Correspondance partielle — vérification recommandée",
@@ -274,10 +263,18 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "CAS_4_AUCUNE_ETUDE_PERTINENTE": "Aucune étude pertinente trouvée dans la base",
     }
     matched_row = next(
-        (row for _, row in ranked
+        (row for _, _, _, row in selected
          if reference_name and reference_name in {Path(row.file_path).name, row.title}),
         None,
     )
+    evidence = []
+    if matched_row and case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
+        evidence.append({
+            "source": reference_name,
+            "point": str(final.get("explanation", ""))[:900],
+            "justification": "Référence retenue après examen du contenu par le RAG.",
+        })
+
     return {
         "mode": "tdr_rag_independent",
         "decision_provider": "independent_rag",
@@ -293,20 +290,25 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "common_points": [str(x)[:500] for x in final.get("common_points", [])[:10]],
             "differences": [str(x)[:500] for x in final.get("differences", [])[:10]],
             "recommendation": str(final.get("recommendation", ""))[:2000],
-            "references_examined": len(ranked),
-            "batches_examined": len(batch_findings),
-            "evidence": [
-                {"source": item["reference"], "point": item["findings"], "justification": ""}
-                for item in batch_findings if item["relevant"] and item["reference"]
-            ][:10],
-            "batch_findings": batch_findings,
+            "references_examined": len(selected),
+            "corpus_references_ranked": len(ranked),
+            "batches_examined": 1,
+            "evidence": evidence,
+            # Pas de liste des trois candidats comme trois verdicts : un seul verdict global.
+            "batch_findings": [],
         },
         "best_source_id": matched_row.id if matched_row else None,
         "best_source": reference_name or None,
         "sources": [
-            {"source_id": row.id, "source": Path(row.file_path).name, "title": row.title, "retrieval_score": round(score, 4)}
-            for score, row in ranked if reference_name and (Path(row.file_path).name == reference_name or row.title == reference_name)
-        ],
+            {
+                "source_id": matched_row.id,
+                "source": Path(matched_row.file_path).name,
+                "title": matched_row.title,
+                "retrieval_score": round(
+                    next(score for score, _, _, row in selected if row.id == matched_row.id), 4
+                ),
+            }
+        ] if matched_row else [],
         "tfidf_score": None,
         "semantic_score": None,
         "hybrid_score": None,
