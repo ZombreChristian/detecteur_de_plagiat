@@ -16,9 +16,9 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 OLLAMA_TIMEOUT = max(300.0, float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "300")))
 # Qwen3 tourne localement avec un contexte souvent limite a 4096 tokens.
 # Borner le prompt evite d'envoyer plusieurs dizaines de milliers de caracteres.
-RAG_REFERENCE_TOP_K = min(3, max(1, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "3"))))
-MAX_CANDIDATE_CHARS = min(6500, max(3000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "6500"))))
-MAX_REFERENCE_CHARS = min(1600, max(1500, int(os.getenv("TDR_RAG_REFERENCE_MAX_CHARS", "1600"))))
+RAG_REFERENCE_TOP_K = min(5, max(1, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "4"))))
+MAX_CANDIDATE_CHARS = min(9000, max(3000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "8000"))))
+MAX_REFERENCE_CHARS = min(3000, max(1200, int(os.getenv("TDR_RAG_REFERENCE_MAX_CHARS", "2400"))))
 
 
 class OllamaRAGError(RuntimeError):
@@ -55,6 +55,7 @@ case_id (une des quatre valeurs exactes ci-dessus),
 decision (une des valeurs exactes SIMILAIRE, SIMILARITÉ PARTIELLE, DIFFERENT, À EXAMINER),
 confidence (FORTE, MOYENNE ou FAIBLE),
 case_title (titre court en français),
+matched_reference (nom exact d'une référence pertinente parmi celles fournies, ou chaîne vide si aucune ne correspond),
 explanation (explication claire en français, 2 à 5 phrases),
 common_points (tableau de chaînes),
 differences (tableau de chaînes),
@@ -85,6 +86,48 @@ def _response_json(content):
         raise OllamaRAGError("Qwen3 n'a pas renvoyé de résultat JSON exploitable.")
 
 
+def _reference_excerpt(candidate_text, source_text, limit):
+    """Sélectionne des paragraphes utiles au TDR sans tronquer uniquement le début."""
+    source_text = (source_text or "").strip()
+    if len(source_text) <= limit:
+        return source_text
+
+    candidate_terms = {
+        term for term in re.findall(r"[\wÀ-ÿ]{4,}", (candidate_text or "").casefold())
+        if term not in {
+            "dans", "pour", "avec", "cette", "étude", "etude", "objectif",
+            "objectifs", "résultats", "resultats", "termes", "référence",
+            "reference", "projet", "ainsi", "entre", "leur", "leurs", "être",
+            "etre", "plus", "tout", "tous", "comme", "afin", "selon",
+        }
+    }
+    blocks = [block.strip() for block in re.split(r"\n{2,}|(?<=[.!?])\s+(?=[A-ZÀ-Ÿ])", source_text) if block.strip()]
+    if not blocks:
+        return source_text[:limit]
+
+    ranked_blocks = []
+    for index, block in enumerate(blocks):
+        terms = set(re.findall(r"[\wÀ-ÿ]{4,}", block.casefold()))
+        overlap = len(candidate_terms & terms)
+        # Favoriser les paragraphes de taille raisonnable et les premières sections,
+        # sans supposer que le début du document contient toutes les informations utiles.
+        score = overlap / max(1, len(terms) ** 0.5) + (0.15 if index < 3 else 0)
+        ranked_blocks.append((score, index, block))
+
+    selected = []
+    used = 0
+    for _, index, block in sorted(ranked_blocks, key=lambda item: (item[0], -item[1]), reverse=True):
+        remaining = limit - used
+        if remaining <= 0:
+            break
+        snippet = block if len(block) <= remaining else block[:remaining]
+        if snippet:
+            selected.append((index, snippet))
+            used += len(snippet) + 2
+    selected.sort(key=lambda item: item[0])
+    return "\n\n".join(block for _, block in selected)[:limit]
+
+
 def analyze_tdr_with_rag(candidate_text, ranked_references):
     """Arbitre un TDR avec Qwen3 à partir des références récupérées par le moteur."""
     references = []
@@ -102,7 +145,7 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
                 "semantic": item.get("semantic_score"),
                 "hybrid": item.get("hybrid_score"),
             },
-            "text": source_text[:MAX_REFERENCE_CHARS],
+            "text": _reference_excerpt(candidate_text, source_text, MAX_REFERENCE_CHARS),
         })
 
     if not references:
@@ -182,6 +225,26 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
     for key in ("case_title", "explanation", "recommendation", "confidence"):
         if not isinstance(result.get(key), str):
             result[key] = ""
+    valid_sources = {ref["source"] for ref in references}
+    matched_reference = result.get("matched_reference")
+    if not isinstance(matched_reference, str) or matched_reference not in valid_sources:
+        matched_reference = ""
+    result["matched_reference"] = matched_reference
+
+    # Ne conserver que les preuves rattachées à une source effectivement fournie à Qwen.
+    validated_evidence = []
+    for item in result["evidence"]:
+        if not isinstance(item, dict):
+            continue
+        source_name = item.get("source")
+        if source_name not in valid_sources:
+            continue
+        validated_evidence.append({
+            "source": source_name,
+            "point": str(item.get("point") or "")[:300],
+            "justification": str(item.get("justification") or "")[:700],
+        })
+    result["evidence"] = validated_evidence
     result["model"] = OLLAMA_MODEL
     result["provider"] = "ollama"
     result["references_used"] = [ref["source"] for ref in references]
