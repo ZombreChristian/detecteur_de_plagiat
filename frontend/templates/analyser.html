@@ -5,7 +5,10 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TDRDOC-SCAN — Nouvelle analyse</title>
 <link rel="stylesheet" href="{% static 'css/app.css' %}" /><link rel="stylesheet" href="{% static 'css/institutional.css' %}">
-<script src="{% static 'js/theme.js' %}"></script></head>
+<script src="{% static 'js/theme.js' %}"></script><style>
+#threshold-field[hidden] { display: none !important; }
+</style>
+</head>
 <body>
 <div class="console">
 <aside class="rail">
@@ -30,7 +33,7 @@
           {% csrf_token %}
           <div class="field"><label>Type de contrôle</label><select id="analysis-mode" name="mode"><option value="duplicate">Doublon — TDR / objet d'étude</option><option value="plagiarism">Plagiat — rapport d'étude</option></select></div>
           <div class="field"><label>Document à contrôler (.docx ou .pdf)</label><input id="document-input" type="file" name="document" accept=".docx,.pdf" required></div>
-          <div class="field" id="threshold-field"><label for="threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="threshold" type="range" name="threshold" min="1" max="100" step="1" value="55" style="flex:1"><output id="threshold-value">55 %</output></div><small class="muted">Un score égal ou supérieur à ce seuil sera considéré comme SIMILAIRE.</small></div>
+          {% if request.POST.mode == 'plagiarism' %}<div class="field" id="threshold-field"><label for="threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="threshold" type="range" name="threshold" min="1" max="100" step="1" value="55" style="flex:1"><output id="threshold-value">55 %</output></div><small class="muted">Un score égal ou supérieur à ce seuil sera considéré comme SIMILAIRE.</small></div>{% else %}<div class="field" id="threshold-field" hidden><label for="threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="threshold" type="range" name="threshold" min="1" max="100" step="1" value="55" style="flex:1"><output id="threshold-value">55 %</output></div><small class="muted">Un score égal ou supérieur à ce seuil sera considéré comme SIMILAIRE.</small></div>{% endif %}
           <button id="submit-button" class="btn btn-primary" type="submit">Lancer la vérification</button>
         </form>
       </div>
