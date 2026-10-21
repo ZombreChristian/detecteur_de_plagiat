@@ -1063,3 +1063,70 @@ def administration_utilisateur(request, pk):
     current_group = target.groups.first()
     return render(request, "administration_utilisateur.html", {"target_user": target, "profile_form": form, "groups": groups, "current_group": current_group})
 
+
+
+@login_required
+def tdr_rag_independent(request):
+    """Page indépendante dédiée à l'analyse RAG complète des TDR."""
+    if not _require_permission(
+        request, "can_verify_tdr",
+        "Votre profil ne dispose pas de l'accès à la vérification des TDR."
+    ):
+        return redirect("detector:dashboard")
+
+    if request.method != "POST":
+        return render(request, "tdr_rag_independent.html")
+
+    uploaded = request.FILES.get("tdr_document") or request.FILES.get("document")
+    if not _validate_document(uploaded):
+        messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
+        return render(request, "tdr_rag_independent.html")
+
+    uploaded_path = _save_uploaded_document(uploaded)
+    try:
+        uploaded.seek(0)
+        response = requests.post(
+            f"{settings.FASTAPI_URL}/api/tdr-rag/analyze",
+            files={"file": (
+                uploaded.name, uploaded.file,
+                uploaded.content_type or _document_content_type(uploaded)
+            )},
+            timeout=1800,
+        )
+        response.raise_for_status()
+        result = response.json()
+        result["uploaded_path"] = uploaded_path
+        result["duration_ms"] = None
+        analysis = Analysis.objects.create(
+            user=request.user,
+            document_name=uploaded.name,
+            mode="duplicate",
+            decision=result.get("decision", ""),
+            hybrid_score=None,
+            semantic_score=None,
+            tfidf_score=None,
+            novelty_score=None,
+            result_json=result,
+            status="success",
+        )
+        messages.success(
+            request,
+            "Analyse RAG indépendante terminée. Toutes les références TDR indexées ont été examinées."
+        )
+        return redirect("detector:analysis_detail", pk=analysis.pk)
+    except requests.RequestException as exc:
+        response = getattr(exc, "response", None)
+        detail = None
+        if response is not None:
+            try:
+                payload = response.json()
+                detail = payload.get("detail", payload)
+                if isinstance(detail, dict):
+                    detail = detail.get("message") or str(detail)
+            except (ValueError, AttributeError):
+                detail = None
+        messages.error(
+            request,
+            "Analyse RAG indépendante non terminée : " + (str(detail) if detail else str(exc))
+        )
+        return render(request, "tdr_rag_independent.html")
