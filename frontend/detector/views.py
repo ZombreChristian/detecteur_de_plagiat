@@ -624,19 +624,28 @@ def reception(request):
         messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
         return redirect("detector:reception")
     uploaded_path = _save_uploaded_document(uploaded)
-    try:
-        threshold = float(request.POST.get("threshold", "")) / 100.0
-        if not 0.01 <= threshold <= 1.0:
-            raise ValueError
-    except (TypeError, ValueError):
-        messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
+    if mode not in ("tdr", "report"):
+        messages.error(request, "Type de contrôle invalide.")
         return redirect("detector:reception")
+
+    # Qwen arbitre les TDR via RAG : aucun seuil de similarité n'est demandé.
+    data = {}
+    if mode == "report":
+        try:
+            threshold = float(request.POST.get("threshold", "")) / 100.0
+            if not 0.01 <= threshold <= 1.0:
+                raise ValueError
+        except (TypeError, ValueError):
+            messages.error(request, "Le seuil du rapport doit être compris entre 1 % et 100 %.")
+            return redirect("detector:reception")
+        data["threshold"] = threshold
+
     endpoint = "/api/detect/duplicate" if mode == "tdr" else "/api/detect/plagiarism"
     start = time.perf_counter()
     try:
         response = requests.post(
             f"{settings.FASTAPI_URL}{endpoint}",
-            data={"threshold": threshold},
+            data=data,
             files={"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))},
             timeout=600,
         )
@@ -667,7 +676,20 @@ def reception(request):
             messages.info(request, "Rapport analysé. Consultez le détail des résultats.")
         return redirect("detector:resultats")
     except requests.RequestException as exc:
-        messages.error(request, f"Le moteur d'analyse est indisponible : {exc}")
+        response = getattr(exc, "response", None)
+        detail = None
+        if response is not None:
+            try:
+                payload = response.json()
+                detail = payload.get("detail", payload)
+                if isinstance(detail, dict):
+                    detail = detail.get("message") or detail.get("error") or str(detail)
+            except (ValueError, AttributeError):
+                detail = None
+        if detail:
+            messages.error(request, f"Analyse non terminée : {detail}")
+        else:
+            messages.error(request, f"Le moteur d'analyse est indisponible : {exc}")
     return redirect("detector:reception")
 
 
