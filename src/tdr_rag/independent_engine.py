@@ -1,7 +1,7 @@
 """Moteur RAG autonome dédié à la vérification des TDR.
 
 La recherche lexicale et sémantique classe toutes les références indexées.
-Qwen analyse ensuite les trois meilleures candidates et renvoie un verdict global unique.
+Qwen analyse ensuite les cinq meilleures candidates et renvoie un verdict global unique.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
 OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 # Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
-# uniquement sur les trois références les mieux classées.
+# uniquement sur les cinq références les mieux classées.
 RAG_TOP_K = 5
 REFERENCE_CHARS = 3800
 CANDIDATE_CHARS = 9000
@@ -209,7 +209,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     reference_blocks = []
     for rank, (hybrid, lexical, semantic, row) in enumerate(selected, start=1):
         reference_blocks.append(
-            f"CANDIDAT DE RECHERCHE {rank}\n"
+            "DOCUMENT DE RÉFÉRENCE\n"
             f"TITRE: {row.title}\nFICHIER: {Path(row.file_path).name}\n"
             f"SCORES DE RÉCUPÉRATION (indicatifs seulement): lexical={lexical:.3f}, "
             f"sémantique={semantic:.3f}, combiné={hybrid:.3f}\n"
@@ -247,8 +247,11 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "l'étude a effectivement été réalisée : il prouve seulement qu'un TDR "
         "correspondant existe dans le registre.\n"
         "Choisis un seul verdict global, indique la référence la plus pertinente avec "
-        "son nom exact, et donne les points communs, les différences et une "
-        "recommandation. Si une référence est faiblement liée, indique-le explicitement "
+        "son titre exact ou son nom de fichier, et donne les points communs, les différences "
+        "et une recommandation. Les libellés internes de récupération ne sont pas destinés "
+        "à l'utilisateur : ne dis jamais « TDR 1 », « TDR 2 », « candidat de recherche 1/2 », "
+        "ni « document numéro 1/2 ». Désigne toujours une référence par son titre exact "
+        "ou son nom de fichier. Si une référence est faiblement liée, indique-le explicitement "
         "et utilise CAS_2 si le lien est réel. N'invente aucun fait. Réponds uniquement "
         "avec un objet JSON valide ayant les clés case_id, decision, explanation, "
         "matched_reference, confidence, common_points (tableau), differences (tableau), "
