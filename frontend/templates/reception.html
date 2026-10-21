@@ -30,7 +30,7 @@
           <form id="tdr-form" method="post" enctype="multipart/form-data">
             {% csrf_token %}<input type="hidden" name="mode" value="tdr">
             <div class="field"><label>Document TDR (.docx ou .pdf)</label><input id="tdr-file" type="file" name="document" accept=".docx,.pdf" required></div>
-            <div class="field"><label for="tdr-threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="tdr-threshold" type="range" name="threshold" min="1" max="100" value="70"><output id="tdr-threshold-value">70 %</output></div><small class="muted">Ajustez le seuil selon le niveau de proximité retenu.</small></div>
+            <div class="notice" style="margin:12px 0;padding:12px;border-radius:8px;border:1px solid var(--line,#ddd)"><strong>Analyse contextuelle par IA locale</strong><p class="muted" style="margin:6px 0 0;font-size:13px;line-height:1.5">Le TDR sera comparé aux références du registre. Qwen3:8B via Ollama analysera les documents récupérés et expliquera son verdict. Aucun seuil de similarité n'est nécessaire.</p></div>
             <button id="tdr-button" class="btn btn-primary" type="submit">Vérifier le TDR</button>
           </form>
         </div>
@@ -66,11 +66,8 @@ const fill=document.getElementById('progress-fill');
 const pct=document.getElementById('progress-percent');
 const txt=document.getElementById('process-text');
 const title=document.getElementById('processing-title');
-const tdrThreshold=document.getElementById('tdr-threshold');
-const tdrThresholdValue=document.getElementById('tdr-threshold-value');
 const reportThreshold=document.getElementById('report-threshold');
 const reportThresholdValue=document.getElementById('report-threshold-value');
-if(tdrThreshold)tdrThreshold.addEventListener('input',()=>tdrThresholdValue.textContent=tdrThreshold.value+' %');
 if(reportThreshold)reportThreshold.addEventListener('input',()=>reportThresholdValue.textContent=reportThreshold.value+' %');
 function attachProgress(form,file,button,isReport){
   if(!form)return;
@@ -84,9 +81,9 @@ function attachProgress(form,file,button,isReport){
       'Calcul du score et identification des passages proches.'
     ]:[
       'Lecture du document et extraction du contenu.',
-      'Calcul de la similarité lexicale (TF-IDF).',
-      'Analyse sémantique du contenu du TDR.',
-      'Calcul du score hybride et décision.'
+      'Recherche des références déjà indexées.',
+      'Transmission du TDR et des références à Qwen3 via Ollama.',
+      'Analyse contextuelle et génération du verdict expliqué.'
     ];
     processing.classList.add('show');
     button.disabled=true;
