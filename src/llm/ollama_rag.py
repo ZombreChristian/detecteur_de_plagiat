@@ -13,10 +13,12 @@ import requests
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
-OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "180"))
-RAG_REFERENCE_TOP_K = max(1, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "5")))
-MAX_CANDIDATE_CHARS = max(3000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "18000")))
-MAX_REFERENCE_CHARS = max(1500, int(os.getenv("TDR_RAG_REFERENCE_MAX_CHARS", "7000")))
+OLLAMA_TIMEOUT = max(300.0, float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "300")))
+# Qwen3 tourne localement avec un contexte souvent limite a 4096 tokens.
+# Borner le prompt evite d'envoyer plusieurs dizaines de milliers de caracteres.
+RAG_REFERENCE_TOP_K = min(3, max(1, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "3"))))
+MAX_CANDIDATE_CHARS = min(6500, max(3000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "6500"))))
+MAX_REFERENCE_CHARS = min(1600, max(1500, int(os.getenv("TDR_RAG_REFERENCE_MAX_CHARS", "1600"))))
 
 
 class OllamaRAGError(RuntimeError):
@@ -135,7 +137,14 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
         data = response.json()
     except requests.Timeout as exc:
         raise OllamaRAGError(
-            f"Ollama n'a pas répondu dans le délai de {OLLAMA_TIMEOUT:g} secondes."
+            f"Ollama n'a pas répondu dans le délai de {OLLAMA_TIMEOUT:g} secondes. "
+            "Le prompt a été limité pour tenir dans le contexte du modèle; vérifiez aussi la charge CPU."
+        ) from exc
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else "inconnu"
+        body = exc.response.text[:500] if exc.response is not None else str(exc)
+        raise OllamaRAGError(
+            f"Ollama a renvoyé HTTP {status}: {body}"
         ) from exc
     except requests.RequestException as exc:
         raise OllamaRAGError(
