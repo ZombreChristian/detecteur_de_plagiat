@@ -351,7 +351,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     }
     if matched_rows and any(name in strong_names for name in requested):
         case_id = "CAS_1_CORRESPONDANCE_FORTE"
-    elif matched_rows and case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
+    elif matched_rows:
         case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
     if case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
         matched_rows = []
