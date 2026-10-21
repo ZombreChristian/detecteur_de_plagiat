@@ -137,6 +137,8 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
             continue
         source_text = (getattr(document, "extracted_text", None)
                        or getattr(document, "cleaned_text", None) or "").strip()
+        if not source_text:
+            continue
         references.append({
             "source": item.get("source") or item.get("title") or f"Référence {item.get('id')}",
             "title": item.get("title") or "",
@@ -219,9 +221,14 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
     }
     result["decision"] = case_decisions[result["case_id"]]
 
-    for key in ("common_points", "differences", "evidence", "missing_information"):
-        if not isinstance(result.get(key), list):
-            result[key] = []
+    for key in ("common_points", "differences", "missing_information"):
+        value = result.get(key)
+        if not isinstance(value, list):
+            value = []
+        result[key] = [str(item).strip()[:700] for item in value if isinstance(item, (str, int, float)) and str(item).strip()][:12]
+
+    if not isinstance(result.get("evidence"), list):
+        result["evidence"] = []
     for key in ("case_title", "explanation", "recommendation", "confidence"):
         if not isinstance(result.get(key), str):
             result[key] = ""
