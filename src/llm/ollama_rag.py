@@ -55,7 +55,7 @@ case_id (une des quatre valeurs exactes ci-dessus),
 decision (une des valeurs exactes SIMILAIRE, SIMILARITÉ PARTIELLE, DIFFERENT, À EXAMINER),
 confidence (FORTE, MOYENNE ou FAIBLE),
 case_title (titre court en français),
-matched_reference (nom exact d'une référence pertinente parmi celles fournies, ou chaîne vide si aucune ne correspond),
+matched_reference (valeur exacte du champ source d'une référence pertinente parmi celles fournies; ne renvoie pas title; chaîne vide uniquement pour CAS_4),
 explanation (explication claire en français, 2 à 5 phrases),
 common_points (tableau de chaînes),
 differences (tableau de chaînes),
@@ -234,8 +234,12 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
             result[key] = ""
     valid_sources = {ref["source"] for ref in references}
     matched_reference = result.get("matched_reference")
-    if not isinstance(matched_reference, str) or matched_reference not in valid_sources:
+    if result["case_id"] == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
         matched_reference = ""
+    elif not isinstance(matched_reference, str) or matched_reference not in valid_sources:
+        raise OllamaRAGError(
+            "Qwen3 a identifié une correspondance sans citer exactement une référence fournie."
+        )
     result["matched_reference"] = matched_reference
 
     # Ne conserver que les preuves rattachées à une source effectivement fournie à Qwen.
