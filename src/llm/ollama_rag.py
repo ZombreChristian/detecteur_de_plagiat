@@ -14,6 +14,9 @@ import requests
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 OLLAMA_TIMEOUT = max(300.0, float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "300")))
+# Paramètres d’inférence réglables sans modifier le code ni les règles métier.
+OLLAMA_NUM_CTX = max(2048, int(os.getenv("OLLAMA_NUM_CTX", "4096")))
+OLLAMA_NUM_BATCH = min(256, max(32, int(os.getenv("OLLAMA_NUM_BATCH", "128"))))
 # Qwen3 tourne localement avec un contexte souvent limite a 4096 tokens.
 # Borner le prompt evite d'envoyer plusieurs dizaines de milliers de caracteres.
 RAG_REFERENCE_TOP_K = min(3, max(1, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "2"))))
@@ -212,8 +215,14 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
                 ],
-                "options": {"temperature": 0.1, "num_predict": MAX_OUTPUT_TOKENS},
-                "keep_alive": "5m",
+                "options": {
+                    "temperature": 0.1,
+                    "num_predict": MAX_OUTPUT_TOKENS,
+                    "num_ctx": OLLAMA_NUM_CTX,
+                    "num_batch": OLLAMA_NUM_BATCH,
+                },
+                # Garder le modèle chargé entre deux analyses évite le coût du rechargement.
+                "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "10m"),
             },
             timeout=OLLAMA_TIMEOUT,
         )
