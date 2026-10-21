@@ -19,18 +19,18 @@
   <div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div>
 </aside>
 <main class="main">
-  <div class="ctxbar"><div><h1>Vérification du TDR</h1><div class="lede">Doublon à la programmation, puis réception du rapport associé</div></div><a class="btn" href="{% url 'detector:tdr_rag_independent' %}">Nouvelle analyse TDR — RAG complet</a></div>
+  <div class="ctxbar"><div><h1>Vérification du TDR</h1><div class="lede">Doublon à la programmation, puis réception du rapport associé</div></div></div>
   <div class="page-pad">
     {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
     <div class="engines" id="workflow-content">
       <section class="panel national-bar-red">
         <div class="panel-head"><h2>Étape 1 — Vérifier le TDR</h2><span class="muted mono" style="font-size:12px">doublon</span></div>
         <div class="panel-body">
-          <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Déposez le nouveau TDR. Il est comparé au registre des TDR déjà présents par similarité sémantique.</p>
+          <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Déposez le TDR à vérifier. Le moteur RAG recherche les TDR et rapports d'étude de référence, puis Qwen compare leur contenu et justifie le verdict.</p>
           <form id="tdr-form" method="post" enctype="multipart/form-data">
             {% csrf_token %}<input type="hidden" name="mode" value="tdr">
             <div class="field"><label>Document TDR (.docx ou .pdf)</label><input id="tdr-file" type="file" name="document" accept=".docx,.pdf" required></div>
-            <div class="notice" style="margin:12px 0;padding:12px;border-radius:8px;border:1px solid var(--line,#ddd)"><strong>Analyse contextuelle par IA locale</strong><p class="muted" style="margin:6px 0 0;font-size:13px;line-height:1.5">Le TDR sera comparé aux références du registre. Qwen3:8B via Ollama analysera les documents récupérés et expliquera son verdict. Aucun seuil de similarité n'est nécessaire.</p></div>
+            <div class="notice" style="margin:12px 0;padding:12px;border-radius:8px;border:1px solid var(--line,#ddd)"><strong>Analyse contextuelle par IA locale</strong><p class="muted" style="margin:6px 0 0;font-size:13px;line-height:1.5">Le moteur RAG complet recherche les références dans PostgreSQL, compare le contenu avec Qwen3:8B via Ollama et présente les documents consultés ainsi que les éléments justificatifs. Aucun seuil de similarité n'est nécessaire.</p></div>
             <button id="tdr-button" class="btn btn-primary" type="submit">Vérifier le TDR</button>
           </form>
         </div>
@@ -80,10 +80,14 @@ function attachProgress(form,file,button,isReport){
       'Analyse sémantique et recherche de paraphrases.',
       'Calcul du score et identification des passages proches.'
     ]:[
-      'Lecture du document et extraction du contenu.',
-      'Recherche des références déjà indexées.',
-      'Transmission du TDR et des références à Qwen3 via Ollama.',
-      'Analyse contextuelle et génération du verdict expliqué.'
+      'Réception et extraction du TDR.',
+      'Chargement des TDR et rapports de référence.',
+      'Recherche lexicale et sémantique des documents proches.',
+      'Sélection des références les plus pertinentes.',
+      'Comparaison du contenu par Qwen3 via Ollama.',
+      'Évaluation des objectifs, méthodes, zones et livrables.',
+      'Préparation du verdict et des justifications.',
+      'Enregistrement du résultat et des références consultables.'
     ];
     processing.classList.add('show');
     button.disabled=true;
