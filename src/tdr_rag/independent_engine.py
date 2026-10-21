@@ -30,7 +30,7 @@ TDR_RAG_NUM_BATCH = min(256, max(32, int(os.getenv("TDR_RAG_NUM_BATCH", "64"))))
 RAG_TOP_K = 5
 REFERENCE_CHARS = min(3000, max(1400, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "2200"))))
 CANDIDATE_CHARS = min(7500, max(4500, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "6500"))))
-OUTPUT_TOKENS = min(1000, max(600, int(os.getenv("TDR_RAG_MAX_OUTPUT_TOKENS", "900"))))
+OUTPUT_TOKENS = min(1000, max(600, int(os.getenv("TDR_RAG_INDEPENDENT_MAX_OUTPUT_TOKENS", "900"))))
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
