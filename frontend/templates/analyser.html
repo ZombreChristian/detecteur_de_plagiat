@@ -101,7 +101,7 @@ form.addEventListener('submit',function(){
   const timer=setInterval(function(){
     p=Math.min(p+(stage<2?4:2),94);
     bar.style.width=p+'%';percent.textContent=p+' %';
-    const next=p<25?0:p<50?1:p<76?2:3;
+    const next=Math.min(Math.floor(p/12.5),7);
     if(next!==stage){stage=next;text.textContent=stages[stage];}
   },450);
   window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
