@@ -325,6 +325,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
                     "source_id": row.id,
                     "title": str(row.title or ""),
                     "filename": Path(row.file_path).name,
+                    "document_type": row.get_document_type_display(),
                     "lexical_score": round(float(lexical), 4),
                     "semantic_score": round(float(semantic), 4),
                     "hybrid_score": round(float(hybrid), 4),
@@ -344,6 +345,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
                 "source_id": matched_row.id,
                 "source": Path(matched_row.file_path).name,
                 "title": matched_row.title,
+                "document_type": matched_row.get_document_type_display(),
                 "retrieval_score": round(
                     next(score for score, _, _, row in selected if row.id == matched_row.id), 4
                 ),
