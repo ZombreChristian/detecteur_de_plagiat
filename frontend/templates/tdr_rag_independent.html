@@ -13,6 +13,17 @@
 a{color:inherit}main{max-width:920px;margin:42px auto;padding:0 20px}.panel{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:clamp(22px,4vw,42px);box-shadow:0 10px 32px #17212b0b}
 h1{font-size:clamp(1.7rem,4vw,2.4rem);line-height:1.15;margin:8px 0 14px}p{color:var(--muted)}.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:24px 0}.step{border:1px solid var(--line);border-radius:12px;padding:14px}.step strong{display:block;margin-bottom:4px}.step span{color:var(--muted);font-size:.9rem}
 label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:block;width:100%;padding:18px;border:1px dashed #aab8c2;border-radius:10px;background:#fbfcfd}button{margin-top:20px;border:0;border-radius:9px;padding:13px 20px;background:#17212b;color:#fff;font-size:1rem;font-weight:700;cursor:pointer}button:hover{background:#334653}.note{border-left:4px solid var(--accent);background:#edf7f1;padding:13px 16px;border-radius:0 8px 8px 0;font-size:.93rem;color:#254c39}.messages{margin-bottom:18px}.message{padding:12px 14px;background:#fff4e5;border:1px solid #eed4ad;border-radius:8px;margin:8px 0}.back{color:var(--muted);text-decoration:none}.back:hover{text-decoration:underline}
+.progress-panel{display:none;margin-top:24px;padding:20px;border:1px solid var(--line);border-radius:12px;background:#fbfcfd}
+.progress-panel.active{display:block}.progress-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;font-weight:700}
+.progress-track{height:12px;overflow:hidden;background:#e5eaee;border-radius:999px}
+.progress-fill{height:100%;width:3%;background:#16834a;border-radius:999px;transition:width .5s ease}
+.progress-status{margin:12px 0 4px;color:var(--ink);font-weight:650}
+.progress-detail{font-size:.9rem;color:var(--muted);margin:0}
+.progress-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:18px}
+.progress-step{padding:10px 8px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:.82rem;text-align:center}
+.progress-step.current{border-color:#16834a;background:#edf7f1;color:#20563b;font-weight:700}
+.progress-step.done{border-color:#a9d4bc;color:#20563b}
+@media(max-width:600px){.progress-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -31,13 +42,75 @@ label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:b
 <div class="step"><strong>3. Comparer avec l'IA</strong><span>Qwen confronte les 3 documents sélectionnés et décide si une étude pertinente existe.</span></div>
 <div class="step"><strong>4. Conclure</strong><span>Verdict motivé et référence retenue, si pertinente.</span></div>
 </div>
-<form method="post" enctype="multipart/form-data">
+<form id="tdr-analysis-form" method="post" enctype="multipart/form-data">
 {% csrf_token %}
 <label for="tdr_document">Document TDR à analyser</label>
 <input id="tdr_document" name="tdr_document" type="file" accept=".docx,.pdf" required>
 <p>Formats acceptés : Word (.docx) et PDF (.pdf). La recherche porte sur toute la base ; l'analyse approfondie par Qwen est limitée aux 3 candidats les plus pertinents.</p>
-<button type="submit">Analyser le TDR</button>
+<button id="analyze-button" type="submit">Analyser le TDR</button>
 </form>
+<section id="progress-panel" class="progress-panel" role="status" aria-live="polite">
+  <div class="progress-heading"><span>Analyse en cours</span><span id="elapsed-time">00:00</span></div>
+  <div class="progress-track" role="progressbar" aria-label="Avancement indicatif de l'analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow="3"><div id="progress-fill" class="progress-fill"></div></div>
+  <p id="progress-status" class="progress-status">Préparation du document…</p>
+  <p id="progress-detail" class="progress-detail">L'étape affichée est indicative : le serveur ne transmet pas encore de mesure détaillée de l'avancement.</p>
+  <div class="progress-steps">
+    <div class="progress-step current" data-step="0">1. Préparation</div>
+    <div class="progress-step" data-step="1">2. Recherche</div>
+    <div class="progress-step" data-step="2">3. Analyse Qwen</div>
+    <div class="progress-step" data-step="3">4. Verdict</div>
+  </div>
+</section>
+<script>
+(() => {
+  const form = document.getElementById("tdr-analysis-form");
+  const file = document.getElementById("tdr_document");
+  const button = document.getElementById("analyze-button");
+  const panel = document.getElementById("progress-panel");
+  const fill = document.getElementById("progress-fill");
+  const status = document.getElementById("progress-status");
+  const detail = document.getElementById("progress-detail");
+  const elapsed = document.getElementById("elapsed-time");
+  const steps = Array.from(document.querySelectorAll(".progress-step"));
+  let startedAt = 0;
+  let timer = null;
+  const stages = [
+    {at:0, pct:8, title:"Préparation du document…", detail:"Envoi du fichier et extraction du texte."},
+    {at:5, pct:28, title:"Recherche lexicale et sémantique…", detail:"Classement des TDR indexés et sélection des trois candidats les plus pertinents."},
+    {at:12, pct:62, title:"Analyse approfondie par Qwen…", detail:"Le modèle compare le contenu des trois documents. Cette étape peut prendre le plus de temps."},
+    {at:45, pct:82, title:"Finalisation du verdict…", detail:"Le modèle prépare une conclusion unique et son explication."}
+  ];
+  function tick() {
+    const seconds = Math.floor((Date.now() - startedAt) / 1000);
+    elapsed.textContent = String(Math.floor(seconds / 60)).padStart(2,"0") + ":" + String(seconds % 60).padStart(2,"0");
+    let index = 0;
+    stages.forEach((stage, i) => { if (seconds >= stage.at) index = i; });
+    const stage = stages[index];
+    fill.style.width = stage.pct + "%";
+    panel.querySelector('[role="progressbar"]').setAttribute("aria-valuenow", String(stage.pct));
+    status.textContent = stage.title;
+    detail.textContent = stage.detail + " L'avancement est estimé et ne représente pas un pourcentage exact du calcul.";
+    steps.forEach((node, i) => {
+      node.classList.toggle("current", i === index);
+      node.classList.toggle("done", i < index);
+    });
+  }
+  form.addEventListener("submit", (event) => {
+    if (!file.files || !file.files.length) return;
+    event.preventDefault();
+    if (timer) clearInterval(timer);
+    panel.classList.add("active");
+    button.disabled = true;
+    button.textContent = "Analyse en cours…";
+    file.disabled = true;
+    startedAt = Date.now();
+    tick();
+    timer = setInterval(tick, 1000);
+    // Soumission HTML native après affichage du panneau, sans bloquer le navigateur.
+    window.setTimeout(() => HTMLFormElement.prototype.submit.call(form), 50);
+  });
+})();
+</script>
 </section>
 </main>
 </body>
