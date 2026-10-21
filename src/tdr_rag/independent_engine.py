@@ -126,10 +126,10 @@ def extract_tdr_document(path: Path) -> str:
 
 def _excerpt(text: str, limit: int) -> str:
     """Conserve les sections métier prioritaires sans éliminer un paragraphe trop long."""
-    text = re.sub(r"\\n{3,}", "\\n\\n", (text or "")).strip()
+    text = re.sub(r"\n{3,}", "\n\n", (text or "")).strip()
     if len(text) <= limit:
         return text
-    paragraphs = [p.strip() for p in re.split(r"\\n\\s*\\n", text) if p.strip()]
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     if not paragraphs:
         return text[:limit]
     priority = ("objet", "contexte", "objectif", "résultat", "zone", "population",
@@ -156,7 +156,7 @@ def _excerpt(text: str, limit: int) -> str:
         # Les sections longues sont tronquées plutôt qu'entièrement perdues.
         selected[idx] = paragraph[:remaining]
         used += len(selected[idx]) + 2
-    return "\\n\\n".join(selected[i] for i in sorted(selected))[:limit]
+    return "\n\n".join(selected[i] for i in sorted(selected))[:limit]
 
 def _load_all_indexed_references():
     import django
