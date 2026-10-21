@@ -1,5 +1,6 @@
 from pathlib import Path
 from functools import lru_cache
+import os
 
 from django import template
 from django.conf import settings
@@ -28,7 +29,7 @@ def _read_document(path: Path) -> str:
 
 @lru_cache(maxsize=32)
 def _profile_cached(analysis_id, uploaded_path, kind, threshold):
-    path = (Path(settings.MEDIA_ROOT) / str(uploaded_path).replace("/", "\\")).resolve()
+    path = (Path(settings.MEDIA_ROOT) / str(uploaded_path).replace("/", os.sep)).resolve()
     media_root = Path(settings.MEDIA_ROOT).resolve()
     try:
         path.relative_to(media_root)
@@ -41,15 +42,7 @@ def _profile_cached(analysis_id, uploaded_path, kind, threshold):
     if not rows:
         return None
     text = _read_document(path)
-    return build_content_profile(
-        text,
-        rows,
-        embeddings,
-        lexical_weight=0.30,
-        semantic_weight=0.70,
-        threshold=float(threshold),
-        kind=kind,
-    )
+    return build_content_profile(text, rows, embeddings, lexical_weight=0.30, semantic_weight=0.70, threshold=float(threshold), kind=kind)
 
 
 @register.simple_tag
@@ -63,6 +56,4 @@ def get_content_profile(analysis, result):
         threshold = float((result or {}).get("threshold", 0.70 if kind == "duplicate" else 0.55))
         return _profile_cached(analysis.pk, uploaded_path, kind, threshold)
     except Exception as exc:
-        # Le profil V2 enrichit l'analyse sans jamais empêcher l'affichage
-        # du résultat historique existant.
         return {"overall": {"existing_percent": 0.0, "new_percent": 0.0, "partial_percent": 0.0, "segments": 0}, "components": [], "interpretation": {"level": "NON DISPONIBLE", "recommendation": "Le profil de couverture n'a pas pu être calculé pour cette analyse.", "note": str(exc)}}
