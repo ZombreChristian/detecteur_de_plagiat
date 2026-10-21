@@ -645,6 +645,7 @@ def analysis_detail(request, pk):
     return render(request, "analysis_detail.html", {
         "analysis": analysis,
         "result": result,
+        "duration_seconds": (f"{analysis.duration_ms / 1000:.1f}".replace(".", ",") if analysis.duration_ms is not None else None),
         "document_url": _document_url(uploaded_path),
         "document_path": uploaded_path,
     })
