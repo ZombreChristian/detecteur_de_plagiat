@@ -222,14 +222,27 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         case_id = "CAS_4_AUCUNE_ETUDE_PERTINENTE"
     reference_name = str(final.get("matched_reference", "")).strip()
     allowed_names = {Path(row.file_path).name for _, row in ranked} | {row.title for _, row in ranked}
-    if reference_name not in allowed_names:
+    if reference_name not in allowed_names or case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
         reference_name = ""
+    case_titles = {
+        "CAS_1_CORRESPONDANCE_FORTE": "Correspondance forte — étude probablement déjà réalisée",
+        "CAS_2_CORRESPONDANCE_PARTIELLE": "Correspondance partielle — vérification recommandée",
+        "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE": "Objectifs similaires — zone géographique différente",
+        "CAS_4_AUCUNE_ETUDE_PERTINENTE": "Aucune étude pertinente trouvée dans la base",
+    }
+    matched_row = next(
+        (row for _, row in ranked
+         if reference_name and reference_name in {Path(row.file_path).name, row.title}),
+        None,
+    )
     return {
         "mode": "tdr_rag_independent",
         "decision_provider": "independent_rag",
         "decision": case_id,
         "rag_analysis": {
             "case_id": case_id,
+            "case_title": case_titles[case_id],
+            "model": OLLAMA_MODEL,
             "decision": str(final.get("decision", case_id)),
             "explanation": str(final.get("explanation", ""))[:2500],
             "matched_reference": reference_name,
@@ -239,11 +252,18 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "recommendation": str(final.get("recommendation", ""))[:2000],
             "references_examined": len(ranked),
             "batches_examined": len(batch_findings),
+            "references_examined": len(ranked),
+            "evidence": [
+                {"source": item["reference"], "point": item["findings"], "justification": ""}
+                for item in batch_findings if item["relevant"] and item["reference"]
+            ][:10],
             "batch_findings": batch_findings,
         },
+        "best_source_id": matched_row.id if matched_row else None,
+        "best_source": reference_name or None,
         "sources": [
-            {"source": Path(row.file_path).name, "title": row.title, "retrieval_score": round(score, 4)}
-            for score, row in ranked if Path(row.file_path).name == reference_name or row.title == reference_name
+            {"source_id": row.id, "source": Path(row.file_path).name, "title": row.title, "retrieval_score": round(score, 4)}
+            for score, row in ranked if reference_name and (Path(row.file_path).name == reference_name or row.title == reference_name)
         ],
         "tfidf_score": None,
         "semantic_score": None,
