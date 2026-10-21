@@ -250,17 +250,27 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "Un TDR prouve qu'un TDR est enregistré ; un rapport d'étude indique qu'un rapport "
         "correspondant est présent dans le registre. N'affirme rien au-delà du contenu réel "
         "du document.\n"
-        "Choisis un seul verdict global, indique la référence la plus pertinente avec "
-        "son titre exact ou son nom de fichier, et donne les points communs, les différences "
-        "et une recommandation. Les libellés internes de récupération ne sont pas destinés "
-        "à l'utilisateur : ne dis jamais « TDR 1 », « TDR 2 », « candidat de recherche 1/2 », "
-        "ni « document numéro 1/2 ». Désigne toujours une référence par son titre exact "
-        "ou son nom de fichier. Si une référence est faiblement liée, indique-le explicitement "
-        "et utilise CAS_2 si le lien est réel. N'invente aucun fait. Réponds uniquement "
-        "avec un objet JSON valide ayant les clés case_id, decision, explanation, "
-        "matched_reference, confidence, common_points (tableau), differences (tableau), "
-        "recommendation, correspondence_level (forte, moyenne, faible ou nulle), "
-        "evidence_from_reference (tableau de courts éléments concrets).\n"
+        "COHÉRENCE OBLIGATOIRE : le case_id, le decision, le correspondence_level, "
+        "l'explication et la recommandation doivent tous exprimer la même conclusion. "
+        "Si tu écris que le candidat correspond fortement à un document, que les objectifs, "
+        "la zone, la méthode et les livrables sont identiques ou très proches, le verdict "
+        "ne peut pas être CAS_4. Choisis CAS_1 si c'est la même étude ou quasi-identique, "
+        "CAS_2 si la correspondance est réelle mais partielle. CAS_4 exige une explication "
+        "qui constate l'absence de référence pertinente. Avant de répondre, vérifie cette "
+        "cohérence et corrige le JSON si nécessaire.\n"
+        "Les seules références que tu peux citer sont celles listées ci-dessous, avec leur "
+        "identifiant, leur titre et leur nom de fichier exacts. N'invente jamais un identifiant "
+        "comme TDR-TEST-101 s'il ne figure pas dans la liste. Pour matched_reference, recopie "
+        "exactement le titre ou le nom de fichier d'une référence fournie ; si aucune référence "
+        "ne convient, renvoie une chaîne vide.\n"
+        "Choisis un seul verdict global et donne les points communs, les différences et une "
+        "recommandation. Les libellés internes de récupération ne sont pas destinés à "
+        "l'utilisateur : ne dis jamais « TDR 1 », « TDR 2 », « candidat de recherche 1/2 », "
+        "ni « document numéro 1/2 ». N'invente aucun fait. Réponds uniquement avec un objet "
+        "JSON valide ayant les clés case_id, decision, explanation, matched_reference, confidence, "
+        "common_points (tableau), differences (tableau), recommendation, correspondence_level "
+        "(forte, moyenne, faible ou nulle), evidence_from_reference (tableau de courts éléments "
+        "concrets).\n"
         "Rappel : les références sont des TDR ou des rapports d'étude présents dans la base ; ne prétends pas "
         "qu'une étude a été exécutée si le document ne l'établit pas."
     )
@@ -268,7 +278,12 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         system_prompt,
         "TDR CANDIDAT À ÉVALUER:\n" + candidate_excerpt
         + "\n\nLES CINQ RÉFÉRENCES À EXAMINER AVANT DE CONCLURE:\n"
-        + "\n\n--- DOCUMENT SUIVANT ---\n\n".join(reference_blocks),
+        + "\n\n--- DOCUMENT SUIVANT ---\n\n".join(reference_blocks)
+        + "\n\nLISTE AUTORISÉE DES RÉFÉRENCES (reprends exactement un titre ou fichier de cette liste) :\n"
+        + "\n".join(
+            f"- ID={row.id} | TYPE={row.get_document_type_display()} | TITRE={row.title} | FICHIER={Path(row.file_path).name}"
+            for _, _, _, row in selected
+        ),
         tokens=1200,
     )
 
