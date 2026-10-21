@@ -532,7 +532,7 @@ def health():
 
 @app.post("/api/detect/{kind}")
 async def detect(kind: str, file: UploadFile = File(...), threshold: float | None = Form(None)):
-    if kind not in THRESHOLDS:
+    if kind not in ("plagiarism", "duplicate"):
         raise HTTPException(
             404,
             "Mode inconnu. Utilisez plagiarism ou duplicate.",
