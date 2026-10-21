@@ -568,3 +568,24 @@ async def compare(file_a: UploadFile = File(...), file_b: UploadFile = File(...)
     if result is None:
         raise HTTPException(400, "Les deux documents doivent contenir du texte.")
     return result
+
+
+@app.post("/api/tdr-rag/analyze")
+async def analyze_tdr_rag_independent(file: UploadFile = File(...)):
+    """Point d'entrée dédié au moteur RAG indépendant des TDR."""
+    if not file.filename or Path(file.filename).suffix.lower() not in {".docx", ".pdf"}:
+        raise HTTPException(400, "Formats acceptés : DOCX et PDF.")
+    from src.tdr_rag.independent_engine import (
+        analyze_tdr_independently,
+        IndependentTDRError,
+    )
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            safe_name = re.sub(r"[^\w.\- ]", "_", file.filename)
+            path = Path(directory) / safe_name
+            path.write_bytes(await file.read())
+            candidate_text = read_document(path)
+        result = await run_in_threadpool(analyze_tdr_independently, candidate_text)
+        return result
+    except IndependentTDRError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
