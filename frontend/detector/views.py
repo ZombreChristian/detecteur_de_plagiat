@@ -612,17 +612,17 @@ def analysis_detail(request, pk):
             if not isinstance(value, str):
                 return value
             value = re.sub(
-                r"(?i)\\b(?:les\\s+)?TDR\\s+des\\s+candidats de recherche\\s+1\\s+et\\s+2\\b",
+                r"(?i)\b(?:les\s+)?TDR\s+des\s+candidats de recherche\s+1\s+et\s+2\b",
                 "les documents de référence examinés",
                 value,
             )
             value = re.sub(
-                r"(?i)\\bcandidats de recherche\\s+1\\s+et\\s+2\\b",
+                r"(?i)\bcandidats de recherche\s+1\s+et\s+2\b",
                 "documents de référence examinés",
                 value,
             )
             value = re.sub(
-                r"(?i)\\bTDR\\s+1\\s+et\\s+2\\b",
+                r"(?i)\bTDR\s+1\s+et\s+2\b",
                 "documents de référence examinés",
                 value,
             )
