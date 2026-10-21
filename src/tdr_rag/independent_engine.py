@@ -24,13 +24,13 @@ OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
 OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 # Limiter le contexte et le lot d’évaluation aide les machines à mémoire partagée.
-TDR_RAG_NUM_CTX = max(4096, int(os.getenv("TDR_RAG_NUM_CTX", "6144")))
+TDR_RAG_NUM_CTX = max(4096, int(os.getenv("TDR_RAG_NUM_CTX", "4096")))
 TDR_RAG_NUM_BATCH = min(256, max(32, int(os.getenv("TDR_RAG_NUM_BATCH", "64"))))
 # Recherche lexicale + sémantique sur le corpus, puis arbitrage sur les trois références les mieux classées.
 RAG_TOP_K = min(3, max(1, int(os.getenv("TDR_RAG_TOP_K", "3"))))
-REFERENCE_CHARS = min(3000, max(1400, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "2200"))))
-CANDIDATE_CHARS = min(7500, max(4500, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "6500"))))
-OUTPUT_TOKENS = min(1000, max(600, int(os.getenv("TDR_RAG_INDEPENDENT_MAX_OUTPUT_TOKENS", "900"))))
+REFERENCE_CHARS = min(2400, max(1200, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "1700"))))
+CANDIDATE_CHARS = min(6000, max(4000, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "5000"))))
+OUTPUT_TOKENS = min(900, max(500, int(os.getenv("TDR_RAG_INDEPENDENT_MAX_OUTPUT_TOKENS", "700"))))
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
@@ -182,15 +182,22 @@ def _rank_all_references(candidate: str, rows):
         [candidate], normalize_embeddings=True, show_progress_bar=False,
         convert_to_numpy=True,
     )[0]
-    ranked = []
-    for index, row in enumerate(rows):
-        vector = np.asarray(row.embedding, dtype=np.float32)
-        norm = float(np.linalg.norm(vector))
-        semantic = float(np.dot(vector / norm, candidate_vector)) if norm else 0.0
-        semantic = max(0.0, min(1.0, semantic))
-        lexical = max(0.0, min(1.0, float(lexical_scores[index])))
-        hybrid = 0.30 * lexical + 0.70 * semantic
-        ranked.append((hybrid, lexical, semantic, row))
+    # Calcul vectorisé des cosinus : évite une boucle Python sur chaque référence.
+    embeddings = np.asarray([row.embedding for row in rows], dtype=np.float32)
+    norms = np.linalg.norm(embeddings, axis=1)
+    semantic_scores = np.divide(
+        embeddings @ candidate_vector,
+        norms,
+        out=np.zeros(len(rows), dtype=np.float32),
+        where=norms > 0,
+    )
+    semantic_scores = np.clip(semantic_scores, 0.0, 1.0)
+    lexical_scores = np.clip(np.asarray(lexical_scores, dtype=np.float32), 0.0, 1.0)
+    hybrid_scores = 0.30 * lexical_scores + 0.70 * semantic_scores
+    ranked = [
+        (float(hybrid_scores[i]), float(lexical_scores[i]), float(semantic_scores[i]), row)
+        for i, row in enumerate(rows)
+    ]
     ranked.sort(key=lambda item: item[0], reverse=True)
     return ranked
 
@@ -207,8 +214,8 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         )
 
     # Le classement sert uniquement à retrouver les références candidates.
-    # Qwen reste responsable du raisonnement et du verdict métier. On lui fournit
-    # cinq références pour limiter les faux négatifs dus à une reformulation.
+    # Qwen reste responsable du raisonnement et du verdict métier ; seules les
+    # trois références les mieux classées lui sont transmises.
     ranked = _rank_all_references(candidate, rows)
     if not ranked:
         raise IndependentTDRError("Aucune référence TDR exploitable n'a été trouvée.")
@@ -231,7 +238,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "reformule ou recoupe une étude déjà présente dans la base. Le raisonnement "
         "de Qwen est la base du verdict final : les scores de recherche servent à "
         "retrouver les références, mais ne décident jamais à ta place. Tu disposes "
-        "de cinq références candidates. Examine leur contenu et compare le sens, pas "
+        "des trois références candidates les mieux classées. Examine leur contenu et compare le sens, pas "
         "seulement les mots exacts : objet, problème traité, objectif général et "
         "objectifs spécifiques, activités, zone, population cible, période, méthode "
         "et livrables. Une reformulation, des synonymes ou un titre différent ne "
@@ -287,14 +294,14 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     final = _ollama_json(
         system_prompt,
         "TDR CANDIDAT À ÉVALUER:\n" + candidate_excerpt
-        + "\n\nLES CINQ RÉFÉRENCES À EXAMINER AVANT DE CONCLURE:\n"
+        + "\n\nLES TROIS RÉFÉRENCES À EXAMINER AVANT DE CONCLURE:\n"
         + "\n\n--- DOCUMENT SUIVANT ---\n\n".join(reference_blocks)
         + "\n\nLISTE AUTORISÉE DES RÉFÉRENCES (reprends exactement un titre ou fichier de cette liste) :\n"
         + "\n".join(
             f"- ID={row.id} | TYPE={row.get_document_type_display()} | TITRE={row.title} | FICHIER={Path(row.file_path).name}"
             for _, _, _, row in selected
         ),
-        tokens=1200,
+        tokens=OUTPUT_TOKENS,
     )
 
     case_id = str(final.get("case_id", "CAS_4_AUCUNE_ETUDE_PERTINENTE"))
