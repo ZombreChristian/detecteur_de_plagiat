@@ -24,19 +24,19 @@ label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:b
 <div class="tag">Moteur RAG indépendant</div>
 <h1>Vérifier si une étude existe déjà</h1>
 <p>Déposez un TDR. L'IA le compare aux études TDR déjà indexées dans la base documentaire, puis explique sa conclusion.</p>
-<div class="note"><strong>Pas de nombre fixe de références.</strong> Le moteur parcourt toutes les références TDR indexées. Elles sont analysées par lots techniques, puis Qwen établit une conclusion globale. Les documents téléversés ne sont pas ajoutés automatiquement à l'index.</div>
+<div class="note"><strong>Pas de nombre fixe de références.</strong> Le moteur classe toutes les références avec une recherche lexicale et sémantique, puis Qwen analyse en profondeur les 3 documents les plus pertinents pour établir un seul verdict global. Les documents téléversés ne sont pas ajoutés automatiquement à l'index.</div>
 <div class="steps">
 <div class="step"><strong>1. Extraire</strong><span>Lecture du contenu du TDR Word ou PDF.</span></div>
-<div class="step"><strong>2. Rechercher</strong><span>Recherche dans toutes les références TDR indexées de PostgreSQL.</span></div>
-<div class="step"><strong>3. Comparer avec l'IA</strong><span>Qwen examine les similitudes et différences de fond.</span></div>
+<div class="step"><strong>2. Rechercher</strong><span>Classement lexical et sémantique de toute la base, puis sélection des 3 meilleurs candidats.</span></div>
+<div class="step"><strong>3. Comparer avec l'IA</strong><span>Qwen confronte les 3 documents sélectionnés et décide si une étude pertinente existe.</span></div>
 <div class="step"><strong>4. Conclure</strong><span>Verdict motivé et référence retenue, si pertinente.</span></div>
 </div>
 <form method="post" enctype="multipart/form-data">
 {% csrf_token %}
 <label for="tdr_document">Document TDR à analyser</label>
 <input id="tdr_document" name="tdr_document" type="file" accept=".docx,.pdf" required>
-<p>Formats acceptés : Word (.docx) et PDF (.pdf). La durée dépend du nombre de références indexées et des performances de Qwen.</p>
-<button type="submit">Lancer l'analyse RAG complète</button>
+<p>Formats acceptés : Word (.docx) et PDF (.pdf). La recherche porte sur toute la base ; l'analyse approfondie par Qwen est limitée aux 3 candidats les plus pertinents.</p>
+<button type="submit">Analyser le TDR</button>
 </form>
 </section>
 </main>
