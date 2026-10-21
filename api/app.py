@@ -298,6 +298,13 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
 
         matched_reference = rag_analysis.get("matched_reference", "")
         matched_item = ranked_by_name.get(matched_reference)
+        # N'afficher comme source de comparaison que la référence explicitement
+        # retenue par Qwen. Les autres documents ont servi à la récupération RAG,
+        # mais ne doivent pas être présentés comme pertinents par défaut.
+        if matched_item:
+            sources = [source for source in sources if source["source"] == matched_reference]
+        else:
+            sources = []
         final_decision = rag_analysis["decision"]
 
         return {
