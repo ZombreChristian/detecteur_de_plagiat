@@ -1,8 +1,7 @@
 """Moteur RAG autonome dédié à la vérification des TDR.
 
-Il interroge directement toutes les références TDR déjà indexées dans PostgreSQL.
-Aucun TOP_K global : les références sont parcourues par lots techniques, puis
-Qwen synthétise les éléments avant de rendre le verdict final.
+La recherche lexicale et sémantique classe toutes les références indexées.
+Qwen analyse ensuite les trois meilleures candidates et renvoie un verdict global unique.
 """
 from __future__ import annotations
 
