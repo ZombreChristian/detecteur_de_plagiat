@@ -24,13 +24,14 @@ OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen2.5:3b"))
 OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 # Limiter le contexte et le lot d’évaluation aide les machines à mémoire partagée.
-TDR_RAG_NUM_CTX = max(4096, int(os.getenv("TDR_RAG_NUM_CTX", "4096")))
+# Un contexte plus large évite de couper les sections utiles des TDR longs.
+TDR_RAG_NUM_CTX = max(4096, int(os.getenv("TDR_RAG_NUM_CTX", "8192")))
 TDR_RAG_NUM_BATCH = min(256, max(32, int(os.getenv("TDR_RAG_NUM_BATCH", "64"))))
-# Recherche lexicale + sémantique sur le corpus, puis arbitrage sur les trois références les mieux classées.
+# Recherche lexicale + sémantique, puis comparaison détaillée des trois meilleures références.
 RAG_TOP_K = min(3, max(1, int(os.getenv("TDR_RAG_TOP_K", "3"))))
-REFERENCE_CHARS = min(2400, max(1200, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "1700"))))
-CANDIDATE_CHARS = min(6000, max(4000, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "5000"))))
-OUTPUT_TOKENS = min(900, max(500, int(os.getenv("TDR_RAG_INDEPENDENT_MAX_OUTPUT_TOKENS", "700"))))
+REFERENCE_CHARS = min(3200, max(1600, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "2600"))))
+CANDIDATE_CHARS = min(7000, max(4500, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "6000"))))
+OUTPUT_TOKENS = min(1800, max(700, int(os.getenv("TDR_RAG_INDEPENDENT_MAX_OUTPUT_TOKENS", "1200"))))
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
@@ -124,26 +125,38 @@ def extract_tdr_document(path: Path) -> str:
 
 
 def _excerpt(text: str, limit: int) -> str:
-    text = re.sub(r"\n{3,}", "\n\n", (text or "")).strip()
+    """Conserve les sections métier prioritaires sans éliminer un paragraphe trop long."""
+    text = re.sub(r"\\n{3,}", "\\n\\n", (text or "")).strip()
     if len(text) <= limit:
         return text
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    paragraphs = [p.strip() for p in re.split(r"\\n\\s*\\n", text) if p.strip()]
+    if not paragraphs:
+        return text[:limit]
     priority = ("objet", "contexte", "objectif", "résultat", "zone", "population",
-                "méthodologie", "activité", "livrable", "période", "justification")
+                "méthodologie", "activité", "livrable", "période", "justification",
+                "bénéficiaire", "indicateur", "budget", "durée")
     ranked = sorted(
         enumerate(paragraphs),
-        key=lambda item: sum(word in item[1][:180].lower() for word in priority),
+        key=lambda item: (
+            sum(word in item[1][:220].lower() for word in priority),
+            -item[0],
+        ),
         reverse=True,
     )
-    selected, used = set(), 0
+    # Réserver une part au début du document pour conserver son objet et son contexte.
+    head_budget = min(max(500, limit // 4), len(paragraphs[0]))
+    selected = {0: paragraphs[0][:head_budget]}
+    used = len(selected[0])
     for idx, paragraph in ranked:
-        cost = len(paragraph) + 2
-        if used + cost <= limit:
-            selected.add(idx)
-            used += cost
-    result = "\n\n".join(p for i, p in enumerate(paragraphs) if i in selected)
-    return result or text[:limit]
-
+        if idx in selected or used >= limit:
+            continue
+        remaining = limit - used - 2
+        if remaining <= 80:
+            break
+        # Les sections longues sont tronquées plutôt qu'entièrement perdues.
+        selected[idx] = paragraph[:remaining]
+        used += len(selected[idx]) + 2
+    return "\\n\\n".join(selected[i] for i in sorted(selected))[:limit]
 
 def _load_all_indexed_references():
     import django
@@ -281,7 +294,13 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "global est CAS_1 si au moins une référence est forte ; CAS_2 si aucune n'est forte "
         "mais qu'au moins une est partielle ; CAS_4 si aucune n'est pertinente. "
         "Choisis aussi un seul verdict global et donne les points communs, les différences et "
-        "une recommandation. Ne cite que les noms exacts de la liste autorisée. Les libellés "
+        "une recommandation opérationnelle. Pour chaque référence retenue, compare concrètement "
+        "l'objet, les objectifs, la zone, les bénéficiaires, les activités, la méthode et les livrables "
+        "lorsque ces informations sont présentes. Distingue les faits visibles des informations absentes. "
+        "Fournis des points précis plutôt que des phrases génériques. N'ajoute pas une référence seulement "
+        "parce que son score de récupération est élevé. Toute référence jugée pertinente doit figurer dans "
+        "matched_references avec son nom exact ; si aucune ne l'est, laisse ce tableau vide. "
+        "Ne cite que les noms exacts de la liste autorisée. Les libellés "
         "internes de récupération ne sont pas destinés à l'utilisateur : ne dis jamais "
         "« TDR 1 », « TDR 2 » ou « document numéro 1/2 ». N'invente aucun fait. Réponds "
         "uniquement avec un objet JSON valide ayant les clés case_id, decision, explanation, "
@@ -350,27 +369,61 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     legacy = str(final.get("matched_reference", "")).strip()
     if legacy and legacy not in requested:
         requested.insert(0, legacy)
-    matched_rows = []
-    for name in requested:
+    def _resolve_reference(name: str):
+        name = str(name or "").strip()
+        if not name:
+            return None
         row = allowed_rows.get(name)
-        if row is None:
-            row = next((candidate for _, _, _, candidate in selected
-                        if name.casefold() in Path(candidate.file_path).name.casefold()
-                        or name.casefold() in str(candidate.title or "").casefold()), None)
+        if row is not None:
+            return row
+        folded = name.casefold()
+        return next((
+            candidate for _, _, _, candidate in selected
+            if folded in Path(candidate.file_path).name.casefold()
+            or folded in str(candidate.title or "").casefold()
+            or Path(candidate.file_path).name.casefold() in folded
+            or (candidate.title and str(candidate.title).casefold() in folded)
+        ), None)
+
+    matched_rows = []
+    row_levels = {}
+    for item in model_refs:
+        if isinstance(item, dict):
+            name = str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
+            level = str(item.get("level", "")).casefold()
+        else:
+            name, level = str(item).strip(), ""
+        row = _resolve_reference(name)
+        if row is not None:
+            if row not in matched_rows:
+                matched_rows.append(row)
+            if level == "forte":
+                row_levels[row.id] = "forte"
+            elif row_levels.get(row.id) != "forte":
+                row_levels[row.id] = "partielle"
+    for name in requested:
+        row = _resolve_reference(name)
         if row is not None and row not in matched_rows:
             matched_rows.append(row)
-    strong_names = {
-        str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
-        for item in model_refs if isinstance(item, dict) and str(item.get("level", "")).casefold() == "forte"
-    }
-    if matched_rows and any(name in strong_names for name in requested):
+
+    # Le niveau global dépend des références effectivement résolues, pas des chaînes brutes.
+    if any(row_levels.get(row.id) == "forte" for row in matched_rows):
         case_id = "CAS_1_CORRESPONDANCE_FORTE"
     elif matched_rows:
         case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
+    elif case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
+        # Ne jamais inventer une correspondance avec le premier résultat du moteur de recherche.
+        case_id = "CAS_4_AUCUNE_ETUDE_PERTINENTE"
+        final["explanation"] = (
+            str(final.get("explanation", "")).strip()
+            + " Aucune référence n'a été identifiée explicitement par le modèle parmi les documents transmis ; "
+              "une correspondance ne peut donc pas être confirmée sans preuve nommée."
+        ).strip()
+        final["recommendation"] = (
+            "Vérifier manuellement les trois références candidates avant de conclure à un doublon."
+        )
     if case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
         matched_rows = []
-    if not matched_rows and case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
-        matched_rows = [selected[0][3]]
     matched_row = matched_rows[0] if matched_rows else None
     reference_name = Path(matched_row.file_path).name if matched_row else ""
     case_titles = {
@@ -381,15 +434,16 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     per_reference = []
     for row in matched_rows:
         item = next((item for item in model_refs if isinstance(item, dict)
-                     and str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
-                     in {Path(row.file_path).name, str(row.title or "")}), {})
+                     and _resolve_reference(
+                         item.get("filename") or item.get("source") or item.get("title") or ""
+                     ) is row), {})
         level = str(item.get("level", "")).casefold()
         per_reference.append({
             "source_id": row.id,
             "source": Path(row.file_path).name,
             "title": str(row.title or ""),
             "document_type": row.get_document_type_display(),
-            "level": "forte" if level == "forte" or (not level and case_id == "CAS_1_CORRESPONDANCE_FORTE" and row is matched_rows[0]) else "partielle",
+            "level": "forte" if row_levels.get(row.id) == "forte" or (not level and case_id == "CAS_1_CORRESPONDANCE_FORTE" and row is matched_rows[0]) else "partielle",
             "explanation": str(item.get("explanation") or final.get("explanation", ""))[:1200],
             "common_points": [str(x)[:400] for x in item.get("common_points", final.get("common_points", []))[:8]],
             "differences": [str(x)[:400] for x in item.get("differences", final.get("differences", []))[:8]],
