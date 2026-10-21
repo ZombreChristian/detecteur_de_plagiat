@@ -193,7 +193,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     rows = _load_all_indexed_references()
     if not rows:
         raise IndependentTDRError(
-            "Aucun TDR de référence n'est présent dans l'index PostgreSQL. "
+            "Aucun TDR ni rapport d'étude de référence n'est présent dans l'index PostgreSQL. "
             "Préparez l'index avant de lancer l'analyse."
         )
 
@@ -335,7 +335,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "corpus_references_ranked": len(ranked),
             "batches_examined": 1,
             "evidence": evidence,
-            # Pas de liste des trois candidats comme trois verdicts : un seul verdict global.
+            # Les références restent des éléments de comparaison, pas des verdicts séparés : un seul verdict global.
             "batch_findings": [],
         },
         "best_source_id": matched_row.id if matched_row else None,
