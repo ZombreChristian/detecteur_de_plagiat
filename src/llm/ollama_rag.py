@@ -157,6 +157,16 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
     if result.get("case_id") not in allowed_cases or result.get("decision") not in allowed_decisions:
         raise OllamaRAGError("La réponse de Qwen3 ne respecte pas le format de décision attendu.")
 
+    # Le case_id est la classification métier canonique : on évite qu'une
+    # réponse JSON incohérente associe un cas et une décision contradictoires.
+    case_decisions = {
+        "CAS_1_CORRESPONDANCE_FORTE": "SIMILAIRE",
+        "CAS_2_CORRESPONDANCE_PARTIELLE": "SIMILARITÉ PARTIELLE",
+        "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE": "DIFFERENT",
+        "CAS_4_AUCUNE_ETUDE_PERTINENTE": "DIFFERENT",
+    }
+    result["decision"] = case_decisions[result["case_id"]]
+
     for key in ("common_points", "differences", "evidence", "missing_information"):
         if not isinstance(result.get(key), list):
             result[key] = []
