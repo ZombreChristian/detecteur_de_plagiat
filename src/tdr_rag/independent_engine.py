@@ -177,9 +177,31 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "differences": [str(x)[:300] for x in analysis.get("differences", [])[:6]],
         })
 
+    # Réduction hiérarchique des résultats pour garder le contexte borné,
+    # sans supprimer de lots ni plafonner le nombre de documents comparés.
+    reduction_system = (
+        "Synthétise fidèlement les constats fournis sur des comparaisons de TDR. "
+        "Conserve les noms exacts des références, les similitudes substantielles, "
+        "les différences de zone et les incertitudes. N'émets pas le verdict final. "
+        "Réponds en JSON avec une clé summary contenant une synthèse concise."
+    )
+    summaries = [json.dumps(item, ensure_ascii=False) for item in batch_findings]
+    while len(summaries) > 6:
+        reduced = []
+        for pos in range(0, len(summaries), 6):
+            group = summaries[pos:pos + 6]
+            summary = _ollama_json(
+                reduction_system,
+                "Synthétise ces constats sans inventer et conserve les noms de références :\n"
+                + "\n\n".join(group),
+                tokens=300,
+            )
+            reduced.append(str(summary.get("summary", ""))[:1800])
+        summaries = reduced
+
     final_system = (
-        "Tu es l'arbitre final d'une vérification de TDR. Les résultats fournis sont "
-        "des analyses de lots couvrant toutes les références indexées. Décide selon "
+        "Tu es l'arbitre final d'une vérification de TDR. Les résultats fournis "
+        "synthétisent les comparaisons de toutes les références indexées. Décide selon "
         "les preuves, pas selon les scores. CAS_1 si même étude ou quasi-identique; "
         "CAS_2 si correspondance partielle substantielle mais différences importantes; "
         "CAS_3 si objectifs/étude comparables mais zone géographique différente; "
@@ -191,8 +213,8 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     final = _ollama_json(
         final_system,
         "TDR CANDIDAT:\n" + candidate_excerpt + "\n\n"
-        "RÉSULTATS DES COMPARAISONS AVEC TOUTES LES RÉFÉRENCES INDEXÉES:\n"
-        + json.dumps(batch_findings, ensure_ascii=False),
+        "SYNTHÈSE DES COMPARAISONS AVEC TOUTES LES RÉFÉRENCES INDEXÉES:\n"
+        + "\n\n".join(summaries),
         tokens=650,
     )
     case_id = str(final.get("case_id", "CAS_4_AUCUNE_ETUDE_PERTINENTE"))
