@@ -33,7 +33,6 @@ OUTPUT_TOKENS = 1200
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
     "CAS_2_CORRESPONDANCE_PARTIELLE",
-    "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE",
     "CAS_4_AUCUNE_ETUDE_PERTINENTE",
 }
 
@@ -233,12 +232,11 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "GRILLE DE DÉCISION OBLIGATOIRE : "
         "CAS_1_CORRESPONDANCE_FORTE = même étude ou quasi-identique, notamment si "
         "l'objet et les objectifs essentiels coïncident malgré une reformulation ; "
-        "CAS_2_CORRESPONDANCE_PARTIELLE = correspondance faible à moyenne, plusieurs "
-        "éléments importants communs mais recouvrement incomplet ou différences "
-        "substantielles ; CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE = objectif et démarche "
-        "comparables mais zone géographique réellement différente ; "
-        "CAS_4_AUCUNE_ETUDE_PERTINENTE = seulement des ressemblances générales ou "
-        "aucune référence suffisamment liée au sujet.\n"
+        "CAS_2_CORRESPONDANCE_PARTIELLE = une ou plusieurs références partagent des "
+        "éléments métier significatifs, même si la zone, la méthode ou les livrables "
+        "diffèrent ; CAS_4_AUCUNE_ETUDE_PERTINENTE = aucune référence ne présente "
+        "de correspondance métier significative. Une zone différente peut relever "
+        "de CAS_2 si les objectifs et la démarche se recoupent réellement.\n"
         "IMPORTANT : une correspondance faible mais réelle doit être signalée en "
         "CAS_2, et non masquée par CAS_4. CAS_4 n'est pas un choix par défaut lorsque "
         "les documents sont reformulés ou lorsque les preuves sont imparfaites. "
@@ -263,14 +261,19 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "comme TDR-TEST-101 s'il ne figure pas dans la liste. Pour matched_reference, recopie "
         "exactement le titre ou le nom de fichier d'une référence fournie ; si aucune référence "
         "ne convient, renvoie une chaîne vide.\n"
-        "Choisis un seul verdict global et donne les points communs, les différences et une "
-        "recommandation. Les libellés internes de récupération ne sont pas destinés à "
-        "l'utilisateur : ne dis jamais « TDR 1 », « TDR 2 », « candidat de recherche 1/2 », "
-        "ni « document numéro 1/2 ». N'invente aucun fait. Réponds uniquement avec un objet "
-        "JSON valide ayant les clés case_id, decision, explanation, matched_reference, confidence, "
-        "common_points (tableau), differences (tableau), recommendation, correspondence_level "
-        "(forte, moyenne, faible ou nulle), evidence_from_reference (tableau de courts éléments "
-        "concrets).\n"
+        "Évalue séparément CHAQUE référence. Retourne matched_references, un tableau "
+        "de toutes les références réellement fortes ou partielles, chacune avec filename, "
+        "level (forte ou partielle), explanation, common_points et differences. Le verdict "
+        "global est CAS_1 si au moins une référence est forte ; CAS_2 si aucune n'est forte "
+        "mais qu'au moins une est partielle ; CAS_4 si aucune n'est pertinente. "
+        "Choisis aussi un seul verdict global et donne les points communs, les différences et "
+        "une recommandation. Ne cite que les noms exacts de la liste autorisée. Les libellés "
+        "internes de récupération ne sont pas destinés à l'utilisateur : ne dis jamais "
+        "« TDR 1 », « TDR 2 » ou « document numéro 1/2 ». N'invente aucun fait. Réponds "
+        "uniquement avec un objet JSON valide ayant les clés case_id, decision, explanation, "
+        "matched_reference, matched_references, confidence, common_points (tableau), differences "
+        "(tableau), recommendation, correspondence_level (forte, moyenne ou nulle), "
+        "evidence_from_reference (tableau).\n"
         "Rappel : les références sont des TDR ou des rapports d'étude présents dans la base ; ne prétends pas "
         "qu'une étude a été exécutée si le document ne l'établit pas."
     )
@@ -319,56 +322,69 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         elif any(phrase in reasoning_text for phrase in partial_phrases):
             case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
 
-    reference_name = str(final.get("matched_reference", "")).strip()
-    # Le modèle peut citer un identifiant métier présent dans le contenu (ex. TDR-STA-016)
-    # plutôt que le nom de fichier. Si le libellé n'est pas une métadonnée autorisée,
-    # on affiche une référence réellement récupérée, jamais un nom inventé.
-    matched_row = None
-    allowed_names = {
-        name
-        for _, _, _, row in selected
-        for name in (Path(row.file_path).name, row.title)
+    # Ne conserver que les références effectivement transmises au modèle.
+    allowed_rows = {Path(row.file_path).name: row for _, _, _, row in selected}
+    allowed_rows.update({str(row.title or ""): row for _, _, _, row in selected})
+    model_refs = final.get("matched_references", [])
+    if not isinstance(model_refs, list):
+        model_refs = []
+    requested = []
+    for item in model_refs:
+        name = str(item.get("filename") or item.get("source") or item.get("title") or "").strip() if isinstance(item, dict) else str(item).strip()
+        if name and name not in requested:
+            requested.append(name)
+    legacy = str(final.get("matched_reference", "")).strip()
+    if legacy and legacy not in requested:
+        requested.insert(0, legacy)
+    matched_rows = []
+    for name in requested:
+        row = allowed_rows.get(name)
+        if row is None:
+            row = next((candidate for _, _, _, candidate in selected
+                        if name.casefold() in Path(candidate.file_path).name.casefold()
+                        or name.casefold() in str(candidate.title or "").casefold()), None)
+        if row is not None and row not in matched_rows:
+            matched_rows.append(row)
+    strong_names = {
+        str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
+        for item in model_refs if isinstance(item, dict) and str(item.get("level", "")).casefold() == "forte"
     }
-    if reference_name in allowed_names:
-        matched_row = next(
-            (row for _, _, _, row in selected
-             if reference_name in {Path(row.file_path).name, row.title}),
-            None,
-        )
-    else:
-        cited = reference_name.casefold()
-        if cited:
-            matched_row = next(
-                (row for _, _, _, row in selected
-                 if cited in str(row.title or "").casefold()
-                 or cited in Path(row.file_path).name.casefold()),
-                None,
-            )
-    if matched_row is None and case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
-        matched_row = selected[0][3]
-    reference_name = (
-        Path(matched_row.file_path).name if matched_row else ""
-    )
-
+    if matched_rows and any(name in strong_names for name in requested):
+        case_id = "CAS_1_CORRESPONDANCE_FORTE"
+    elif matched_rows and case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
+        case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
+    if case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
+        matched_rows = []
+    if not matched_rows and case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
+        matched_rows = [selected[0][3]]
+    matched_row = matched_rows[0] if matched_rows else None
+    reference_name = Path(matched_row.file_path).name if matched_row else ""
     case_titles = {
-        "CAS_1_CORRESPONDANCE_FORTE": "Correspondance forte — document correspondant trouvé dans le registre",
-        "CAS_2_CORRESPONDANCE_PARTIELLE": "Correspondance partielle — vérification recommandée",
-        "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE": "Objectifs similaires — zone géographique différente",
-        "CAS_4_AUCUNE_ETUDE_PERTINENTE": "Aucun document de référence pertinent trouvé dans la base",
+        "CAS_1_CORRESPONDANCE_FORTE": "Forte correspondance",
+        "CAS_2_CORRESPONDANCE_PARTIELLE": "Correspondance partielle",
+        "CAS_4_AUCUNE_ETUDE_PERTINENTE": "Aucune correspondance",
     }
-    matched_row = next(
-        (row for _, _, _, row in selected
-         if reference_name and reference_name in {Path(row.file_path).name, row.title}),
-        None,
-    )
-    evidence = []
-    if matched_row and case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
-        evidence.append({
-            "source": reference_name,
-            "point": str(final.get("explanation", ""))[:900],
-            "justification": "Référence retenue après examen du contenu par le RAG.",
+    per_reference = []
+    for row in matched_rows:
+        item = next((item for item in model_refs if isinstance(item, dict)
+                     and str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
+                     in {Path(row.file_path).name, str(row.title or "")}), {})
+        level = str(item.get("level", "")).casefold()
+        per_reference.append({
+            "source_id": row.id,
+            "source": Path(row.file_path).name,
+            "title": str(row.title or ""),
+            "document_type": row.get_document_type_display(),
+            "level": "forte" if level == "forte" or (not level and case_id == "CAS_1_CORRESPONDANCE_FORTE" and row is matched_rows[0]) else "partielle",
+            "explanation": str(item.get("explanation") or final.get("explanation", ""))[:1200],
+            "common_points": [str(x)[:400] for x in item.get("common_points", final.get("common_points", []))[:8]],
+            "differences": [str(x)[:400] for x in item.get("differences", final.get("differences", []))[:8]],
         })
-
+    evidence = [{
+        "source": item["source"],
+        "point": item["explanation"][:900],
+        "justification": "Référence retenue après examen du contenu par le RAG.",
+    } for item in per_reference]
     return {
         "mode": "tdr_rag_independent",
         "decision_provider": "independent_rag",
@@ -380,6 +396,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "decision": str(final.get("decision", case_id)),
             "explanation": str(final.get("explanation", ""))[:2500],
             "matched_reference": reference_name,
+            "matched_references": per_reference,
             "confidence": str(final.get("confidence", "À confirmer"))[:80],
             "common_points": [str(x)[:500] for x in final.get("common_points", [])[:10]],
             "differences": [str(x)[:500] for x in final.get("differences", [])[:10]],
@@ -411,16 +428,11 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "best_source_id": matched_row.id if matched_row else None,
         "best_source": reference_name or None,
         "sources": [
-            {
-                "source_id": matched_row.id,
-                "source": Path(matched_row.file_path).name,
-                "title": matched_row.title,
-                "document_type": matched_row.get_document_type_display(),
-                "retrieval_score": round(
-                    next(score for score, _, _, row in selected if row.id == matched_row.id), 4
-                ),
-            }
-        ] if matched_row else [],
+            {"source_id": item["source_id"], "source": item["source"],
+             "title": item["title"], "document_type": item["document_type"],
+             "level": item["level"]}
+            for item in per_reference
+        ],
         "tfidf_score": None,
         "semantic_score": None,
         "hybrid_score": None,
