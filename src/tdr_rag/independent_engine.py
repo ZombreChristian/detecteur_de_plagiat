@@ -290,14 +290,65 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     case_id = str(final.get("case_id", "CAS_4_AUCUNE_ETUDE_PERTINENTE"))
     if case_id not in CASES:
         case_id = "CAS_4_AUCUNE_ETUDE_PERTINENTE"
+
+    # Réconcilie les contradictions connues du modèle : si son texte affirme
+    # explicitement une forte correspondance mais que son case_id vaut CAS_4,
+    # ne laisse pas l'interface afficher deux conclusions opposées.
+    explanation_text = str(final.get("explanation", ""))
+    recommendation_text = str(final.get("recommendation", ""))
+    common_points = final.get("common_points", [])
+    differences = final.get("differences", [])
+    reasoning_text = " ".join([
+        explanation_text,
+        recommendation_text,
+        " ".join(str(x) for x in common_points) if isinstance(common_points, list) else "",
+    ]).casefold()
+    strong_phrases = (
+        "correspond fortement", "correspondance forte", "identiques ou très proches",
+        "même étude", "meme etude", "reformulation très proche",
+        "reformulation tres proche", "ne pas enregistrer", "même tdr",
+        "meme tdr", "contenu et la structure", "alignés avec",
+    )
+    partial_phrases = (
+        "correspondance partielle", "proche mais", "objectifs comparables",
+        "similitude méthodologique", "similitude methodologique",
+    )
+    if case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
+        if any(phrase in reasoning_text for phrase in strong_phrases):
+            case_id = "CAS_1_CORRESPONDANCE_FORTE"
+        elif any(phrase in reasoning_text for phrase in partial_phrases):
+            case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
+
     reference_name = str(final.get("matched_reference", "")).strip()
+    # Le modèle peut citer un identifiant métier présent dans le contenu (ex. TDR-STA-016)
+    # plutôt que le nom de fichier. Si le libellé n'est pas une métadonnée autorisée,
+    # on affiche une référence réellement récupérée, jamais un nom inventé.
+    matched_row = None
     allowed_names = {
         name
         for _, _, _, row in selected
         for name in (Path(row.file_path).name, row.title)
     }
-    if reference_name not in allowed_names or case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
-        reference_name = ""
+    if reference_name in allowed_names:
+        matched_row = next(
+            (row for _, _, _, row in selected
+             if reference_name in {Path(row.file_path).name, row.title}),
+            None,
+        )
+    else:
+        cited = reference_name.casefold()
+        if cited:
+            matched_row = next(
+                (row for _, _, _, row in selected
+                 if cited in str(row.title or "").casefold()
+                 or cited in Path(row.file_path).name.casefold()),
+                None,
+            )
+    if matched_row is None and case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
+        matched_row = selected[0][3]
+    reference_name = (
+        Path(matched_row.file_path).name if matched_row else ""
+    )
 
     case_titles = {
         "CAS_1_CORRESPONDANCE_FORTE": "Correspondance forte — document correspondant trouvé dans le registre",
