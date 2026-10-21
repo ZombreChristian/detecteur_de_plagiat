@@ -16,9 +16,10 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 OLLAMA_TIMEOUT = max(300.0, float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "300")))
 # Qwen3 tourne localement avec un contexte souvent limite a 4096 tokens.
 # Borner le prompt evite d'envoyer plusieurs dizaines de milliers de caracteres.
-RAG_REFERENCE_TOP_K = min(3, max(1, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "3"))))
-MAX_CANDIDATE_CHARS = min(6500, max(3000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "6500"))))
-MAX_REFERENCE_CHARS = min(1800, max(1200, int(os.getenv("TDR_RAG_REFERENCE_MAX_CHARS", "1800"))))
+RAG_REFERENCE_TOP_K = min(3, max(1, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "2"))))
+MAX_CANDIDATE_CHARS = min(6500, max(3000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "5200"))))
+MAX_REFERENCE_CHARS = min(1800, max(900, int(os.getenv("TDR_RAG_REFERENCE_MAX_CHARS", "1200"))))
+MAX_OUTPUT_TOKENS = min(700, max(250, int(os.getenv("TDR_RAG_MAX_OUTPUT_TOKENS", "450"))))
 
 
 class OllamaRAGError(RuntimeError):
@@ -128,6 +129,43 @@ def _reference_excerpt(candidate_text, source_text, limit):
     return "\n\n".join(block for _, block in selected)[:limit]
 
 
+def _candidate_excerpt(candidate_text, limit):
+    """Préserve les sections déterminantes d'un TDR au lieu de couper au début."""
+    text = (candidate_text or "").strip()
+    if len(text) <= limit:
+        return text
+
+    priority = (
+        "objet", "contexte", "justification", "problématique", "problematique",
+        "objectif", "résultat", "resultat", "zone", "localisation", "bénéficiaire",
+        "beneficiaire", "population", "méthodologie", "methodologie", "livrable",
+        "période", "periode", "activité", "activite",
+    )
+    blocks = [block.strip() for block in re.split(r"\n{2,}|(?<=[.!?])\s+(?=[A-ZÀ-Ÿ])", text) if block.strip()]
+    if not blocks:
+        return text[:limit]
+
+    ranked = []
+    for index, block in enumerate(blocks):
+        folded = block.casefold()
+        heading_bonus = sum(2.0 for term in priority if term in folded[:100])
+        terms = set(re.findall(r"[\wÀ-ÿ]{4,}", folded))
+        ranked.append((heading_bonus + min(len(terms), 80) / 200 + (0.3 if index < 3 else 0), index, block))
+
+    chosen = []
+    used = 0
+    for score, index, block in sorted(ranked, key=lambda item: (item[0], -item[1]), reverse=True):
+        remaining = limit - used
+        if remaining <= 0:
+            break
+        piece = block if len(block) <= remaining else block[:remaining]
+        if piece:
+            chosen.append((index, piece))
+            used += len(piece) + 2
+    chosen.sort(key=lambda item: item[0])
+    return "\n\n".join(piece for _, piece in chosen)[:limit]
+
+
 def analyze_tdr_with_rag(candidate_text, ranked_references):
     """Arbitre un TDR avec Qwen3 à partir des références récupérées par le moteur."""
     references = []
@@ -154,7 +192,7 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
         raise OllamaRAGError("Aucune référence indexée n'a pu être transmise à Qwen3.")
 
     payload = {
-        "tdr_candidat": (candidate_text or "")[:MAX_CANDIDATE_CHARS],
+        "tdr_candidat": _candidate_excerpt(candidate_text, MAX_CANDIDATE_CHARS),
         "references_recuperees": references,
         "consigne": (
             "Analyse le TDR candidat par rapport à chaque référence. Les références "
@@ -174,7 +212,8 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
                 ],
-                "options": {"temperature": 0.1},
+                "options": {"temperature": 0.1, "num_predict": MAX_OUTPUT_TOKENS},
+                "keep_alive": "5m",
             },
             timeout=OLLAMA_TIMEOUT,
         )
@@ -183,7 +222,7 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
     except requests.Timeout as exc:
         raise OllamaRAGError(
             f"Ollama n'a pas répondu dans le délai de {OLLAMA_TIMEOUT:g} secondes. "
-            "Le prompt a été limité pour tenir dans le contexte du modèle; vérifiez aussi la charge CPU."
+            "Le contexte et la longueur de réponse ont été réduits; vérifiez aussi la charge CPU. Pour un premier chargement, le modèle peut prendre plus de temps."
         ) from exc
     except requests.HTTPError as exc:
         status = exc.response.status_code if exc.response is not None else "inconnu"
