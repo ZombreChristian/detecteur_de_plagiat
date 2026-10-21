@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 try:
@@ -8,6 +9,10 @@ except ImportError:
     pass
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BASE_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-detecteur-plagiat-dev")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if h.strip()]
