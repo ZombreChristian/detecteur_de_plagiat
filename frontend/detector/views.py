@@ -857,6 +857,8 @@ def analyser(request):
         request.session["last_result"] = result
         request.session["last_analysis_id"] = analysis.id
         request.session["last_document_name"] = uploaded.name
+        if mode == "duplicate":
+            return redirect("detector:analysis_detail", pk=analysis.pk)
         return redirect("detector:resultats")
     except requests.RequestException as exc:
         response = getattr(exc, "response", None)
