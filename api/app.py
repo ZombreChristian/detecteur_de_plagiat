@@ -450,14 +450,21 @@ async def lifespan(app: FastAPI):
     print(f"[similarity] Modèle : {model_info['name']}")
     get_model()
 
-    try:
+    def initialize_reference_data():
+        # Django ORM et call_command('migrate') sont synchrones. Le lifespan
+        # FastAPI est asynchrone : exécuter toute l'initialisation DB dans un
+        # thread évite l'erreur SynchronousOnlyOperation.
         stats = ensure_reference_index()
+        _warm_reference_runtime_indexes()
+        return stats
+
+    try:
+        stats = await run_in_threadpool(initialize_reference_data)
         print(
             "[similarity] Références : "
             f"{stats['created_or_updated']} préparée(s), "
             f"{stats['skipped']} déjà indexée(s)."
         )
-        _warm_reference_runtime_indexes()
     except Exception as exc:
         print(f"[similarity] Initialisation PostgreSQL/index impossible : {exc}")
 
