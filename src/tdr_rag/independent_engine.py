@@ -80,7 +80,7 @@ def extract_tdr_document(path: Path) -> str:
     if suffix == ".pdf":
         from pypdf import PdfReader
         reader = PdfReader(str(path))
-        return "\\n\\n".join(
+        return "\n\n".join(
             (page.extract_text() or "").strip()
             for page in reader.pages
             if (page.extract_text() or "").strip()
@@ -94,7 +94,7 @@ def extract_tdr_document(path: Path) -> str:
                 cells = [cell.text.strip() for cell in row.cells]
                 if any(cells):
                     parts.append(" | ".join(cells))
-        return "\\n\\n".join(parts)
+        return "\n\n".join(parts)
     raise IndependentTDRError("Format non pris en charge. Utilisez un fichier DOCX ou PDF.")
 
 
