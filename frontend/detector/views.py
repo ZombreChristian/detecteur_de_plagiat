@@ -678,15 +678,24 @@ def reception(request):
             return redirect("detector:reception")
         data["threshold"] = threshold
 
-    endpoint = "/api/detect/duplicate" if mode == "tdr" else "/api/detect/plagiarism"
+    # Le contrôle du TDR passe par le même moteur RAG que la page dédiée ; le rapport garde son moteur de plagiat.
+    endpoint = "/api/tdr-rag/analyze" if mode == "tdr" else "/api/detect/plagiarism"
     start = time.perf_counter()
     try:
-        response = requests.post(
-            f"{settings.FASTAPI_URL}{endpoint}",
-            data=data,
-            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))},
-            timeout=600,
-        )
+        upload_payload = {"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))}
+        if mode == "duplicate":
+            response = requests.post(
+                f"{settings.FASTAPI_URL}{endpoint}",
+                files=upload_payload,
+                timeout=1800,
+            )
+        else:
+            response = requests.post(
+                f"{settings.FASTAPI_URL}{endpoint}",
+                data=data,
+                files=upload_payload,
+                timeout=600,
+            )
         response.raise_for_status()
         result = response.json()
         result["uploaded_path"] = uploaded_path
@@ -816,15 +825,24 @@ def analyser(request):
             messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
             return redirect("detector:analyser")
         data["threshold"] = threshold
-    endpoint = "/api/detect/duplicate" if mode == "duplicate" else "/api/detect/plagiarism"
+    # Tous les contrôles de TDR utilisent le moteur RAG complet ; le contrôle des rapports reste inchangé.
+    endpoint = "/api/tdr-rag/analyze" if mode == "duplicate" else "/api/detect/plagiarism"
     start = time.perf_counter()
     try:
-        response = requests.post(
-            f"{settings.FASTAPI_URL}{endpoint}",
-            data=data,
-            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))},
-            timeout=600,
-        )
+        upload_payload = {"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))}
+        if mode == "tdr":
+            response = requests.post(
+                f"{settings.FASTAPI_URL}{endpoint}",
+                files=upload_payload,
+                timeout=1800,
+            )
+        else:
+            response = requests.post(
+                f"{settings.FASTAPI_URL}{endpoint}",
+                data=data,
+                files=upload_payload,
+                timeout=600,
+            )
         response.raise_for_status()
         result = response.json()
         result["uploaded_path"] = uploaded_path
