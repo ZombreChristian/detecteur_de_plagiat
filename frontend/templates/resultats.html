@@ -83,6 +83,7 @@
               <select name="decision">
                 <option value="all" {% if selected_decision == 'all' %}selected{% endif %}>Toutes</option>
                 <option value="SIMILAIRE" {% if selected_decision == 'SIMILAIRE' %}selected{% endif %}>SIMILAIRE</option>
+                <option value="SIMILARITÉ PARTIELLE" {% if selected_decision == 'SIMILARITÉ PARTIELLE' %}selected{% endif %}>SIMILARITÉ PARTIELLE</option>
                 <option value="DIFFERENT" {% if selected_decision == 'DIFFERENT' %}selected{% endif %}>DIFFERENT</option>
                 <option value="A EXAMINER" {% if selected_decision == 'A EXAMINER' %}selected{% endif %}>À EXAMINER</option>
               </select>
@@ -132,7 +133,7 @@
                     <span class="status status-neutral">{{ item.decision|default:'—' }}</span>
                   {% endif %}
                 </td>
-                <td class="num">{{ item.hybrid_score|floatformat:3 }}</td>
+                <td class="num">{% if item.mode == 'duplicate' %}—{% else %}{{ item.hybrid_score|floatformat:3|default:'—' }}{% endif %}</td>
 <td>
   <a class="btn" href="{% url 'detector:delete_analysis' item.id %}">Retirer</a>
 </td>
