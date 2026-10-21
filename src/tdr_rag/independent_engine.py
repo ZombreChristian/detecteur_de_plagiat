@@ -43,35 +43,54 @@ class IndependentTDRError(RuntimeError):
 
 
 def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKENS) -> dict:
-    try:
-        response = requests.post(
-            f"{OLLAMA_URL}/api/chat",
-            json={
-                "model": OLLAMA_MODEL,
-                "stream": False,
-                "format": "json",
-                "think": False,
-                "keep_alive": "5m",
-                "options": {"temperature": 0.1, "num_predict": tokens},
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-            },
-            timeout=OLLAMA_TIMEOUT,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        content = (payload.get("message") or {}).get("content", "")
-        parsed = json.loads(content)
-        if not isinstance(parsed, dict):
-            raise ValueError("La réponse JSON n'est pas un objet.")
-        return parsed
-    except Exception as exc:
-        raise IndependentTDRError(
-            f"Le moteur RAG indépendant n'a pas pu obtenir une réponse exploitable de "
-            f"{OLLAMA_MODEL} : {exc}"
-        ) from exc
+    """Appelle Ollama avec reprises en cas de JSON invalide ou de génération tronquée."""
+    last_error = None
+    last_content = ""
+    # Une première tentative normale, puis deux reprises avec davantage de tokens
+    # et une consigne explicite de produire un objet JSON complet.
+    for attempt in range(3):
+        token_budget = min(max(tokens, 600) * (attempt + 1), 1800)
+        retry_note = ""
+        if attempt:
+            retry_note = (
+                "\n\nIMPORTANT — la réponse précédente était invalide ou incomplète. "
+                "Recommence et renvoie un unique objet JSON valide, complet, sans Markdown, "
+                "sans texte avant/après, avec toutes les chaînes correctement échappées. "
+                "Reste concis et termine toutes les accolades et tous les guillemets."
+            )
+        try:
+            response = requests.post(
+                f"{OLLAMA_URL}/api/chat",
+                json={
+                    "model": OLLAMA_MODEL,
+                    "stream": False,
+                    "format": "json",
+                    "think": False,
+                    "keep_alive": "5m",
+                    "options": {"temperature": 0, "num_predict": token_budget},
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt + retry_note},
+                    ],
+                },
+                timeout=OLLAMA_TIMEOUT,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            last_content = (payload.get("message") or {}).get("content", "").strip()
+            if not last_content:
+                raise ValueError("Ollama a renvoyé une réponse vide.")
+            parsed = json.loads(last_content)
+            if not isinstance(parsed, dict):
+                raise ValueError("La réponse JSON n'est pas un objet.")
+            return parsed
+        except Exception as exc:
+            last_error = exc
+    preview = re.sub(r"\\s+", " ", last_content)[:240]
+    raise IndependentTDRError(
+        f"Qwen ({OLLAMA_MODEL}) a renvoyé un JSON invalide après 3 tentatives. "
+        f"Dernière erreur : {last_error}. Début de la réponse : {preview!r}"
+    ) from last_error
 
 
 def extract_tdr_document(path: Path) -> str:
@@ -191,7 +210,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             system_batch,
             "TDR CANDIDAT:\n" + candidate_excerpt + "\n\n"
             + "\n\n--- RÉFÉRENCE SUIVANTE ---\n\n".join(reference_blocks),
-            tokens=320,
+            tokens=700,
         )
         batch_findings.append({
             "reference": str(analysis.get("reference", ""))[:300],
@@ -218,7 +237,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
                 reduction_system,
                 "Synthétise ces constats sans inventer et conserve les noms de références :\n"
                 + "\n\n".join(group),
-                tokens=300,
+                tokens=600,
             )
             reduced.append(str(summary.get("summary", ""))[:1800])
         summaries = reduced
@@ -239,7 +258,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "TDR CANDIDAT:\n" + candidate_excerpt + "\n\n"
         "SYNTHÈSE DES COMPARAISONS AVEC TOUTES LES RÉFÉRENCES INDEXÉES:\n"
         + "\n\n".join(summaries),
-        tokens=650,
+        tokens=1000,
     )
     case_id = str(final.get("case_id", "CAS_4_AUCUNE_ETUDE_PERTINENTE"))
     if case_id not in CASES:
