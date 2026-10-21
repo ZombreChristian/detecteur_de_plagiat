@@ -4,74 +4,78 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TDRDOC-SCAN — Analyse TDR RAG indépendante</title>
+<title>TDRDOC-SCAN — Analyse TDR RAG</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}">
+<link rel="stylesheet" href="{% static 'css/institutional.css' %}">
+<script src="{% static 'js/theme.js' %}"></script>
 <style>
-:root{color-scheme:light;--ink:#17212b;--muted:#5e6a75;--line:#dce3e8;--paper:#fff;--bg:#f3f6f8;--accent:#2767a8;--accent-soft:#edf4fb}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
-.flag{height:7px;background:linear-gradient(to bottom,#e32636 0 33.33%,#f5d442 33.33% 66.66%,#16834a 66.66%)}header{background:var(--paper);border-bottom:1px solid var(--line);padding:20px clamp(20px,5vw,72px);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.brand{font-weight:800;letter-spacing:.04em}.tag{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-a{color:inherit}main{max-width:920px;margin:42px auto;padding:0 20px}.panel{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:clamp(22px,4vw,42px);box-shadow:0 10px 32px #17212b0b}
-h1{font-size:clamp(1.7rem,4vw,2.4rem);line-height:1.15;margin:8px 0 14px}p{color:var(--muted)}.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:24px 0}.step{border:1px solid var(--line);border-radius:12px;padding:14px}.step strong{display:block;margin-bottom:4px}.step span{color:var(--muted);font-size:.9rem}
-label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:block;width:100%;padding:18px;border:1px dashed #aab8c2;border-radius:10px;background:#fbfcfd}button{margin-top:20px;border:0;border-radius:9px;padding:13px 20px;background:#17212b;color:#fff;font-size:1rem;font-weight:700;cursor:pointer}button:hover{background:#334653}button:disabled{opacity:.65;cursor:wait}.note{border-left:4px solid var(--accent);background:var(--accent-soft);padding:13px 16px;border-radius:0 8px 8px 0;font-size:.93rem;color:#243f5d}.messages{margin-bottom:18px}.message{padding:12px 14px;background:#fff4e5;border:1px solid #eed4ad;border-radius:8px;margin:8px 0}.back{color:var(--muted);text-decoration:none}.back:hover{text-decoration:underline}
-.progress-panel{display:none;margin-top:24px;padding:20px;border:1px solid var(--line);border-radius:12px;background:#fbfcfd}
-.progress-panel.active{display:block}.progress-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;font-weight:700}
-.progress-track{height:12px;overflow:hidden;background:#e5eaee;border-radius:999px}
-.progress-fill{height:100%;width:3%;background:var(--accent);border-radius:999px;transition:width .5s ease}
-.progress-fill.waiting{background:linear-gradient(90deg,#2767a8 0%,#8db6df 50%,#2767a8 100%);background-size:200% 100%;animation:progress-shimmer 1.6s linear infinite}
+.progress-panel{display:none;margin-top:22px;padding:20px;border:1px solid var(--hairline);border-radius:var(--radius-m);background:var(--panel)}
+.progress-panel.active{display:block}.progress-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;font-weight:650}
+.progress-track{height:10px;overflow:hidden;background:var(--panel-raised);border-radius:999px}
+.progress-fill{height:100%;width:3%;background:var(--gold);border-radius:999px;transition:width .5s ease}
+.progress-fill.waiting{background:linear-gradient(90deg,var(--gold) 0%,#d7c48d 50%,var(--gold) 100%);background-size:200% 100%;animation:progress-shimmer 1.6s linear infinite}
 @keyframes progress-shimmer{from{background-position:100% 0}to{background-position:-100% 0}}
-.progress-status{margin:12px 0 4px;color:var(--ink);font-weight:650}
-.progress-detail{font-size:.9rem;color:var(--muted);margin:0}
-.progress-note{font-size:.8rem;color:var(--muted);margin-top:8px}
+.progress-status{margin:12px 0 4px;color:var(--text);font-weight:650}.progress-detail,.progress-note{font-size:.9rem;color:var(--text-dim);margin:0}.progress-note{font-size:.8rem;margin-top:8px}
 .progress-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:18px}
-.progress-step{padding:10px 8px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:.82rem;text-align:center}
-.progress-step.current{border-color:var(--accent);background:var(--accent-soft);color:#214f7d;font-weight:700}
-.progress-step.done{border-color:#b9cfe4;color:#214f7d;background:#f7faff}
-.progress-error{display:none;margin-top:12px;padding:12px;border:1px solid #e8c4c4;background:#fff6f6;color:#842c2c;border-radius:8px}
-@media(max-width:600px){.progress-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.progress-step{padding:10px 8px;border:1px solid var(--hairline);border-radius:var(--radius-s);color:var(--text-dim);font-size:.82rem;text-align:center}
+.progress-step.current{border-color:var(--gold);background:var(--gold-wash);color:var(--text);font-weight:700}.progress-step.done{border-color:var(--hairline);color:var(--text-dim)}
+.progress-error{display:none;margin-top:12px;padding:12px;border:1px solid #e8c4c4;background:#fff6f6;color:#842c2c;border-radius:var(--radius-s)}
+.document-drop{display:block;width:100%;padding:18px;border:1px dashed var(--hairline);border-radius:var(--radius-s);background:var(--panel-raised);color:var(--text)}
+@media(max-width:700px){.progress-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.ctxbar .actions{flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){.progress-fill.waiting{animation:none}.progress-fill{transition:none}}
 </style>
 </head>
 <body>
-<div class="flag"></div>
-<header><div><div class="brand">TDRDOC-SCAN</div><div class="tag">Analyse autonome des TDR</div></div><a class="back" href="{% url 'detector:dashboard' %}">← Tableau de bord</a></header>
-<main>
-{% if messages %}<div class="messages">{% for message in messages %}<div class="message">{{ message }}</div>{% endfor %}</div>{% endif %}
-<section class="panel">
-<div class="tag">Moteur RAG indépendant</div>
-<h1>Vérifier si une étude existe déjà</h1>
-<p>Déposez un TDR. L'IA le compare aux études TDR déjà indexées dans la base documentaire, puis explique sa conclusion.</p>
-<div class="note"><strong>Comment fonctionne l'analyse ?</strong> Le moteur classe les références indexées avec une recherche lexicale (30 %) et sémantique (70 %), puis Qwen analyse en profondeur les 3 documents les plus pertinents pour établir un seul verdict global. Les documents téléversés ne sont pas ajoutés automatiquement à l'index.</div>
-<div class="steps">
-<div class="step"><strong>1. Extraire</strong><span>Lecture du contenu du TDR Word ou PDF.</span></div>
-<div class="step"><strong>2. Rechercher</strong><span>Classement lexical et sémantique de toute la base, puis sélection des 3 meilleurs candidats.</span></div>
-<div class="step"><strong>3. Comparer avec l'IA</strong><span>Qwen confronte les 3 documents sélectionnés et décide si une étude pertinente existe.</span></div>
-<div class="step"><strong>4. Conclure</strong><span>Verdict motivé et référence retenue, si pertinente.</span></div>
-</div>
+<div class="console">
+<aside class="rail">
+<div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
+<nav class="rail-nav">
+<a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span><span>Tableau de bord</span></a>
+<a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="m10 15 2 2 4-4"></path></svg></span><span>Vérifier un TDR</span></a>
+<a class="rail-link active" href="{% url 'detector:tdr_rag_independent' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"></path><circle cx="12" cy="12" r="8"></circle></svg></span><span>Analyse TDR — RAG complet</span></a>
+<a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M8 12h8"></path></svg></span><span>Nouvelle analyse</span></a>
+<a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span><span>Historique</span></a>
+<a class="rail-link" href="{% url 'detector:account_settings' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span><span>Mon compte</span></a>
+{% if request.user.is_staff %}<a class="rail-link" href="{% url 'detector:administration' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span><span>Administration</span></a>{% endif %}
+</nav>
+<div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div>
+</aside>
+<main class="main">
+<div class="ctxbar"><div><h1>Analyse TDR — RAG complet</h1><div class="lede">Vérifier si un projet d'étude correspond à un document déjà présent dans le registre</div></div><div class="actions"><a class="btn" href="{% url 'detector:dashboard' %}">← Tableau de bord</a><a class="btn" href="{% url 'detector:resultats' %}">Historique</a></div></div>
+{% if messages %}<div class="page-pad">{% for message in messages %}<div class="notice">{{ message }}</div>{% endfor %}</div>{% endif %}
+<div class="page-pad">
+<section class="panel national-bar-red">
+<div class="panel-head"><div><div class="engine-kicker muted">Moteur de comparaison documentaire</div><h2>Vérifier si une étude existe déjà</h2></div></div>
+<div class="panel-body">
+<p class="muted">Déposez un TDR au format Word ou PDF. Qwen compare son contenu aux références TDR indexées dans PostgreSQL et explique si un document correspondant, proche ou non pertinent est présent dans le registre.</p>
+<div class="notice"><strong>Comment fonctionne l'analyse ?</strong><p class="muted" style="margin:6px 0 0">La recherche lexicale et sémantique sélectionne les cinq références les plus prometteuses. Ces scores servent uniquement à retrouver des documents ; Qwen examine ensuite leur contenu et formule le verdict. Un TDR présent dans le registre ne prouve pas, à lui seul, que l'étude a été exécutée.</p></div>
 <form id="tdr-analysis-form" method="post" enctype="multipart/form-data">
 {% csrf_token %}
 <label for="tdr_document">Document TDR à analyser</label>
-<input id="tdr_document" name="tdr_document" type="file" accept=".docx,.pdf" required>
-<p>Formats acceptés : Word (.docx) et PDF (.pdf). La recherche porte sur toute la base ; l'analyse approfondie par Qwen est limitée aux 3 candidats les plus pertinents.</p>
-<button id="analyze-button" type="submit">Analyser le TDR</button>
+<input class="document-drop" id="tdr_document" name="tdr_document" type="file" accept=".docx,.pdf" required>
+<p class="muted">Formats acceptés : Word (.docx) et PDF (.pdf).</p>
+<button class="btn btn-primary" id="analyze-button" type="submit">Analyser le TDR</button>
 </form>
 <section id="progress-panel" class="progress-panel" role="status" aria-live="polite">
-  <div class="progress-heading"><span>Analyse en cours</span><span id="elapsed-time">00:00</span></div>
-  <div class="progress-track" role="progressbar" aria-label="Progression indicative de l'analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow="3"><div id="progress-fill" class="progress-fill waiting"></div></div>
-  <p id="progress-status" class="progress-status">Préparation du document…</p>
-  <p id="progress-detail" class="progress-detail">Le traitement peut prendre plusieurs minutes selon la taille de la base et le temps de réponse de Qwen.</p>
-  <p class="progress-note">Les étapes affichées donnent une estimation visuelle basée sur le temps écoulé. Le serveur ne transmet pas encore le pourcentage réel de chaque opération.</p>
-  <div class="progress-steps">
-    <div class="progress-step current" data-step="0">1. Réception du document</div>
-    <div class="progress-step" data-step="1">2. Extraction du texte</div>
-    <div class="progress-step" data-step="2">3. Chargement des références</div>
-    <div class="progress-step" data-step="3">4. Recherche des similarités</div>
-    <div class="progress-step" data-step="4">5. Sélection des 3 références</div>
-    <div class="progress-step" data-step="5">6. Analyse par Qwen</div>
-    <div class="progress-step" data-step="6">7. Préparation du verdict</div>
-    <div class="progress-step" data-step="7">8. Enregistrement du résultat</div>
-  </div>
-  <div id="progress-error" class="progress-error" role="alert"></div>
+<div class="progress-heading"><span>Analyse en cours</span><span id="elapsed-time">00:00</span></div>
+<div class="progress-track" role="progressbar" aria-label="Progression indicative de l'analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow="3"><div id="progress-fill" class="progress-fill waiting"></div></div>
+<p id="progress-status" class="progress-status">Préparation du document…</p>
+<p id="progress-detail" class="progress-detail">Le traitement peut prendre plusieurs minutes selon la taille de la base et le temps de réponse de Qwen.</p>
+<p class="progress-note">La progression est indicative : le serveur ne transmet pas encore l'avancement réel de chaque opération.</p>
+<div class="progress-steps">
+<div class="progress-step current" data-step="0">1. Réception du document</div>
+<div class="progress-step" data-step="1">2. Extraction du texte</div>
+<div class="progress-step" data-step="2">3. Chargement des références</div>
+<div class="progress-step" data-step="3">4. Recherche des similarités</div>
+<div class="progress-step" data-step="4">5. Sélection des références</div>
+<div class="progress-step" data-step="5">6. Analyse par Qwen</div>
+<div class="progress-step" data-step="6">7. Préparation du verdict</div>
+<div class="progress-step" data-step="7">8. Enregistrement du résultat</div>
+</div>
+<div id="progress-error" class="progress-error" role="alert"></div>
 </section>
+</div></section>
+</div>
 <script>
 (() => {
   const form = document.getElementById("tdr-analysis-form");
@@ -93,7 +97,7 @@ label{display:block;font-weight:650;margin:24px 0 8px}input[type=file]{display:b
     {at:2, pct:15, title:"2/8 — Extraction du texte…", detail:"Lecture du PDF ou du document Word et récupération du texte exploitable."},
     {at:5, pct:25, title:"3/8 — Chargement des références…", detail:"Chargement des TDR de référence déjà indexés dans PostgreSQL."},
     {at:10, pct:40, title:"4/8 — Recherche des similarités…", detail:"Classement lexical et sémantique du corpus (30 % lexical, 70 % sémantique)."},
-    {at:16, pct:52, title:"5/8 — Sélection des 3 références…", detail:"Les trois documents les mieux classés sont transmis à l'analyse approfondie."},
+    {at:16, pct:52, title:"5/8 — Sélection des 5 références…", detail:"Les cinq documents les mieux classés sont transmis à l'analyse approfondie."},
     {at:22, pct:72, title:"6/8 — Analyse par Qwen…", detail:"Qwen compare l'objet, les objectifs, les activités, la zone, la méthode et les livrables."},
     {at:45, pct:88, title:"7/8 — Préparation du verdict…", detail:"Le moteur prépare une conclusion globale et ses explications."},
     {at:60, pct:95, title:"8/8 — Finalisation du résultat…", detail:"Le résultat est enregistré dans l'historique."}
