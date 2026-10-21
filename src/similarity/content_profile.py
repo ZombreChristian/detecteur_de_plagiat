@@ -76,10 +76,17 @@ def _score_segments(segments, rows, embeddings, vectorizer, reference_matrix, le
 def _classify(score: float, threshold: float):
     partial_threshold = max(0.35, threshold * 0.78)
     if score >= threshold:
-        return "EXISTANT", 1.0
+        return "EXISTANT"
     if score >= partial_threshold:
-        return "PARTIELLEMENT_EXISTANT", 0.5
-    return "NOUVEAU", 0.0
+        return "PARTIELLEMENT_EXISTANT"
+    return "NOUVEAU"
+
+def _weighted_metrics(segments, threshold):
+    total = sum(x["length"] for x in segments) or 1
+    existing = sum(x["length"] for x in segments if _classify(x["score"], threshold) == "EXISTANT")
+    partial = sum(x["length"] for x in segments if _classify(x["score"], threshold) == "PARTIELLEMENT_EXISTANT")
+    new = sum(x["length"] for x in segments if _classify(x["score"], threshold) == "NOUVEAU")
+    return {"existing": 100 * existing / total, "partial": 100 * partial / total, "new": 100 * new / total}
 
 def build_content_profile(text: str, rows, embeddings, lexical_weight: float, semantic_weight: float, threshold: float, kind: str):
     cleaned = clean_text(text)
@@ -89,38 +96,30 @@ def build_content_profile(text: str, rows, embeddings, lexical_weight: float, se
     vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True)
     reference_matrix = vectorizer.fit_transform(corpus)
     groups = _split_components(text)
-    all_segments = _paragraphs(text)
-    scored = _score_segments(all_segments, rows, embeddings, vectorizer, reference_matrix, lexical_weight, semantic_weight)
-    total_len = sum(x["length"] for x in scored) or 1
-    existing_weight = sum(x["length"] * _classify(x["score"], threshold)[1] for x in scored)
-    partial_weight = sum(x["length"] for x in scored if _classify(x["score"], threshold)[0] == "PARTIELLEMENT_EXISTANT")
-    existing_percent = 100 * existing_weight / total_len
-    partial_percent = 100 * partial_weight / total_len
-    new_percent = max(0.0, 100.0 - existing_percent - partial_percent * 0.5)
+    scored = _score_segments(_paragraphs(text), rows, embeddings, vectorizer, reference_matrix, lexical_weight, semantic_weight)
+    metrics = _weighted_metrics(scored, threshold)
     scored_by_text = {x["text"]: x for x in scored}
     components = []
     for key, label, _ in COMPONENTS:
         segments = [scored_by_text[s] for s in groups[key]["segments"] if s in scored_by_text]
         if not segments:
             continue
-        length = sum(x["length"] for x in segments) or 1
-        existing = 100 * sum(x["length"] * _classify(x["score"], threshold)[1] for x in segments) / length
-        partial = 100 * sum(x["length"] for x in segments if _classify(x["score"], threshold)[0] == "PARTIELLEMENT_EXISTANT") / length
-        new = max(0.0, 100.0 - existing - partial * 0.5)
+        cm = _weighted_metrics(segments, threshold)
         strongest = max(segments, key=lambda x: x["score"])
-        components.append({"key": key, "label": label, "existing_percent": round(existing, 1), "new_percent": round(new, 1), "partial_percent": round(partial, 1), "score": round(strongest["score"], 3), "segments": len(segments), "best_source": strongest["source"]})
+        components.append({"key": key, "label": label, "existing_percent": round(cm["existing"], 1), "new_percent": round(cm["new"], 1), "partial_percent": round(cm["partial"], 1), "score": round(strongest["score"], 3), "segments": len(segments), "best_source": strongest["source"]})
+    effective_existing = metrics["existing"] + 0.5 * metrics["partial"]
     if kind == "duplicate":
-        if existing_percent >= 70:
-            level, recommendation = "FORTE_PROXIMITE", "Le TDR reprend une part importante du contenu déjà présent. Recommandation : SIMILAIRE ou examen humain si le contexte institutionnel justifie la comparaison."
-        elif existing_percent >= 40:
-            level, recommendation = "PROXIMITE_MOYENNE", "Une part substantielle du contenu correspond au corpus. Recommandation : À EXAMINER avant d'accepter le TDR."
+        if effective_existing >= 70:
+            level, recommendation = "FORTE_PROXIMITE", "Une part importante du TDR correspond au corpus existant. Recommandation : SIMILAIRE, avec examen humain si le contexte institutionnel l'exige."
+        elif effective_existing >= 40:
+            level, recommendation = "PROXIMITE_MOYENNE", "Une part substantielle du TDR correspond au corpus. Recommandation : À EXAMINER avant acceptation."
         else:
-            level, recommendation = "FAIBLE_PROXIMITE", "La majorité du contenu n'a pas de correspondance forte détectable. Recommandation : DIFFERENT sous réserve de l'examen du contexte."
+            level, recommendation = "FAIBLE_PROXIMITE", "La majorité du contenu ne présente pas de correspondance forte détectable. Recommandation : DIFFERENT sous réserve du contexte."
     else:
-        if existing_percent >= 60:
+        if effective_existing >= 60:
             level, recommendation = "FORTE_CORRESPONDANCE", "Une part importante du rapport présente une correspondance détectable. Vérifier les passages et les sources avant toute conclusion de plagiat."
-        elif existing_percent >= 30:
+        elif effective_existing >= 30:
             level, recommendation = "CORRESPONDANCE_MODEREE", "Des correspondances détectables existent. Une vérification humaine des passages signalés est recommandée."
         else:
             level, recommendation = "FAIBLE_CORRESPONDANCE", "Peu de contenu présente une correspondance forte détectable avec le corpus."
-    return {"overall": {"existing_percent": round(existing_percent, 1), "new_percent": round(new_percent, 1), "partial_percent": round(partial_percent, 1), "segments": len(scored)}, "components": components, "interpretation": {"level": level, "recommendation": recommendation, "note": "« Existant » signifie correspondance détectable avec le corpus, et non preuve de plagiat. La décision finale doit rester traçable et vérifiable."}}
+    return {"overall": {"existing_percent": round(metrics["existing"], 1), "new_percent": round(metrics["new"], 1), "partial_percent": round(metrics["partial"], 1), "effective_existing_percent": round(effective_existing, 1), "segments": len(scored)}, "components": components, "interpretation": {"level": level, "recommendation": recommendation, "note": "« Existant » signifie correspondance détectable avec le corpus, et non preuve de plagiat. Les catégories forte, partielle et nouvelle sont pondérées par longueur de contenu."}}
