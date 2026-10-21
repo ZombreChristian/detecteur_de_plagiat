@@ -665,14 +665,20 @@ def reception(request):
         request.session["last_analysis_id"] = analysis.id
         request.session["last_document_name"] = uploaded.name
         if mode == "tdr" and result.get("decision") == "DIFFERENT":
-            # L'upload sert à l'analyse uniquement : il ne devient pas
-            # automatiquement un document de référence dans PostgreSQL.
+            # Le verdict reste distinct selon le cas : une autre zone peut
+            # partager les objectifs sans constituer le même TDR.
             request.session["validated_tdr_name"] = uploaded.name
-            messages.success(request, "TDR accepté : aucune similarité suffisante n'a été trouvée. Le document n'a pas été ajouté automatiquement au registre.")
+            case_id = (result.get("rag_analysis") or {}).get("case_id")
+            if case_id == "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE":
+                messages.success(request, "Le TDR porte sur une zone différente d'une étude aux objectifs comparables. Consultez le verdict détaillé avant de poursuivre.")
+            else:
+                messages.success(request, "Aucune référence suffisamment pertinente n'a été retenue par Qwen. Le TDR n'a pas été ajouté automatiquement au registre.")
             return redirect("detector:reception")
         if mode == "tdr" and result.get("decision") == "SIMILAIRE":
-            messages.error(request, "TDR non retenu : un document similaire existe déjà dans la base.")
-        else:
+            messages.error(request, "TDR non retenu : Qwen a identifié une étude correspondant essentiellement au même sujet.")
+        elif mode == "tdr" and result.get("decision") == "SIMILARITÉ PARTIELLE":
+            messages.warning(request, "Des ressemblances importantes ont été identifiées. Consultez le détail et vérifiez les différences avant de conclure.")
+        elif mode == "report":
             messages.info(request, "Rapport analysé. Consultez le détail des résultats.")
         return redirect("detector:resultats")
     except requests.RequestException as exc:
