@@ -26,11 +26,10 @@
       <section class="panel national-bar-red">
         <div class="panel-head"><h2>Étape 1 — Vérifier le TDR</h2><span class="muted mono" style="font-size:12px">doublon</span></div>
         <div class="panel-body">
-          <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Déposez le TDR à vérifier. Le moteur RAG recherche les TDR et rapports d'étude de référence, puis Qwen compare leur contenu et justifie le verdict.</p>
+          <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Déposez le TDR à vérifier. Le système le compare aux études déjà enregistrées et présente les correspondances pertinentes.</p>
           <form id="tdr-form" method="post" enctype="multipart/form-data">
             {% csrf_token %}<input type="hidden" name="mode" value="tdr">
             <div class="field"><label>Document TDR (.docx ou .pdf)</label><input id="tdr-file" type="file" name="document" accept=".docx,.pdf" required></div>
-            <div class="notice" style="margin:12px 0;padding:12px;border-radius:8px;border:1px solid var(--line,#ddd)"><strong>Analyse contextuelle par IA locale</strong><p class="muted" style="margin:6px 0 0;font-size:13px;line-height:1.5">Le moteur RAG complet recherche les références dans PostgreSQL, compare le contenu avec Qwen3:8B via Ollama et présente les documents consultés ainsi que les éléments justificatifs. Aucun seuil de similarité n'est nécessaire.</p></div>
             <button id="tdr-button" class="btn btn-primary" type="submit">Vérifier le TDR</button>
           </form>
         </div>
