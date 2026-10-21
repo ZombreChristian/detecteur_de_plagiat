@@ -139,13 +139,13 @@ def _excerpt(text: str, limit: int) -> str:
     return result or text[:limit]
 
 
-def _load_all_indexed_tdr():
+def _load_all_indexed_references():
     import django
     django.setup()
     from detector.models import StudyDocument
     rows = list(
         StudyDocument.objects.filter(
-            is_reference=True, document_type="TDR"
+            is_reference=True, document_type__in=["TDR", "RAPPORT"]
         ).exclude(cleaned_text="").exclude(embedding=[]).order_by("id")
     )
     return rows
@@ -190,7 +190,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     candidate = (candidate_text or "").strip()
     if len(candidate) < 80:
         raise IndependentTDRError("Le TDR contient trop peu de texte exploitable.")
-    rows = _load_all_indexed_tdr()
+    rows = _load_all_indexed_references()
     if not rows:
         raise IndependentTDRError(
             "Aucun TDR de référence n'est présent dans l'index PostgreSQL. "
@@ -210,10 +210,10 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     for rank, (hybrid, lexical, semantic, row) in enumerate(selected, start=1):
         reference_blocks.append(
             "DOCUMENT DE RÉFÉRENCE\n"
-            f"TITRE: {row.title}\nFICHIER: {Path(row.file_path).name}\n"
+            f"TITRE: {row.title}\nTYPE DE DOCUMENT: {row.get_document_type_display()}\nFICHIER: {Path(row.file_path).name}\n"
             f"SCORES DE RÉCUPÉRATION (indicatifs seulement): lexical={lexical:.3f}, "
             f"sémantique={semantic:.3f}, combiné={hybrid:.3f}\n"
-            f"CONTENU DU TDR DE RÉFÉRENCE:\n"
+            f"CONTENU DU DOCUMENT DE RÉFÉRENCE:\n"
             f"{_excerpt(row.extracted_text or row.cleaned_text, REFERENCE_CHARS)}"
         )
 
@@ -257,7 +257,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "matched_reference, confidence, common_points (tableau), differences (tableau), "
         "recommendation, correspondence_level (forte, moyenne, faible ou nulle), "
         "evidence_from_reference (tableau de courts éléments concrets).\n"
-        "Rappel : les références sont des TDR présents dans la base ; ne prétends pas "
+        "Rappel : les références sont des TDR ou des rapports d'étude présents dans la base ; ne prétends pas "
         "qu'une étude a été exécutée si le document ne l'établit pas."
     )
     final = _ollama_json(
@@ -281,10 +281,10 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         reference_name = ""
 
     case_titles = {
-        "CAS_1_CORRESPONDANCE_FORTE": "Correspondance forte — étude probablement déjà réalisée",
+        "CAS_1_CORRESPONDANCE_FORTE": "Correspondance forte — document correspondant trouvé dans le registre",
         "CAS_2_CORRESPONDANCE_PARTIELLE": "Correspondance partielle — vérification recommandée",
         "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE": "Objectifs similaires — zone géographique différente",
-        "CAS_4_AUCUNE_ETUDE_PERTINENTE": "Aucune étude pertinente trouvée dans la base",
+        "CAS_4_AUCUNE_ETUDE_PERTINENTE": "Aucun document de référence pertinent trouvé dans la base",
     }
     matched_row = next(
         (row for _, _, _, row in selected
