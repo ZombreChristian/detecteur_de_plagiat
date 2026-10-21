@@ -738,19 +738,24 @@ def analyser(request):
         messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
         return redirect("detector:analyser")
     uploaded_path = _save_uploaded_document(uploaded)
-    try:
-        threshold = float(request.POST.get("threshold", "")) / 100.0
-        if not 0.01 <= threshold <= 1.0:
-            raise ValueError
-    except (TypeError, ValueError):
-        messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
-        return redirect("detector:analyser")
+    # Le verdict TDR est arbitré par le moteur RAG/LLM, pas par un seuil utilisateur.
+    # Le seuil reste configurable uniquement pour le contrôle de plagiat des rapports.
+    data = {}
+    if mode == "plagiarism":
+        try:
+            threshold = float(request.POST.get("threshold", "")) / 100.0
+            if not 0.01 <= threshold <= 1.0:
+                raise ValueError
+        except (TypeError, ValueError):
+            messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
+            return redirect("detector:analyser")
+        data["threshold"] = threshold
     endpoint = "/api/detect/duplicate" if mode == "duplicate" else "/api/detect/plagiarism"
     start = time.perf_counter()
     try:
         response = requests.post(
             f"{settings.FASTAPI_URL}{endpoint}",
-            data={"threshold": threshold},
+            data=data,
             files={"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))},
             timeout=600,
         )
