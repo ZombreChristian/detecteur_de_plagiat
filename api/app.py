@@ -577,6 +577,7 @@ async def analyze_tdr_rag_independent(file: UploadFile = File(...)):
         raise HTTPException(400, "Formats acceptés : DOCX et PDF.")
     from src.tdr_rag.independent_engine import (
         analyze_tdr_independently,
+        extract_tdr_document,
         IndependentTDRError,
     )
     try:
@@ -584,7 +585,7 @@ async def analyze_tdr_rag_independent(file: UploadFile = File(...)):
             safe_name = re.sub(r"[^\w.\- ]", "_", file.filename)
             path = Path(directory) / safe_name
             path.write_bytes(await file.read())
-            candidate_text = read_document(path)
+            candidate_text = extract_tdr_document(path)
         result = await run_in_threadpool(analyze_tdr_independently, candidate_text)
         return result
     except IndependentTDRError as exc:
