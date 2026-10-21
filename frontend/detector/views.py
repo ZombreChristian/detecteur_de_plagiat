@@ -1077,9 +1077,20 @@ def tdr_rag_independent(request):
     if request.method != "POST":
         return render(request, "tdr_rag_independent.html")
 
-    uploaded = request.FILES.get("tdr_document") or request.FILES.get("document")
+    # Accepte le nom du champ du formulaire RAG et les champs de fichier
+    # courants utilisés ailleurs dans l'application, sans dépendre d'un seul nom.
+    uploaded = _get_uploaded_docx(request)
+    if not uploaded:
+        messages.error(request, "Aucun fichier reçu. Sélectionnez un fichier DOCX ou PDF puis réessayez.")
+        return render(request, "tdr_rag_independent.html")
     if not _validate_document(uploaded):
-        messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
+        messages.error(
+            request,
+            f"Format non pris en charge : « {uploaded.name} ». Sélectionnez un fichier Word (.docx) ou PDF (.pdf)."
+        )
+        return render(request, "tdr_rag_independent.html")
+    if getattr(uploaded, "size", 0) <= 0:
+        messages.error(request, "Le fichier sélectionné est vide. Choisissez un autre document.")
         return render(request, "tdr_rag_independent.html")
 
     uploaded_path = _save_uploaded_document(uploaded)
