@@ -19,7 +19,7 @@
   <div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div>
 </aside>
 <main class="main">
-  <div class="ctxbar"><div><h1>Vérification du TDR</h1><div class="lede">Doublon à la programmation, puis réception du rapport associé</div></div></div>
+  <div class="ctxbar"><div><h1>Vérification du TDR</h1><div class="lede">Doublon à la programmation, puis réception du rapport associé</div></div><a class="btn" href="{% url 'detector:tdr_rag_independent' %}">Nouvelle analyse TDR — RAG complet</a></div>
   <div class="page-pad">
     {% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}
     <div class="engines" id="workflow-content">
