@@ -142,11 +142,14 @@ def _excerpt(text: str, limit: int) -> str:
 def _load_all_indexed_references():
     import django
     django.setup()
+    from django.db.models import Q
     from detector.models import StudyDocument
     rows = list(
         StudyDocument.objects.filter(
             is_reference=True, document_type__in=["TDR", "RAPPORT"]
-        ).exclude(cleaned_text="").exclude(embedding=[]).order_by("id")
+        ).filter(Q(cleaned_text__gt="") | Q(extracted_text__gt=""))
+        .exclude(embedding=[])
+        .order_by("id")
     )
     return rows
 
