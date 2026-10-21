@@ -228,7 +228,7 @@ def dashboard(request):
     mode = request.GET.get("mode", "all")
     if q:
         base = base.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
-    if decision in ("SIMILAIRE", "DIFFERENT", "À EXAMINER"):
+    if decision in ("SIMILAIRE", "SIMILARITÉ PARTIELLE", "DIFFERENT", "À EXAMINER"):
         base = base.filter(decision=decision)
     if mode in ("duplicate", "plagiarism"):
         base = base.filter(mode=mode)
@@ -797,7 +797,20 @@ def analyser(request):
         request.session["last_document_name"] = uploaded.name
         return redirect("detector:resultats")
     except requests.RequestException as exc:
-        messages.error(request, f"Le moteur FastAPI est indisponible : {exc}")
+        response = getattr(exc, "response", None)
+        detail = None
+        if response is not None:
+            try:
+                payload = response.json()
+                detail = payload.get("detail", payload)
+                if isinstance(detail, dict):
+                    detail = detail.get("message") or detail.get("error") or str(detail)
+            except (ValueError, AttributeError):
+                detail = None
+        if detail:
+            messages.error(request, f"Analyse non terminée : {detail}")
+        else:
+            messages.error(request, f"Le moteur FastAPI est indisponible : {exc}")
     except Exception as exc:
         messages.error(request, f"Erreur pendant l'analyse : {exc}")
     return render(request, "analyser.html")
@@ -841,7 +854,7 @@ def resultats(request):
     mode = request.GET.get("mode", "all")
     if q:
         analyses = analyses.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
-    if decision in ("SIMILAIRE", "DIFFERENT", "À EXAMINER"):
+    if decision in ("SIMILAIRE", "SIMILARITÉ PARTIELLE", "DIFFERENT", "À EXAMINER"):
         analyses = analyses.filter(decision=decision)
     if mode in ("duplicate", "plagiarism"):
         analyses = analyses.filter(mode=mode)
