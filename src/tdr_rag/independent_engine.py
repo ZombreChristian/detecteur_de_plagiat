@@ -25,8 +25,8 @@ OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
 OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 # Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
 # uniquement sur les trois références les mieux classées.
-RAG_TOP_K = 3
-REFERENCE_CHARS = 3200
+RAG_TOP_K = 5
+REFERENCE_CHARS = 3800
 CANDIDATE_CHARS = 9000
 OUTPUT_TOKENS = 1200
 
@@ -197,8 +197,9 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "Préparez l'index avant de lancer l'analyse."
         )
 
-    # Le classement lexical + sémantique parcourt le corpus, mais ne sollicite pas
-    # le LLM pour chaque référence. Seuls les trois meilleurs candidats passent au RAG.
+    # Le classement sert uniquement à retrouver les références candidates.
+    # Qwen reste responsable du raisonnement et du verdict métier. On lui fournit
+    # cinq références pour limiter les faux négatifs dus à une reformulation.
     ranked = _rank_all_references(candidate, rows)
     if not ranked:
         raise IndependentTDRError("Aucune référence TDR exploitable n'a été trouvée.")
@@ -217,28 +218,49 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         )
 
     system_prompt = (
-        "Tu es un expert chargé de déterminer si une étude correspondant au TDR "
-        "candidat a déjà été réalisée. Trois références ont été sélectionnées par "
-        "recherche lexicale et sémantique dans la base. Analyse réellement le contenu "
-        "des trois documents, leurs objectifs, objet, activités, zone, population, "
-        "période, méthode et livrables. Les scores ne sont PAS des preuves ni des verdicts. "
-        "Ne conclus pas qu'une étude existe simplement parce qu'un document est classé "
-        "premier. Choisis un seul verdict final parmi : "
-        "CAS_1_CORRESPONDANCE_FORTE (même étude ou quasi-identique), "
-        "CAS_2_CORRESPONDANCE_PARTIELLE (recouvrement substantiel mais différence importante), "
-        "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE (étude comparable mais zone géographique différente), "
-        "CAS_4_AUCUNE_ETUDE_PERTINENTE (aucune des références ne démontre une étude pertinente). "
-        "Si aucune des trois références n'est réellement pertinente, choisis CAS_4. "
-        "N'invente aucun fait. Ne donne PAS trois verdicts et ne présente PAS les trois "
-        "documents comme trois résultats. Rends uniquement le verdict global et, si une "
-        "référence soutient ce verdict, son nom exact. Réponds uniquement avec un objet "
-        "JSON valide ayant les clés case_id, decision, explanation, matched_reference, "
-        "confidence, common_points (tableau), differences (tableau), recommendation."
+        "Tu es l'analyste principal chargé d'évaluer si le TDR candidat reprend, "
+        "reformule ou recoupe une étude déjà présente dans la base. Le raisonnement "
+        "de Qwen est la base du verdict final : les scores de recherche servent à "
+        "retrouver les références, mais ne décident jamais à ta place. Tu disposes "
+        "de cinq références candidates. Examine leur contenu et compare le sens, pas "
+        "seulement les mots exacts : objet, problème traité, objectif général et "
+        "objectifs spécifiques, activités, zone, population cible, période, méthode "
+        "et livrables. Une reformulation, des synonymes ou un titre différent ne "
+        "suffisent PAS à conclure qu'il s'agit d'une nouvelle étude.\n"
+        "GRILLE DE DÉCISION OBLIGATOIRE : "
+        "CAS_1_CORRESPONDANCE_FORTE = même étude ou quasi-identique, notamment si "
+        "l'objet et les objectifs essentiels coïncident malgré une reformulation ; "
+        "CAS_2_CORRESPONDANCE_PARTIELLE = correspondance faible à moyenne, plusieurs "
+        "éléments importants communs mais recouvrement incomplet ou différences "
+        "substantielles ; CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE = objectif et démarche "
+        "comparables mais zone géographique réellement différente ; "
+        "CAS_4_AUCUNE_ETUDE_PERTINENTE = seulement des ressemblances générales ou "
+        "aucune référence suffisamment liée au sujet.\n"
+        "IMPORTANT : une correspondance faible mais réelle doit être signalée en "
+        "CAS_2, et non masquée par CAS_4. CAS_4 n'est pas un choix par défaut lorsque "
+        "les documents sont reformulés ou lorsque les preuves sont imparfaites. "
+        "À l'inverse, ne déclare pas une correspondance sur la seule présence de mots "
+        "génériques. Explique précisément les indices qui soutiennent le niveau choisi "
+        "et distingue les faits observés des incertitudes. Les scores lexical, "
+        "sémantique et combiné sont des indices de récupération, pas des probabilités "
+        "ni des verdicts. Ne présente jamais le TDR de référence comme preuve que "
+        "l'étude a effectivement été réalisée : il prouve seulement qu'un TDR "
+        "correspondant existe dans le registre.\n"
+        "Choisis un seul verdict global, indique la référence la plus pertinente avec "
+        "son nom exact, et donne les points communs, les différences et une "
+        "recommandation. Si une référence est faiblement liée, indique-le explicitement "
+        "et utilise CAS_2 si le lien est réel. N'invente aucun fait. Réponds uniquement "
+        "avec un objet JSON valide ayant les clés case_id, decision, explanation, "
+        "matched_reference, confidence, common_points (tableau), differences (tableau), "
+        "recommendation, correspondence_level (forte, moyenne, faible ou nulle), "
+        "evidence_from_reference (tableau de courts éléments concrets).\n"
+        "Rappel : les références sont des TDR présents dans la base ; ne prétends pas "
+        "qu'une étude a été exécutée si le document ne l'établit pas."
     )
     final = _ollama_json(
         system_prompt,
         "TDR CANDIDAT À ÉVALUER:\n" + candidate_excerpt
-        + "\n\nLES TROIS RÉFÉRENCES À EXAMINER AVANT DE CONCLURE:\n"
+        + "\n\nLES CINQ RÉFÉRENCES À EXAMINER AVANT DE CONCLURE:\n"
         + "\n\n--- DOCUMENT SUIVANT ---\n\n".join(reference_blocks),
         tokens=1200,
     )
@@ -289,7 +311,23 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "common_points": [str(x)[:500] for x in final.get("common_points", [])[:10]],
             "differences": [str(x)[:500] for x in final.get("differences", [])[:10]],
             "recommendation": str(final.get("recommendation", ""))[:2000],
+            "correspondence_level": str(final.get("correspondence_level", "À confirmer"))[:40],
+            "evidence_from_reference": [
+                str(x)[:500] for x in final.get("evidence_from_reference", [])[:8]
+            ] if isinstance(final.get("evidence_from_reference", []), list) else [],
             "references_examined": len(selected),
+            "retrieval_candidates": [
+                {
+                    "rank": rank,
+                    "source_id": row.id,
+                    "title": str(row.title or ""),
+                    "filename": Path(row.file_path).name,
+                    "lexical_score": round(float(lexical), 4),
+                    "semantic_score": round(float(semantic), 4),
+                    "hybrid_score": round(float(hybrid), 4),
+                }
+                for rank, (hybrid, lexical, semantic, row) in enumerate(selected, start=1)
+            ],
             "corpus_references_ranked": len(ranked),
             "batches_examined": 1,
             "evidence": evidence,
