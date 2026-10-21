@@ -23,12 +23,14 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
 OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
-# Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
-# uniquement sur les cinq références les mieux classées.
+# Limiter le contexte et le lot d’évaluation aide les machines à mémoire partagée.
+TDR_RAG_NUM_CTX = max(4096, int(os.getenv("TDR_RAG_NUM_CTX", "6144")))
+TDR_RAG_NUM_BATCH = min(256, max(32, int(os.getenv("TDR_RAG_NUM_BATCH", "64"))))
+# Recherche lexicale + sémantique sur le corpus, puis arbitrage sur les cinq références les mieux classées.
 RAG_TOP_K = 5
-REFERENCE_CHARS = 3800
-CANDIDATE_CHARS = 9000
-OUTPUT_TOKENS = 1200
+REFERENCE_CHARS = min(3000, max(1400, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "2200"))))
+CANDIDATE_CHARS = min(7500, max(4500, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "6500"))))
+OUTPUT_TOKENS = min(1000, max(600, int(os.getenv("TDR_RAG_MAX_OUTPUT_TOKENS", "900"))))
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
@@ -65,8 +67,13 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                     "stream": False,
                     "format": "json",
                     "think": False,
-                    "keep_alive": "5m",
-                    "options": {"temperature": 0, "num_predict": token_budget},
+                    "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "10m"),
+                    "options": {
+                        "temperature": 0,
+                        "num_predict": token_budget,
+                        "num_ctx": TDR_RAG_NUM_CTX,
+                        "num_batch": TDR_RAG_NUM_BATCH,
+                    },
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt + retry_note},
