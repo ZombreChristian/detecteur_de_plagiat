@@ -386,6 +386,24 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "point": item["explanation"][:900],
         "justification": "Référence retenue après examen du contenu par le RAG.",
     } for item in per_reference]
+
+    # Cas sans correspondance : résultat métier court et uniforme, sans comparaison
+    # inutile des références non pertinentes ni recommandation de rejet.
+    no_match = case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE"
+    if no_match:
+        no_match_message = "Aucune étude correspondant au sujet du TDR n’a été identifiée dans la base de données consultée."
+        no_match_recommendation = "Le sujet peut poursuivre son processus d’étude."
+        final["decision"] = case_id
+        final["explanation"] = no_match_message
+        final["recommendation"] = no_match_recommendation
+        final["common_points"] = []
+        final["differences"] = []
+        final["evidence_from_reference"] = []
+        final["confidence"] = "Aucune correspondance détectée dans la base"
+        final["correspondence_level"] = "nulle"
+        per_reference = []
+        evidence = []
+
     return {
         "mode": "tdr_rag_independent",
         "decision_provider": "independent_rag",
