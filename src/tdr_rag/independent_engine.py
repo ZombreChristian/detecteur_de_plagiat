@@ -237,6 +237,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "diffèrent ; CAS_4_AUCUNE_ETUDE_PERTINENTE = aucune référence ne présente "
         "de correspondance métier significative. Une zone différente peut relever "
         "de CAS_2 si les objectifs et la démarche se recoupent réellement.\n"
+        "CAS_4 — FORMULATION OBLIGATOIRE : lorsque aucune référence de la base ne présente de correspondance métier significative, indique simplement qu’aucune étude correspondante n’a été trouvée dans la base de données et que le sujet peut poursuivre son étude. Ne recommande pas de bloquer, rejeter ou suspendre le sujet dans ce cas. N’ajoute pas d’autres conclusions non étayées.\n"
         "IMPORTANT : une correspondance faible mais réelle doit être signalée en "
         "CAS_2, et non masquée par CAS_4. CAS_4 n'est pas un choix par défaut lorsque "
         "les documents sont reformulés ou lorsque les preuves sont imparfaites. "
@@ -362,7 +363,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     case_titles = {
         "CAS_1_CORRESPONDANCE_FORTE": "Forte correspondance",
         "CAS_2_CORRESPONDANCE_PARTIELLE": "Correspondance partielle",
-        "CAS_4_AUCUNE_ETUDE_PERTINENTE": "Aucune correspondance",
+        "CAS_4_AUCUNE_ETUDE_PERTINENTE": "Aucune étude correspondante dans la base",
     }
     per_reference = []
     for row in matched_rows:
