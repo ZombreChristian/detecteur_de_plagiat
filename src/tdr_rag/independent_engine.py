@@ -1,7 +1,7 @@
 """Moteur RAG autonome dédié à la vérification des TDR.
 
 La recherche lexicale et sémantique classe toutes les références indexées.
-Qwen analyse ensuite les trois meilleures candidates et renvoie un verdict global unique.
+Qwen analyse les meilleures références candidates et renvoie un verdict global unique.
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 # Un contexte plus large évite de couper les sections utiles des TDR longs.
 TDR_RAG_NUM_CTX = max(4096, int(os.getenv("TDR_RAG_NUM_CTX", "8192")))
 TDR_RAG_NUM_BATCH = min(256, max(32, int(os.getenv("TDR_RAG_NUM_BATCH", "64"))))
-# Recherche lexicale + sémantique, puis comparaison détaillée des trois meilleures références.
+# Recherche lexicale + sémantique, puis comparaison détaillée des meilleures références.
 RAG_TOP_K = min(8, max(3, int(os.getenv("TDR_RAG_TOP_K", "5"))))
 REFERENCE_CHARS = min(4200, max(2200, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "3200"))))
 CANDIDATE_CHARS = min(9000, max(5000, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "7500"))))
@@ -282,7 +282,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
 
     # Le classement sert uniquement à retrouver les références candidates.
     # Qwen reste responsable du raisonnement et du verdict métier ; seules les
-    # trois références les mieux classées lui sont transmises.
+    # plusieurs références bien classées lui sont transmises.
     ranked = _rank_all_references(candidate, rows)
     if not ranked:
         raise IndependentTDRError("Aucune référence TDR exploitable n'a été trouvée.")
@@ -474,7 +474,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
               "une correspondance ne peut donc pas être confirmée sans preuve nommée."
         ).strip()
         final["recommendation"] = (
-            "Vérifier manuellement les trois références candidates avant de conclure à un doublon."
+            "Vérifier manuellement les références candidates avant de conclure à un doublon."
         )
     if case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
         matched_rows = []
