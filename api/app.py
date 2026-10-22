@@ -271,8 +271,8 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
                     "error": "TDR_RAG_UNAVAILABLE",
                     "message": str(exc),
                     "hint": (
-                        "Démarrez Ollama et vérifiez que qwen3:8b est installé "
-                        "(ollama list)."
+                        "Démarrez Ollama et vérifiez que qwen2.5:3b est installé "
+                        "(ollama list). Vérifiez aussi OLLAMA_MODEL dans frontend/.env."
                     ),
                 },
             ) from exc
