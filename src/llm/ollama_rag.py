@@ -1,4 +1,4 @@
-"""Arbitrage RAG des TDR par Qwen2.5:3b via Ollama local.
+"""Arbitrage RAG des TDR par Qwen3:8b via Ollama local.
 
 La recherche des références est effectuée par le moteur existant. Ce module
 transmet au modèle le TDR à analyser et les références récupérées; il ne
@@ -12,12 +12,12 @@ import requests
 
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 OLLAMA_TIMEOUT = max(300.0, float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "300")))
 # Paramètres d’inférence réglables sans modifier le code ni les règles métier.
 OLLAMA_NUM_CTX = max(4096, int(os.getenv("OLLAMA_NUM_CTX", "8192")))
 OLLAMA_NUM_BATCH = min(128, max(16, int(os.getenv("OLLAMA_NUM_BATCH", "64"))))
-# Qwen2.5:3b a besoin d'un contexte suffisant pour comparer plusieurs TDR.
+# Qwen3:8b a besoin d'un contexte suffisant pour comparer plusieurs TDR.
 # Les limites ci-dessous gardent le prompt assez riche sans dépasser le contexte local.
 RAG_REFERENCE_TOP_K = min(3, max(3, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "3"))))
 MAX_CANDIDATE_CHARS = min(10000, max(5000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "8000"))))
@@ -94,8 +94,8 @@ def _response_json(content):
             try:
                 return json.loads(text[start:end + 1])
             except json.JSONDecodeError as exc:
-                raise OllamaRAGError("Qwen2.5:3b a renvoyé un JSON invalide.") from exc
-        raise OllamaRAGError("Qwen2.5:3b n'a pas renvoyé de résultat JSON exploitable.")
+                raise OllamaRAGError("Qwen3:8b a renvoyé un JSON invalide.") from exc
+        raise OllamaRAGError("Qwen3:8b n'a pas renvoyé de résultat JSON exploitable.")
 
 
 def _reference_excerpt(candidate_text, source_text, limit):
@@ -178,7 +178,7 @@ def _candidate_excerpt(candidate_text, limit):
 
 
 def analyze_tdr_with_rag(candidate_text, ranked_references):
-    """Arbitre un TDR avec Qwen2.5:3b à partir des références récupérées par le moteur."""
+    """Arbitre un TDR avec Qwen3:8b à partir des références récupérées par le moteur."""
     references = []
     for item in ranked_references[:RAG_REFERENCE_TOP_K]:
         document = item.get("_document")
@@ -200,7 +200,7 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
         })
 
     if not references:
-        raise OllamaRAGError("Aucune référence indexée n'a pu être transmise à Qwen2.5:3b.")
+        raise OllamaRAGError("Aucune référence indexée n'a pu être transmise à Qwen3:8b.")
 
     payload = {
         "tdr_candidat": _candidate_excerpt(candidate_text, MAX_CANDIDATE_CHARS),
@@ -264,7 +264,7 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
     }
     allowed_decisions = {"SIMILAIRE", "SIMILARITÉ PARTIELLE", "DIFFERENT", "À EXAMINER"}
     if result.get("case_id") not in allowed_cases or result.get("decision") not in allowed_decisions:
-        raise OllamaRAGError("La réponse de Qwen2.5:3b ne respecte pas le format de décision attendu.")
+        raise OllamaRAGError("La réponse de Qwen3:8b ne respecte pas le format de décision attendu.")
 
     # Le case_id reste la classification canonique, mais on préserve À EXAMINER
     # si le modèle indique explicitement que les preuves ne suffisent pas.
@@ -293,7 +293,7 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
         matched_reference = ""
     elif not isinstance(matched_reference, str) or matched_reference not in valid_sources:
         raise OllamaRAGError(
-            "Qwen2.5:3b a identifié une correspondance sans citer exactement une référence fournie."
+            "Qwen3:8b a identifié une correspondance sans citer exactement une référence fournie."
         )
     result["matched_reference"] = matched_reference
 
