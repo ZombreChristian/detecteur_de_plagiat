@@ -101,7 +101,7 @@ Les paramètres RAG sont documentés dans `frontend/.env.example` :
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen3:8b
 OLLAMA_TIMEOUT_SECONDS=180
-TDR_RAG_REFERENCE_TOP_K=5
+TDR_RAG_REFERENCE_TOP_K=3
 TDR_RAG_CANDIDATE_MAX_CHARS=18000
 TDR_RAG_REFERENCE_MAX_CHARS=7000
 ```
@@ -179,7 +179,7 @@ Les paramètres suivants sont définis dans `frontend/.env.example` et peuvent �
 - `SIMILARITY_SEMANTIC_WEIGHT=0.70` : poids du score sémantique ;
 - `SIMILARITY_REFERENCE_TOP_K=10` : nombre de références considérées par la recherche générale ;
 - `SIMILARITY_PASSAGE_TOP_K=3` : nombre de sources utilisées pour l'analyse détaillée des passages ;
-- `TDR_RAG_REFERENCE_TOP_K=5` : nombre maximal de références envoyées à Qwen3 pour l'arbitrage RAG.
+- `TDR_RAG_REFERENCE_TOP_K=3` : nombre maximal de références envoyées à Qwen3 pour l'arbitrage RAG.
 
 La somme des poids lexical et sémantique doit être égale à 1. Les seuils de similarité restent utilisés pour le mode rapports. Pour les TDR, le verdict métier provient de l'arbitrage Qwen3 à partir des références récupérées, pas d'un seuil numérique fixe.
 
