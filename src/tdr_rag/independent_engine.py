@@ -28,7 +28,7 @@ OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 TDR_RAG_NUM_CTX = max(4096, int(os.getenv("TDR_RAG_NUM_CTX", "8192")))
 TDR_RAG_NUM_BATCH = min(256, max(32, int(os.getenv("TDR_RAG_NUM_BATCH", "64"))))
 # Recherche lexicale + sémantique, puis comparaison détaillée des meilleures références.
-RAG_TOP_K = min(8, max(3, int(os.getenv("TDR_RAG_TOP_K", "5"))))
+RAG_TOP_K = min(3, max(3, int(os.getenv("TDR_RAG_TOP_K", "3"))))
 REFERENCE_CHARS = min(4200, max(2200, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "3200"))))
 CANDIDATE_CHARS = min(9000, max(5000, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "7500"))))
 OUTPUT_TOKENS = min(2800, max(1400, int(os.getenv("TDR_RAG_INDEPENDENT_MAX_OUTPUT_TOKENS", "2200"))))
