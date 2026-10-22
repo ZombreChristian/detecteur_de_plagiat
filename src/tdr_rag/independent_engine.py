@@ -462,7 +462,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
 
         # Qwen peut retourner le code métier présent dans le contenu du fichier
         # plutôt que le titre/nom de fichier. Accepter uniquement une occurrence unique.
-        if len(name) >= 5 and re.search(r"[A-Za-z]\d|\d[A-Za-z]", name):
+        if len(name) >= 5 and re.search(r"[A-Za-z][\w-]*\d|\d[\w-]*[A-Za-z]", name):
             content_matches = []
             for candidate in selected_rows:
                 document_text = str(
@@ -577,17 +577,26 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     }
     per_reference = []
     for row in matched_rows:
-        item = next((item for item in model_refs if isinstance(item, dict)
-                     and _resolve_reference(
-                         item.get("filename") or item.get("source") or item.get("title") or ""
-                     ) is row), {})
-        level = str(item.get("level", "")).casefold()
+        item = next((
+            entry for entry in model_refs
+            if isinstance(entry, dict)
+            and any(
+                _resolve_reference(entry.get(key)) is row
+                for key in ("source_id", "reference_id", "id", "filename", "source", "title", "reference")
+            )
+        ), {})
+        level = str(item.get("level", "")).casefold().strip()
+        is_strong = (
+            row_levels.get(row.id) == "forte"
+            or level in {"forte", "forte correspondance", "strong", "high"}
+            or (not level and case_id == "CAS_1_CORRESPONDANCE_FORTE" and row is matched_rows[0])
+        )
         per_reference.append({
             "source_id": row.id,
             "source": Path(row.file_path).name,
             "title": str(row.title or ""),
             "document_type": row.get_document_type_display(),
-            "level": "forte" if row_levels.get(row.id) == "forte" or (not level and case_id == "CAS_1_CORRESPONDANCE_FORTE" and row is matched_rows[0]) else "partielle",
+            "level": "forte" if is_strong else "partielle",
             "explanation": str(item.get("explanation") or final.get("explanation", ""))[:1200],
             "common_points": [str(x)[:400] for x in item.get("common_points", final.get("common_points", []))[:8]],
             "differences": [str(x)[:400] for x in item.get("differences", final.get("differences", []))[:8]],
