@@ -19,7 +19,7 @@ OLLAMA_NUM_CTX = max(4096, int(os.getenv("OLLAMA_NUM_CTX", "8192")))
 OLLAMA_NUM_BATCH = min(128, max(16, int(os.getenv("OLLAMA_NUM_BATCH", "64"))))
 # Qwen2.5:3b a besoin d'un contexte suffisant pour comparer plusieurs TDR.
 # Les limites ci-dessous gardent le prompt assez riche sans dépasser le contexte local.
-RAG_REFERENCE_TOP_K = min(5, max(3, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "5"))))
+RAG_REFERENCE_TOP_K = min(3, max(3, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "3"))))
 MAX_CANDIDATE_CHARS = min(10000, max(5000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "8000"))))
 MAX_REFERENCE_CHARS = min(3200, max(1800, int(os.getenv("TDR_RAG_REFERENCE_MAX_CHARS", "2600"))))
 MAX_OUTPUT_TOKENS = min(1800, max(800, int(os.getenv("TDR_RAG_MAX_OUTPUT_TOKENS", "1200"))))
