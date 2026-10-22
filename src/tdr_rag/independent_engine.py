@@ -31,7 +31,7 @@ TDR_RAG_NUM_BATCH = min(256, max(32, int(os.getenv("TDR_RAG_NUM_BATCH", "64"))))
 RAG_TOP_K = min(8, max(3, int(os.getenv("TDR_RAG_TOP_K", "5"))))
 REFERENCE_CHARS = min(4200, max(2200, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "3200"))))
 CANDIDATE_CHARS = min(9000, max(5000, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "7500"))))
-OUTPUT_TOKENS = min(1800, max(700, int(os.getenv("TDR_RAG_INDEPENDENT_MAX_OUTPUT_TOKENS", "1200"))))
+OUTPUT_TOKENS = min(2800, max(1400, int(os.getenv("TDR_RAG_INDEPENDENT_MAX_OUTPUT_TOKENS", "2200"))))
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
@@ -51,7 +51,7 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
     # Une première tentative normale, puis deux reprises avec davantage de tokens
     # et une consigne explicite de produire un objet JSON complet.
     for attempt in range(3):
-        token_budget = min(max(tokens, 600) * (attempt + 1), 1800)
+        token_budget = min(max(tokens, 1400) * (attempt + 1), 3200)
         retry_note = ""
         if attempt:
             retry_note = (
@@ -347,20 +347,35 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "level (forte ou partielle), explanation, common_points et differences. Le verdict "
         "global est CAS_1 si au moins une référence est forte ; CAS_2 si aucune n'est forte "
         "mais qu'au moins une est partielle ; CAS_4 si aucune n'est pertinente. "
-        "Choisis aussi un seul verdict global et donne les points communs, les différences et "
-        "une recommandation opérationnelle. Pour chaque référence retenue, compare concrètement "
-        "l'objet, les objectifs, la zone, les bénéficiaires, les activités, la méthode et les livrables "
-        "lorsque ces informations sont présentes. Distingue les faits visibles des informations absentes. "
-        "Fournis des points précis plutôt que des phrases génériques. N'ajoute pas une référence seulement "
-        "parce que son score de récupération est élevé. Toute référence jugée pertinente doit figurer dans "
-        "matched_references avec son nom exact ; si aucune ne l'est, laisse ce tableau vide. "
-        "Ne cite que les noms exacts de la liste autorisée. Les libellés "
-        "internes de récupération ne sont pas destinés à l'utilisateur : ne dis jamais "
-        "« TDR 1 », « TDR 2 » ou « document numéro 1/2 ». N'invente aucun fait. Réponds "
-        "uniquement avec un objet JSON valide ayant les clés case_id, decision, explanation, "
-        "matched_reference, matched_references, confidence, common_points (tableau), differences "
-        "(tableau), recommendation, correspondence_level (forte, moyenne ou nulle), "
-        "evidence_from_reference (tableau).\n"
+        "FORMAT ET NIVEAU DE DÉTAIL OBLIGATOIRES — produis un véritable rapport d'analyse métier, "
+        "pas un résumé de deux phrases. Le champ explanation doit contenir environ 180 à 300 mots en français, "
+        "répartis en paragraphes lisibles : (1) conclusion globale et référence principale, (2) comparaison "
+        "des éléments substantiels, (3) portée et limites de la conclusion. N'allonge pas avec des répétitions. "
+        "Pour chaque référence retenue, donne au moins 5 à 8 points communs concrets lorsque le contenu les "
+        "permet, et indique les différences réelles ou écris clairement qu'aucune différence majeure n'est "
+        "établie à partir des extraits disponibles. Ne transforme jamais une information absente en fait. "
+        "Examine systématiquement, si disponibles : objet et problématique, contexte et justification, objectif "
+        "général, objectifs spécifiques, résultats attendus, activités, zone géographique, population cible et "
+        "bénéficiaires, approche méthodologique et outils, livrables, calendrier/durée, parties prenantes et "
+        "indicateurs. Pour chaque point, précise ce que disent les deux documents et pourquoi cela indique "
+        "une identité, une proximité ou une différence. Un thème général commun ne suffit pas à conclure à un doublon. "
+        "Les champs common_points et differences doivent être des tableaux de chaînes détaillées, et non des "
+        "mots-clés isolés. Le champ recommendation doit contenir une décision opérationnelle de 2 à 4 phrases, "
+        "proportionnée au verdict et explicitant la prochaine action. "
+        "Pour matched_references, fournis chaque référence réellement pertinente avec filename exact, level "
+        "(forte ou partielle), explanation détaillée, common_points et differences. N'inclus pas les références "
+        "simplement récupérées mais non pertinentes. Le verdict global est CAS_1 si une référence démontre une "
+        "quasi-identité substantielle, CAS_2 si les recoupements sont réels mais insuffisants pour conclure à "
+        "un doublon, CAS_4 si aucune référence ne présente de recoupement métier significatif. "
+        "N'invente ni titres, ni identifiants, ni livrables, ni durées. Cite les noms exacts de la liste autorisée. "
+        "Ne dis jamais « TDR 1 », « TDR 2 » ou « document numéro 1/2 ». La confiance doit refléter la qualité "
+        "des preuves visibles, et non les scores de récupération. Si les extraits ne permettent pas de vérifier "
+        "un élément, dis-le explicitement. Vérifie avant de répondre que le verdict, l'explication, les niveaux "
+        "des références et la recommandation sont cohérents. "
+        "Réponds uniquement avec un objet JSON valide ayant les clés case_id, decision, explanation, "
+        "matched_reference, matched_references, confidence, common_points (tableau), differences (tableau), "
+        "recommendation, correspondence_level (forte, moyenne ou nulle), evidence_from_reference (tableau). "
+        "evidence_from_reference doit contenir des constats précis tirés des références examinées.\n"
         "Rappel : les références sont des TDR ou des rapports d'étude présents dans la base ; ne prétends pas "
         "qu'une étude a été exécutée si le document ne l'établit pas."
     )
