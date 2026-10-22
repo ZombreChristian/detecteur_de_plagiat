@@ -293,7 +293,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     for rank, (hybrid, lexical, semantic, row) in enumerate(selected, start=1):
         reference_blocks.append(
             "DOCUMENT DE RÉFÉRENCE\n"
-            f"TITRE: {row.title}\nTYPE DE DOCUMENT: {row.get_document_type_display()}\nFICHIER: {Path(row.file_path).name}\n"
+            f"IDENTIFIANT DE RÉFÉRENCE source_id: {row.id}\nTITRE: {row.title}\nTYPE DE DOCUMENT: {row.get_document_type_display()}\nFICHIER: {Path(row.file_path).name}\n"
             f"SCORES DE RÉCUPÉRATION (indicatifs seulement): lexical={lexical:.3f}, "
             f"sémantique={semantic:.3f}, combiné={hybrid:.3f}\n"
             f"CONTENU DU DOCUMENT DE RÉFÉRENCE:\n"
@@ -337,11 +337,12 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "CAS_2 si la correspondance est réelle mais partielle. CAS_4 exige une explication "
         "qui constate l'absence de référence pertinente. Avant de répondre, vérifie cette "
         "cohérence et corrige le JSON si nécessaire.\n"
-        "Les seules références que tu peux citer sont celles listées ci-dessous, avec leur "
-        "identifiant, leur titre et leur nom de fichier exacts. N'invente jamais un identifiant "
-        "comme TDR-TEST-101 s'il ne figure pas dans la liste. Pour matched_reference, recopie "
-        "exactement le titre ou le nom de fichier d'une référence fournie ; si aucune référence "
-        "ne convient, renvoie une chaîne vide.\n"
+        "Les seules références que tu peux citer sont celles listées ci-dessous. Pour chaque "
+        "référence retenue, retourne obligatoirement source_id (l'identifiant numérique exact "
+        "affiché dans le bloc) et filename (le nom de fichier exact). N'invente jamais d'identifiant. "
+        "Le champ matched_reference doit reprendre le nom de fichier exact ou l'identifiant numérique. "
+        "Si aucune référence n'est pertinente, utilise une liste matched_references vide et "
+        "matched_reference égal à une chaîne vide.\n"
         "Évalue séparément CHAQUE référence. Retourne matched_references, un tableau "
         "de toutes les références réellement fortes ou partielles, chacune avec filename, "
         "level (forte ou partielle), explanation, common_points et differences. Le verdict "
@@ -362,8 +363,8 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "Les champs common_points et differences doivent être des tableaux de chaînes détaillées, et non des "
         "mots-clés isolés. Le champ recommendation doit contenir une décision opérationnelle de 2 à 4 phrases, "
         "proportionnée au verdict et explicitant la prochaine action. "
-        "Pour matched_references, fournis chaque référence réellement pertinente avec filename exact, level "
-        "(forte ou partielle), explanation détaillée, common_points et differences. N'inclus pas les références "
+        "Pour matched_references, fournis chaque référence réellement pertinente avec source_id numérique exact, "
+        "filename exact, level (forte ou partielle), explanation détaillée, common_points et differences. N'inclus pas les références "
         "simplement récupérées mais non pertinentes. Le verdict global est CAS_1 si une référence démontre une "
         "quasi-identité substantielle, CAS_2 si les recoupements sont réels mais insuffisants pour conclure à "
         "un doublon, CAS_4 si aucune référence ne présente de recoupement métier significatif. "
@@ -424,72 +425,124 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         elif any(phrase in reasoning_text for phrase in partial_phrases):
             case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
 
-    # Ne conserver que les références effectivement transmises au modèle.
+    # Résoudre les références citées sans dépendre d'un seul format de sortie de Qwen.
     allowed_rows = {Path(row.file_path).name: row for _, _, _, row in selected}
     allowed_rows.update({str(row.title or ""): row for _, _, _, row in selected})
-    model_refs = final.get("matched_references", [])
-    if not isinstance(model_refs, list):
-        model_refs = []
-    requested = []
-    for item in model_refs:
-        name = str(item.get("filename") or item.get("source") or item.get("title") or "").strip() if isinstance(item, dict) else str(item).strip()
-        if name and name not in requested:
-            requested.append(name)
-    legacy = str(final.get("matched_reference", "")).strip()
-    if legacy and legacy not in requested:
-        requested.insert(0, legacy)
+    allowed_rows_by_id = {str(row.id): row for _, _, _, row in selected}
+    selected_rows = [row for _, _, _, row in selected]
+
     def _resolve_reference(name: str):
-        name = str(name or "").strip()
+        name = str(name or "").strip().strip(" \"'")
         if not name:
             return None
-        row = allowed_rows.get(name)
-        if row is not None:
-            return row
+        if name in allowed_rows:
+            return allowed_rows[name]
+        if name in allowed_rows_by_id:
+            return allowed_rows_by_id[name]
+
+        # Accepte les identifiants numériques/REF-123/ID=123 seulement
+        # lorsqu'ils correspondent à un candidat effectivement transmis.
+        id_match = re.fullmatch(r"(?:(?:source_id|reference_id|ref|id)\s*[:=#-]?\s*)?(\d+)", name, re.I)
+        if id_match and id_match.group(1) in allowed_rows_by_id:
+            return allowed_rows_by_id[id_match.group(1)]
+
         folded = name.casefold()
-        return next((
-            candidate for _, _, _, candidate in selected
+        name_matches = [
+            candidate for candidate in selected_rows
             if folded in Path(candidate.file_path).name.casefold()
             or folded in str(candidate.title or "").casefold()
             or Path(candidate.file_path).name.casefold() in folded
             or (candidate.title and str(candidate.title).casefold() in folded)
-        ), None)
+        ]
+        if len(name_matches) == 1:
+            return name_matches[0]
+        if name_matches:
+            # Un nom ambigu ne doit pas être associé arbitrairement à un document.
+            return None
+
+        # Qwen peut retourner le code métier présent dans le contenu du fichier
+        # plutôt que le titre/nom de fichier. Accepter uniquement une occurrence unique.
+        if len(name) >= 5 and re.search(r"[A-Za-z]\d|\d[A-Za-z]", name):
+            content_matches = []
+            for candidate in selected_rows:
+                document_text = str(
+                    getattr(candidate, "extracted_text", None)
+                    or getattr(candidate, "cleaned_text", None)
+                    or ""
+                ).casefold()
+                if folded in document_text:
+                    content_matches.append(candidate)
+            if len(content_matches) == 1:
+                return content_matches[0]
+        return None
+
+    model_refs = final.get("matched_references", [])
+    if not isinstance(model_refs, list):
+        model_refs = []
+    legacy = str(final.get("matched_reference", "")).strip()
+    requested = []
+    for item in model_refs:
+        aliases = []
+        if isinstance(item, dict):
+            for key in ("source_id", "reference_id", "id", "filename", "source", "title", "reference"):
+                value = item.get(key)
+                if value is not None and str(value).strip() and str(value).strip() not in aliases:
+                    aliases.append(str(value).strip())
+        elif str(item).strip():
+            aliases.append(str(item).strip())
+        for alias in aliases:
+            if alias not in requested:
+                requested.append(alias)
+    if legacy and legacy not in requested:
+        requested.insert(0, legacy)
 
     matched_rows = []
     row_levels = {}
     for item in model_refs:
         if isinstance(item, dict):
-            name = str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
-            level = str(item.get("level", "")).casefold()
+            aliases = [
+                str(item.get(key)).strip()
+                for key in ("source_id", "reference_id", "id", "filename", "source", "title", "reference")
+                if item.get(key) is not None and str(item.get(key)).strip()
+            ]
+            level = str(item.get("level", "")).casefold().strip()
         else:
-            name, level = str(item).strip(), ""
-        row = _resolve_reference(name)
+            aliases, level = [str(item).strip()], ""
+        row = next((_resolve_reference(alias) for alias in aliases if _resolve_reference(alias) is not None), None)
         if row is not None:
             if row not in matched_rows:
                 matched_rows.append(row)
-            if level == "forte":
+            if level in {"forte", "forte correspondance", "strong", "high"}:
                 row_levels[row.id] = "forte"
-            elif row_levels.get(row.id) != "forte":
-                row_levels[row.id] = "partielle"
+            elif level in {"partielle", "correspondance partielle", "partial", "medium"}:
+                if row_levels.get(row.id) != "forte":
+                    row_levels[row.id] = "partielle"
     for name in requested:
         row = _resolve_reference(name)
         if row is not None and row not in matched_rows:
             matched_rows.append(row)
 
-    # Le niveau global dépend des références effectivement résolues, pas des chaînes brutes.
-    if any(row_levels.get(row.id) == "forte" for row in matched_rows):
+    # Le verdict global doit rester cohérent avec les références effectivement résolues.
+    explicit_levels = [row_levels.get(row.id) for row in matched_rows if row.id in row_levels]
+    if "forte" in explicit_levels:
+        case_id = "CAS_1_CORRESPONDANCE_FORTE"
+    elif matched_rows and explicit_levels and all(level == "partielle" for level in explicit_levels):
+        case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
+    elif matched_rows and case_id == "CAS_1_CORRESPONDANCE_FORTE":
+        # Le modèle a déclaré une forte correspondance et une référence identifiable existe,
+        # mais il n'a pas précisé le niveau de cette référence.
+        row_levels.setdefault(matched_rows[0].id, "forte")
         case_id = "CAS_1_CORRESPONDANCE_FORTE"
     elif matched_rows:
         case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
     elif case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
-        # Ne jamais inventer une correspondance avec le premier résultat du moteur de recherche.
-        case_id = "CAS_4_AUCUNE_ETUDE_PERTINENTE"
-        final["explanation"] = (
-            str(final.get("explanation", "")).strip()
-            + " Aucune référence n'a été identifiée explicitement par le modèle parmi les documents transmis ; "
-              "une correspondance ne peut donc pas être confirmée sans preuve nommée."
-        ).strip()
-        final["recommendation"] = (
-            "Vérifier manuellement les références candidates avant de conclure à un doublon."
+        # Ne pas convertir en faux « aucune correspondance » un verdict fort/partiel
+        # dont la référence n'a pas pu être reconnue.
+        raise IndependentTDRError(
+            "Qwen a annoncé une correspondance, mais la référence citée ne peut pas être "
+            "rattachée aux documents candidats transmis. Le résultat n'a pas été classé "
+            "« Aucune correspondance » afin d'éviter un faux négatif. Relancez l'analyse ; "
+            "si le problème persiste, vérifiez les références candidates dans le registre."
         )
     if case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
         matched_rows = []
@@ -552,7 +605,11 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "case_id": case_id,
             "case_title": case_titles[case_id],
             "model": OLLAMA_MODEL,
-            "decision": str(final.get("decision", case_id)),
+            "decision": {
+                "CAS_1_CORRESPONDANCE_FORTE": "SIMILAIRE",
+                "CAS_2_CORRESPONDANCE_PARTIELLE": "SIMILARITÉ PARTIELLE",
+                "CAS_4_AUCUNE_ETUDE_PERTINENTE": "DIFFERENT",
+            }[case_id],
             "explanation": str(final.get("explanation", ""))[:2500],
             "matched_reference": reference_name,
             "matched_references": per_reference,
