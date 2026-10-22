@@ -24,11 +24,11 @@ OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
 OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 # Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
-# uniquement sur les cinq références les mieux classées.
-RAG_TOP_K = 5
+# uniquement sur les trois références les mieux classées.
+RAG_TOP_K = 3
 REFERENCE_CHARS = 3800
 CANDIDATE_CHARS = 9000
-OUTPUT_TOKENS = 1200
+OUTPUT_TOKENS = 1800
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
@@ -224,7 +224,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "reformule ou recoupe une étude déjà présente dans la base. Le raisonnement "
         "de Qwen est la base du verdict final : les scores de recherche servent à "
         "retrouver les références, mais ne décident jamais à ta place. Tu disposes "
-        "de cinq références candidates. Examine leur contenu et compare le sens, pas "
+        "de trois références candidates. Examine leur contenu et compare le sens, pas "
         "seulement les mots exacts : objet, problème traité, objectif général et "
         "objectifs spécifiques, activités, zone, population cible, période, méthode "
         "et livrables. Une reformulation, des synonymes ou un titre différent ne "
@@ -261,12 +261,12 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "comme TDR-TEST-101 s'il ne figure pas dans la liste. Pour matched_reference, recopie "
         "exactement le titre ou le nom de fichier d'une référence fournie ; si aucune référence "
         "ne convient, renvoie une chaîne vide.\n"
-        "Évalue séparément CHAQUE référence. Retourne matched_references, un tableau "
+        "Évalue séparément CHACUNE DES TROIS références fournies, sans en ignorer une avant comparaison. Pour chacune, précise les ressemblances et différences concrètes concernant l'objet, les objectifs, la zone, la population, la période, la méthode, les activités et les livrables. Retourne matched_references, un tableau "
         "de toutes les références réellement fortes ou partielles, chacune avec filename, "
         "level (forte ou partielle), explanation, common_points et differences. Le verdict "
         "global est CAS_1 si au moins une référence est forte ; CAS_2 si aucune n'est forte "
         "mais qu'au moins une est partielle ; CAS_4 si aucune n'est pertinente. "
-        "Choisis aussi un seul verdict global et donne les points communs, les différences et "
+        "L'explication globale doit être développée, précise et justifiée, et non limitée à une phrase générique. Choisis aussi un seul verdict global et donne les points communs, les différences et "
         "une recommandation. Ne cite que les noms exacts de la liste autorisée. Les libellés "
         "internes de récupération ne sont pas destinés à l'utilisateur : ne dis jamais "
         "« TDR 1 », « TDR 2 » ou « document numéro 1/2 ». N'invente aucun fait. Réponds "
@@ -280,14 +280,14 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     final = _ollama_json(
         system_prompt,
         "TDR CANDIDAT À ÉVALUER:\n" + candidate_excerpt
-        + "\n\nLES CINQ RÉFÉRENCES À EXAMINER AVANT DE CONCLURE:\n"
+        + "\n\nLES TROIS RÉFÉRENCES LES MIEUX CLASSÉES À EXAMINER AVANT DE CONCLURE:\n"
         + "\n\n--- DOCUMENT SUIVANT ---\n\n".join(reference_blocks)
         + "\n\nLISTE AUTORISÉE DES RÉFÉRENCES (reprends exactement un titre ou fichier de cette liste) :\n"
         + "\n".join(
             f"- ID={row.id} | TYPE={row.get_document_type_display()} | TITRE={row.title} | FICHIER={Path(row.file_path).name}"
             for _, _, _, row in selected
         ),
-        tokens=1200,
+        tokens=1800,
     )
 
     case_id = str(final.get("case_id", "CAS_4_AUCUNE_ETUDE_PERTINENTE"))
