@@ -1,7 +1,7 @@
 """Moteur RAG autonome dédié à la vérification des TDR.
 
 La recherche lexicale et sémantique classe toutes les références indexées.
-Qwen analyse ensuite les trois meilleures candidates et renvoie un verdict global unique.
+Qwen analyse les meilleures références candidates et renvoie un verdict global unique.
 """
 from __future__ import annotations
 
@@ -27,10 +27,10 @@ OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 # Un contexte plus large évite de couper les sections utiles des TDR longs.
 TDR_RAG_NUM_CTX = max(4096, int(os.getenv("TDR_RAG_NUM_CTX", "8192")))
 TDR_RAG_NUM_BATCH = min(256, max(32, int(os.getenv("TDR_RAG_NUM_BATCH", "64"))))
-# Recherche lexicale + sémantique, puis comparaison détaillée des trois meilleures références.
-RAG_TOP_K = min(3, max(1, int(os.getenv("TDR_RAG_TOP_K", "3"))))
-REFERENCE_CHARS = min(3200, max(1600, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "2600"))))
-CANDIDATE_CHARS = min(7000, max(4500, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "6000"))))
+# Recherche lexicale + sémantique, puis comparaison détaillée des meilleures références.
+RAG_TOP_K = min(8, max(3, int(os.getenv("TDR_RAG_TOP_K", "5"))))
+REFERENCE_CHARS = min(4200, max(2200, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "3200"))))
+CANDIDATE_CHARS = min(9000, max(5000, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "7500"))))
 OUTPUT_TOKENS = min(1800, max(700, int(os.getenv("TDR_RAG_INDEPENDENT_MAX_OUTPUT_TOKENS", "1200"))))
 
 CASES = {
@@ -173,14 +173,49 @@ def _load_all_indexed_references():
     return rows
 
 
+def _candidate_embedding_chunks(text: str, max_chunks: int = 10, chunk_chars: int = 1000) -> list[str]:
+    """Construit des extraits de plusieurs sections pour éviter la troncature du début du TDR."""
+    text = re.sub(r"\n{3,}", "\n\n", (text or "")).strip()
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text) if part.strip()]
+    if not paragraphs:
+        return [text[:chunk_chars]] if text else []
+
+    chunks = []
+    for paragraph in paragraphs:
+        if len(paragraph) <= chunk_chars:
+            chunks.append(paragraph)
+            continue
+        start = 0
+        while start < len(paragraph):
+            chunks.append(paragraph[start:start + chunk_chars])
+            if start + chunk_chars >= len(paragraph):
+                break
+            start += chunk_chars - 120
+
+    priority = ("objet", "contexte", "objectif", "résultat", "zone", "population",
+                "méthodologie", "activité", "livrable", "période", "justification",
+                "bénéficiaire", "indicateur")
+    ranked = sorted(
+        enumerate(chunks),
+        key=lambda item: (sum(term in item[1][:250].casefold() for term in priority), -item[0]),
+        reverse=True,
+    )
+    chosen = {0}
+    for idx, _ in ranked:
+        if len(chosen) >= max_chunks:
+            break
+        chosen.add(idx)
+    return [chunks[idx] for idx in sorted(chosen) if chunks[idx].strip()]
+
+
 def _rank_all_references(candidate: str, rows):
-    """Classe tout le corpus avec TF-IDF lexical (30 %) et cosinus sémantique (70 %)."""
+    """Classe le corpus avec le lexique complet et plusieurs vues sémantiques du TDR."""
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.metrics.pairwise import cosine_similarity
     from src.similarity.model_manager import get_model
 
     reference_texts = [
-        (row.cleaned_text or row.extracted_text or row.title or "").strip()
+        (str(row.title or "") + "\n" + str(row.cleaned_text or row.extracted_text or "")).strip()
         for row in rows
     ]
     vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True)
@@ -191,19 +226,38 @@ def _rank_all_references(candidate: str, rows):
         lexical_scores = np.zeros(len(rows), dtype=np.float32)
 
     model = get_model()
+    # Un embedding unique d’un long document ne représente souvent que son début
+    # (limite de tokens du modèle). On combine donc la vue globale avec plusieurs
+    # extraits couvrant notamment les objectifs, la zone, la méthode et les livrables.
+    candidate_chunks = _candidate_embedding_chunks(candidate)
+    if not candidate_chunks:
+        candidate_chunks = [candidate[:1000]]
+    chunk_vectors = model.encode(
+        candidate_chunks, normalize_embeddings=True, show_progress_bar=False,
+        convert_to_numpy=True,
+    )
     candidate_vector = model.encode(
         [candidate], normalize_embeddings=True, show_progress_bar=False,
         convert_to_numpy=True,
     )[0]
-    # Calcul vectorisé des cosinus : évite une boucle Python sur chaque référence.
+    # Les embeddings enregistrés sont réutilisés ; seul le TDR candidat est encodé.
     embeddings = np.asarray([row.embedding for row in rows], dtype=np.float32)
     norms = np.linalg.norm(embeddings, axis=1)
-    semantic_scores = np.divide(
+    global_scores = np.divide(
         embeddings @ candidate_vector,
         norms,
         out=np.zeros(len(rows), dtype=np.float32),
         where=norms > 0,
     )
+    chunk_scores = np.divide(
+        chunk_vectors @ embeddings.T,
+        norms[None, :],
+        out=np.zeros((len(chunk_vectors), len(rows)), dtype=np.float32),
+        where=norms[None, :] > 0,
+    )
+    # Une forte proximité sur une section métier peut révéler un doublon masqué
+    # par un début de document différent ; la vue globale conserve un poids utile.
+    semantic_scores = 0.35 * global_scores + 0.65 * chunk_scores.max(axis=0)
     semantic_scores = np.clip(semantic_scores, 0.0, 1.0)
     lexical_scores = np.clip(np.asarray(lexical_scores, dtype=np.float32), 0.0, 1.0)
     hybrid_scores = 0.30 * lexical_scores + 0.70 * semantic_scores
@@ -215,7 +269,7 @@ def _rank_all_references(candidate: str, rows):
     return ranked
 
 def analyze_tdr_independently(candidate_text: str) -> dict:
-    """Classe le corpus, puis demande à Qwen un seul verdict fondé sur les 3 meilleurs TDR."""
+    """Classe le corpus, puis demande à Qwen un verdict sur les meilleures références."""
     candidate = (candidate_text or "").strip()
     if len(candidate) < 80:
         raise IndependentTDRError("Le TDR contient trop peu de texte exploitable.")
@@ -228,7 +282,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
 
     # Le classement sert uniquement à retrouver les références candidates.
     # Qwen reste responsable du raisonnement et du verdict métier ; seules les
-    # trois références les mieux classées lui sont transmises.
+    # plusieurs références bien classées lui sont transmises.
     ranked = _rank_all_references(candidate, rows)
     if not ranked:
         raise IndependentTDRError("Aucune référence TDR exploitable n'a été trouvée.")
@@ -251,7 +305,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "reformule ou recoupe une étude déjà présente dans la base. Le raisonnement "
         "de Qwen est la base du verdict final : les scores de recherche servent à "
         "retrouver les références, mais ne décident jamais à ta place. Tu disposes "
-        "des trois références candidates les mieux classées. Examine leur contenu et compare le sens, pas "
+        "des références candidates les mieux classées. Examine leur contenu et compare le sens, pas "
         "seulement les mots exacts : objet, problème traité, objectif général et "
         "objectifs spécifiques, activités, zone, population cible, période, méthode "
         "et livrables. Une reformulation, des synonymes ou un titre différent ne "
@@ -313,7 +367,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     final = _ollama_json(
         system_prompt,
         "TDR CANDIDAT À ÉVALUER:\n" + candidate_excerpt
-        + "\n\nLES TROIS RÉFÉRENCES À EXAMINER AVANT DE CONCLURE:\n"
+        + "\n\nLES RÉFÉRENCES CANDIDATES À EXAMINER AVANT DE CONCLURE:\n"
         + "\n\n--- DOCUMENT SUIVANT ---\n\n".join(reference_blocks)
         + "\n\nLISTE AUTORISÉE DES RÉFÉRENCES (reprends exactement un titre ou fichier de cette liste) :\n"
         + "\n".join(
@@ -420,7 +474,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
               "une correspondance ne peut donc pas être confirmée sans preuve nommée."
         ).strip()
         final["recommendation"] = (
-            "Vérifier manuellement les trois références candidates avant de conclure à un doublon."
+            "Vérifier manuellement les références candidates avant de conclure à un doublon."
         )
     if case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
         matched_rows = []
