@@ -1,7 +1,7 @@
 """Moteur RAG autonome dédié à la vérification des TDR.
 
 La recherche lexicale et sémantique classe toutes les références indexées.
-Qwen analyse les meilleures références candidates et renvoie un verdict global unique.
+Qwen analyse ensuite les cinq meilleures candidates et renvoie un verdict global unique.
 """
 from __future__ import annotations
 
@@ -23,15 +23,12 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
 OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
-# Limiter le contexte et le lot d’évaluation aide les machines à mémoire partagée.
-# Un contexte plus large évite de couper les sections utiles des TDR longs.
-TDR_RAG_NUM_CTX = max(4096, int(os.getenv("TDR_RAG_NUM_CTX", "8192")))
-TDR_RAG_NUM_BATCH = min(256, max(32, int(os.getenv("TDR_RAG_NUM_BATCH", "64"))))
-# Recherche lexicale + sémantique, puis comparaison détaillée des meilleures références.
-RAG_TOP_K = min(3, max(3, int(os.getenv("TDR_RAG_TOP_K", "3"))))
-REFERENCE_CHARS = min(4200, max(2200, int(os.getenv("TDR_RAG_REFERENCE_CHARS", "3200"))))
-CANDIDATE_CHARS = min(9000, max(5000, int(os.getenv("TDR_RAG_CANDIDATE_CHARS", "7500"))))
-OUTPUT_TOKENS = min(2800, max(1400, int(os.getenv("TDR_RAG_INDEPENDENT_MAX_OUTPUT_TOKENS", "2200"))))
+# Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
+# uniquement sur les cinq références les mieux classées.
+RAG_TOP_K = 5
+REFERENCE_CHARS = 3800
+CANDIDATE_CHARS = 9000
+OUTPUT_TOKENS = 1200
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
@@ -51,7 +48,7 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
     # Une première tentative normale, puis deux reprises avec davantage de tokens
     # et une consigne explicite de produire un objet JSON complet.
     for attempt in range(3):
-        token_budget = min(max(tokens, 1400) * (attempt + 1), 3200)
+        token_budget = min(max(tokens, 600) * (attempt + 1), 1800)
         retry_note = ""
         if attempt:
             retry_note = (
@@ -68,13 +65,8 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                     "stream": False,
                     "format": "json",
                     "think": False,
-                    "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "10m"),
-                    "options": {
-                        "temperature": 0,
-                        "num_predict": token_budget,
-                        "num_ctx": TDR_RAG_NUM_CTX,
-                        "num_batch": TDR_RAG_NUM_BATCH,
-                    },
+                    "keep_alive": "5m",
+                    "options": {"temperature": 0, "num_predict": token_budget},
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt + retry_note},
@@ -125,38 +117,26 @@ def extract_tdr_document(path: Path) -> str:
 
 
 def _excerpt(text: str, limit: int) -> str:
-    """Conserve les sections métier prioritaires sans éliminer un paragraphe trop long."""
     text = re.sub(r"\n{3,}", "\n\n", (text or "")).strip()
     if len(text) <= limit:
         return text
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
-    if not paragraphs:
-        return text[:limit]
     priority = ("objet", "contexte", "objectif", "résultat", "zone", "population",
-                "méthodologie", "activité", "livrable", "période", "justification",
-                "bénéficiaire", "indicateur", "budget", "durée")
+                "méthodologie", "activité", "livrable", "période", "justification")
     ranked = sorted(
         enumerate(paragraphs),
-        key=lambda item: (
-            sum(word in item[1][:220].lower() for word in priority),
-            -item[0],
-        ),
+        key=lambda item: sum(word in item[1][:180].lower() for word in priority),
         reverse=True,
     )
-    # Réserver une part au début du document pour conserver son objet et son contexte.
-    head_budget = min(max(500, limit // 4), len(paragraphs[0]))
-    selected = {0: paragraphs[0][:head_budget]}
-    used = len(selected[0])
+    selected, used = set(), 0
     for idx, paragraph in ranked:
-        if idx in selected or used >= limit:
-            continue
-        remaining = limit - used - 2
-        if remaining <= 80:
-            break
-        # Les sections longues sont tronquées plutôt qu'entièrement perdues.
-        selected[idx] = paragraph[:remaining]
-        used += len(selected[idx]) + 2
-    return "\n\n".join(selected[i] for i in sorted(selected))[:limit]
+        cost = len(paragraph) + 2
+        if used + cost <= limit:
+            selected.add(idx)
+            used += cost
+    result = "\n\n".join(p for i, p in enumerate(paragraphs) if i in selected)
+    return result or text[:limit]
+
 
 def _load_all_indexed_references():
     import django
@@ -173,49 +153,14 @@ def _load_all_indexed_references():
     return rows
 
 
-def _candidate_embedding_chunks(text: str, max_chunks: int = 10, chunk_chars: int = 1000) -> list[str]:
-    """Construit des extraits de plusieurs sections pour éviter la troncature du début du TDR."""
-    text = re.sub(r"\n{3,}", "\n\n", (text or "")).strip()
-    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text) if part.strip()]
-    if not paragraphs:
-        return [text[:chunk_chars]] if text else []
-
-    chunks = []
-    for paragraph in paragraphs:
-        if len(paragraph) <= chunk_chars:
-            chunks.append(paragraph)
-            continue
-        start = 0
-        while start < len(paragraph):
-            chunks.append(paragraph[start:start + chunk_chars])
-            if start + chunk_chars >= len(paragraph):
-                break
-            start += chunk_chars - 120
-
-    priority = ("objet", "contexte", "objectif", "résultat", "zone", "population",
-                "méthodologie", "activité", "livrable", "période", "justification",
-                "bénéficiaire", "indicateur")
-    ranked = sorted(
-        enumerate(chunks),
-        key=lambda item: (sum(term in item[1][:250].casefold() for term in priority), -item[0]),
-        reverse=True,
-    )
-    chosen = {0}
-    for idx, _ in ranked:
-        if len(chosen) >= max_chunks:
-            break
-        chosen.add(idx)
-    return [chunks[idx] for idx in sorted(chosen) if chunks[idx].strip()]
-
-
 def _rank_all_references(candidate: str, rows):
-    """Classe le corpus avec le lexique complet et plusieurs vues sémantiques du TDR."""
+    """Classe tout le corpus avec TF-IDF lexical (30 %) et cosinus sémantique (70 %)."""
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.metrics.pairwise import cosine_similarity
     from src.similarity.model_manager import get_model
 
     reference_texts = [
-        (str(row.title or "") + "\n" + str(row.cleaned_text or row.extracted_text or "")).strip()
+        (row.cleaned_text or row.extracted_text or row.title or "").strip()
         for row in rows
     ]
     vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True)
@@ -226,50 +171,24 @@ def _rank_all_references(candidate: str, rows):
         lexical_scores = np.zeros(len(rows), dtype=np.float32)
 
     model = get_model()
-    # Un embedding unique d’un long document ne représente souvent que son début
-    # (limite de tokens du modèle). On combine donc la vue globale avec plusieurs
-    # extraits couvrant notamment les objectifs, la zone, la méthode et les livrables.
-    candidate_chunks = _candidate_embedding_chunks(candidate)
-    if not candidate_chunks:
-        candidate_chunks = [candidate[:1000]]
-    chunk_vectors = model.encode(
-        candidate_chunks, normalize_embeddings=True, show_progress_bar=False,
-        convert_to_numpy=True,
-    )
     candidate_vector = model.encode(
         [candidate], normalize_embeddings=True, show_progress_bar=False,
         convert_to_numpy=True,
     )[0]
-    # Les embeddings enregistrés sont réutilisés ; seul le TDR candidat est encodé.
-    embeddings = np.asarray([row.embedding for row in rows], dtype=np.float32)
-    norms = np.linalg.norm(embeddings, axis=1)
-    global_scores = np.divide(
-        embeddings @ candidate_vector,
-        norms,
-        out=np.zeros(len(rows), dtype=np.float32),
-        where=norms > 0,
-    )
-    chunk_scores = np.divide(
-        chunk_vectors @ embeddings.T,
-        norms[None, :],
-        out=np.zeros((len(chunk_vectors), len(rows)), dtype=np.float32),
-        where=norms[None, :] > 0,
-    )
-    # Une forte proximité sur une section métier peut révéler un doublon masqué
-    # par un début de document différent ; la vue globale conserve un poids utile.
-    semantic_scores = 0.35 * global_scores + 0.65 * chunk_scores.max(axis=0)
-    semantic_scores = np.clip(semantic_scores, 0.0, 1.0)
-    lexical_scores = np.clip(np.asarray(lexical_scores, dtype=np.float32), 0.0, 1.0)
-    hybrid_scores = 0.30 * lexical_scores + 0.70 * semantic_scores
-    ranked = [
-        (float(hybrid_scores[i]), float(lexical_scores[i]), float(semantic_scores[i]), row)
-        for i, row in enumerate(rows)
-    ]
+    ranked = []
+    for index, row in enumerate(rows):
+        vector = np.asarray(row.embedding, dtype=np.float32)
+        norm = float(np.linalg.norm(vector))
+        semantic = float(np.dot(vector / norm, candidate_vector)) if norm else 0.0
+        semantic = max(0.0, min(1.0, semantic))
+        lexical = max(0.0, min(1.0, float(lexical_scores[index])))
+        hybrid = 0.30 * lexical + 0.70 * semantic
+        ranked.append((hybrid, lexical, semantic, row))
     ranked.sort(key=lambda item: item[0], reverse=True)
     return ranked
 
 def analyze_tdr_independently(candidate_text: str) -> dict:
-    """Classe le corpus, puis demande à Qwen un verdict sur les meilleures références."""
+    """Classe le corpus, puis demande à Qwen un seul verdict fondé sur les 3 meilleurs TDR."""
     candidate = (candidate_text or "").strip()
     if len(candidate) < 80:
         raise IndependentTDRError("Le TDR contient trop peu de texte exploitable.")
@@ -281,8 +200,8 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         )
 
     # Le classement sert uniquement à retrouver les références candidates.
-    # Qwen reste responsable du raisonnement et du verdict métier ; seules les
-    # plusieurs références bien classées lui sont transmises.
+    # Qwen reste responsable du raisonnement et du verdict métier. On lui fournit
+    # cinq références pour limiter les faux négatifs dus à une reformulation.
     ranked = _rank_all_references(candidate, rows)
     if not ranked:
         raise IndependentTDRError("Aucune référence TDR exploitable n'a été trouvée.")
@@ -293,7 +212,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     for rank, (hybrid, lexical, semantic, row) in enumerate(selected, start=1):
         reference_blocks.append(
             "DOCUMENT DE RÉFÉRENCE\n"
-            f"IDENTIFIANT DE RÉFÉRENCE source_id: {row.id}\nTITRE: {row.title}\nTYPE DE DOCUMENT: {row.get_document_type_display()}\nFICHIER: {Path(row.file_path).name}\n"
+            f"TITRE: {row.title}\nTYPE DE DOCUMENT: {row.get_document_type_display()}\nFICHIER: {Path(row.file_path).name}\n"
             f"SCORES DE RÉCUPÉRATION (indicatifs seulement): lexical={lexical:.3f}, "
             f"sémantique={semantic:.3f}, combiné={hybrid:.3f}\n"
             f"CONTENU DU DOCUMENT DE RÉFÉRENCE:\n"
@@ -305,7 +224,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "reformule ou recoupe une étude déjà présente dans la base. Le raisonnement "
         "de Qwen est la base du verdict final : les scores de recherche servent à "
         "retrouver les références, mais ne décident jamais à ta place. Tu disposes "
-        "des références candidates les mieux classées. Examine leur contenu et compare le sens, pas "
+        "de cinq références candidates. Examine leur contenu et compare le sens, pas "
         "seulement les mots exacts : objet, problème traité, objectif général et "
         "objectifs spécifiques, activités, zone, population cible, période, méthode "
         "et livrables. Une reformulation, des synonymes ou un titre différent ne "
@@ -337,60 +256,38 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "CAS_2 si la correspondance est réelle mais partielle. CAS_4 exige une explication "
         "qui constate l'absence de référence pertinente. Avant de répondre, vérifie cette "
         "cohérence et corrige le JSON si nécessaire.\n"
-        "Les seules références que tu peux citer sont celles listées ci-dessous. Pour chaque "
-        "référence retenue, retourne obligatoirement source_id (l'identifiant numérique exact "
-        "affiché dans le bloc) et filename (le nom de fichier exact). N'invente jamais d'identifiant. "
-        "Le champ matched_reference doit reprendre le nom de fichier exact ou l'identifiant numérique. "
-        "Si aucune référence n'est pertinente, utilise une liste matched_references vide et "
-        "matched_reference égal à une chaîne vide.\n"
+        "Les seules références que tu peux citer sont celles listées ci-dessous, avec leur "
+        "identifiant, leur titre et leur nom de fichier exacts. N'invente jamais un identifiant "
+        "comme TDR-TEST-101 s'il ne figure pas dans la liste. Pour matched_reference, recopie "
+        "exactement le titre ou le nom de fichier d'une référence fournie ; si aucune référence "
+        "ne convient, renvoie une chaîne vide.\n"
         "Évalue séparément CHAQUE référence. Retourne matched_references, un tableau "
         "de toutes les références réellement fortes ou partielles, chacune avec filename, "
         "level (forte ou partielle), explanation, common_points et differences. Le verdict "
         "global est CAS_1 si au moins une référence est forte ; CAS_2 si aucune n'est forte "
         "mais qu'au moins une est partielle ; CAS_4 si aucune n'est pertinente. "
-        "FORMAT ET NIVEAU DE DÉTAIL OBLIGATOIRES — produis un véritable rapport d'analyse métier, "
-        "pas un résumé de deux phrases. Le champ explanation doit contenir environ 180 à 300 mots en français, "
-        "répartis en paragraphes lisibles : (1) conclusion globale et référence principale, (2) comparaison "
-        "des éléments substantiels, (3) portée et limites de la conclusion. N'allonge pas avec des répétitions. "
-        "Pour chaque référence retenue, donne au moins 5 à 8 points communs concrets lorsque le contenu les "
-        "permet, et indique les différences réelles ou écris clairement qu'aucune différence majeure n'est "
-        "établie à partir des extraits disponibles. Ne transforme jamais une information absente en fait. "
-        "Examine systématiquement, si disponibles : objet et problématique, contexte et justification, objectif "
-        "général, objectifs spécifiques, résultats attendus, activités, zone géographique, population cible et "
-        "bénéficiaires, approche méthodologique et outils, livrables, calendrier/durée, parties prenantes et "
-        "indicateurs. Pour chaque point, précise ce que disent les deux documents et pourquoi cela indique "
-        "une identité, une proximité ou une différence. Un thème général commun ne suffit pas à conclure à un doublon. "
-        "Les champs common_points et differences doivent être des tableaux de chaînes détaillées, et non des "
-        "mots-clés isolés. Le champ recommendation doit contenir une décision opérationnelle de 2 à 4 phrases, "
-        "proportionnée au verdict et explicitant la prochaine action. "
-        "Pour matched_references, fournis chaque référence réellement pertinente avec source_id numérique exact, "
-        "filename exact, level (forte ou partielle), explanation détaillée, common_points et differences. N'inclus pas les références "
-        "simplement récupérées mais non pertinentes. Le verdict global est CAS_1 si une référence démontre une "
-        "quasi-identité substantielle, CAS_2 si les recoupements sont réels mais insuffisants pour conclure à "
-        "un doublon, CAS_4 si aucune référence ne présente de recoupement métier significatif. "
-        "N'invente ni titres, ni identifiants, ni livrables, ni durées. Cite les noms exacts de la liste autorisée. "
-        "Ne dis jamais « TDR 1 », « TDR 2 » ou « document numéro 1/2 ». La confiance doit refléter la qualité "
-        "des preuves visibles, et non les scores de récupération. Si les extraits ne permettent pas de vérifier "
-        "un élément, dis-le explicitement. Vérifie avant de répondre que le verdict, l'explication, les niveaux "
-        "des références et la recommandation sont cohérents. "
-        "Réponds uniquement avec un objet JSON valide ayant les clés case_id, decision, explanation, "
-        "matched_reference, matched_references, confidence, common_points (tableau), differences (tableau), "
-        "recommendation, correspondence_level (forte, moyenne ou nulle), evidence_from_reference (tableau). "
-        "evidence_from_reference doit contenir des constats précis tirés des références examinées.\n"
+        "Choisis aussi un seul verdict global et donne les points communs, les différences et "
+        "une recommandation. Ne cite que les noms exacts de la liste autorisée. Les libellés "
+        "internes de récupération ne sont pas destinés à l'utilisateur : ne dis jamais "
+        "« TDR 1 », « TDR 2 » ou « document numéro 1/2 ». N'invente aucun fait. Réponds "
+        "uniquement avec un objet JSON valide ayant les clés case_id, decision, explanation, "
+        "matched_reference, matched_references, confidence, common_points (tableau), differences "
+        "(tableau), recommendation, correspondence_level (forte, moyenne ou nulle), "
+        "evidence_from_reference (tableau).\n"
         "Rappel : les références sont des TDR ou des rapports d'étude présents dans la base ; ne prétends pas "
         "qu'une étude a été exécutée si le document ne l'établit pas."
     )
     final = _ollama_json(
         system_prompt,
         "TDR CANDIDAT À ÉVALUER:\n" + candidate_excerpt
-        + "\n\nLES RÉFÉRENCES CANDIDATES À EXAMINER AVANT DE CONCLURE:\n"
+        + "\n\nLES CINQ RÉFÉRENCES À EXAMINER AVANT DE CONCLURE:\n"
         + "\n\n--- DOCUMENT SUIVANT ---\n\n".join(reference_blocks)
         + "\n\nLISTE AUTORISÉE DES RÉFÉRENCES (reprends exactement un titre ou fichier de cette liste) :\n"
         + "\n".join(
             f"- ID={row.id} | TYPE={row.get_document_type_display()} | TITRE={row.title} | FICHIER={Path(row.file_path).name}"
             for _, _, _, row in selected
         ),
-        tokens=OUTPUT_TOKENS,
+        tokens=1200,
     )
 
     case_id = str(final.get("case_id", "CAS_4_AUCUNE_ETUDE_PERTINENTE"))
@@ -425,151 +322,43 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         elif any(phrase in reasoning_text for phrase in partial_phrases):
             case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
 
-    # Résoudre les références citées sans dépendre d'un seul format de sortie de Qwen.
+    # Ne conserver que les références effectivement transmises au modèle.
     allowed_rows = {Path(row.file_path).name: row for _, _, _, row in selected}
     allowed_rows.update({str(row.title or ""): row for _, _, _, row in selected})
-    allowed_rows_by_id = {str(row.id): row for _, _, _, row in selected}
-    selected_rows = [row for _, _, _, row in selected]
-
-    def _resolve_reference(name: str):
-        name = str(name or "").strip().strip(" \"'")
-        if not name:
-            return None
-        if name in allowed_rows:
-            return allowed_rows[name]
-        if name in allowed_rows_by_id:
-            return allowed_rows_by_id[name]
-
-        # Accepte les identifiants numériques/REF-123/ID=123 seulement
-        # lorsqu'ils correspondent à un candidat effectivement transmis.
-        id_match = re.fullmatch(r"(?:(?:source_id|reference_id|ref|id)\s*[:=#-]?\s*)?(\d+)", name, re.I)
-        if id_match and id_match.group(1) in allowed_rows_by_id:
-            return allowed_rows_by_id[id_match.group(1)]
-
-        folded = name.casefold()
-        name_matches = [
-            candidate for candidate in selected_rows
-            if folded in Path(candidate.file_path).name.casefold()
-            or folded in str(candidate.title or "").casefold()
-            or Path(candidate.file_path).name.casefold() in folded
-            or (candidate.title and str(candidate.title).casefold() in folded)
-        ]
-        if len(name_matches) == 1:
-            return name_matches[0]
-        if name_matches:
-            # Un nom ambigu ne doit pas être associé arbitrairement à un document.
-            return None
-
-        # Qwen peut retourner le code métier présent dans le contenu du fichier
-        # plutôt que le titre/nom de fichier. Accepter uniquement une occurrence unique.
-        if len(name) >= 5 and re.search(r"[A-Za-z][\w-]*\d|\d[\w-]*[A-Za-z]", name):
-            content_matches = []
-            for candidate in selected_rows:
-                document_text = str(
-                    getattr(candidate, "extracted_text", None)
-                    or getattr(candidate, "cleaned_text", None)
-                    or ""
-                ).casefold()
-                if folded in document_text:
-                    content_matches.append(candidate)
-            if len(content_matches) == 1:
-                return content_matches[0]
-        return None
-
     model_refs = final.get("matched_references", [])
     if not isinstance(model_refs, list):
         model_refs = []
-    legacy = str(final.get("matched_reference", "")).strip()
     requested = []
     for item in model_refs:
-        aliases = []
-        if isinstance(item, dict):
-            for key in ("source_id", "reference_id", "id", "filename", "source", "title", "reference"):
-                value = item.get(key)
-                if value is not None and str(value).strip() and str(value).strip() not in aliases:
-                    aliases.append(str(value).strip())
-        elif str(item).strip():
-            aliases.append(str(item).strip())
-        for alias in aliases:
-            if alias not in requested:
-                requested.append(alias)
+        name = str(item.get("filename") or item.get("source") or item.get("title") or "").strip() if isinstance(item, dict) else str(item).strip()
+        if name and name not in requested:
+            requested.append(name)
+    legacy = str(final.get("matched_reference", "")).strip()
     if legacy and legacy not in requested:
         requested.insert(0, legacy)
-
     matched_rows = []
-    row_levels = {}
-    for item in model_refs:
-        if isinstance(item, dict):
-            aliases = [
-                str(item.get(key)).strip()
-                for key in ("source_id", "reference_id", "id", "filename", "source", "title", "reference")
-                if item.get(key) is not None and str(item.get(key)).strip()
-            ]
-            level = str(item.get("level", "")).casefold().strip()
-        else:
-            aliases, level = [str(item).strip()], ""
-        row = next((_resolve_reference(alias) for alias in aliases if _resolve_reference(alias) is not None), None)
-        if row is not None:
-            if row not in matched_rows:
-                matched_rows.append(row)
-            if level in {"forte", "forte correspondance", "strong", "high"}:
-                row_levels[row.id] = "forte"
-            elif level in {"partielle", "correspondance partielle", "partial", "medium"}:
-                if row_levels.get(row.id) != "forte":
-                    row_levels[row.id] = "partielle"
     for name in requested:
-        row = _resolve_reference(name)
+        row = allowed_rows.get(name)
+        if row is None:
+            row = next((candidate for _, _, _, candidate in selected
+                        if name.casefold() in Path(candidate.file_path).name.casefold()
+                        or name.casefold() in str(candidate.title or "").casefold()), None)
         if row is not None and row not in matched_rows:
             matched_rows.append(row)
-
-    # Le verdict global doit rester cohérent avec les références effectivement résolues.
-    explicit_levels = [row_levels.get(row.id) for row in matched_rows if row.id in row_levels]
-    if "forte" in explicit_levels:
-        case_id = "CAS_1_CORRESPONDANCE_FORTE"
-    elif matched_rows and explicit_levels and all(level == "partielle" for level in explicit_levels):
-        case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
-    elif matched_rows and case_id == "CAS_1_CORRESPONDANCE_FORTE":
-        # Le modèle a déclaré une forte correspondance et une référence identifiable existe,
-        # mais il n'a pas précisé le niveau de cette référence.
-        row_levels.setdefault(matched_rows[0].id, "forte")
+    strong_names = {
+        str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
+        for item in model_refs if isinstance(item, dict) and str(item.get("level", "")).casefold() == "forte"
+    }
+    if matched_rows and any(name in strong_names for name in requested):
         case_id = "CAS_1_CORRESPONDANCE_FORTE"
     elif matched_rows:
         case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
-    elif case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
-        # Ne pas convertir en faux « aucune correspondance » un verdict fort/partiel
-        # dont la référence n'a pas pu être reconnue.
-        raise IndependentTDRError(
-            "Qwen a annoncé une correspondance, mais la référence citée ne peut pas être "
-            "rattachée aux documents candidats transmis. Le résultat n'a pas été classé "
-            "« Aucune correspondance » afin d'éviter un faux négatif. Relancez l'analyse ; "
-            "si le problème persiste, vérifiez les références candidates dans le registre."
-        )
     if case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
         matched_rows = []
+    if not matched_rows and case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
+        matched_rows = [selected[0][3]]
     matched_row = matched_rows[0] if matched_rows else None
     reference_name = Path(matched_row.file_path).name if matched_row else ""
-
-    # La recommandation doit être déterminée à partir du verdict final calculé,
-    # et non reprise aveuglément du texte libre de Qwen, qui peut le contredire.
-    if case_id == "CAS_1_CORRESPONDANCE_FORTE":
-        final["recommendation"] = (
-            "Risque élevé de doublon avec au moins une référence identifiée. "
-            "Suspendre la validation d'une nouvelle étude jusqu'à une comparaison "
-            "métier des objectifs, activités, livrables et bénéficiaires."
-        )
-    elif case_id == "CAS_2_CORRESPONDANCE_PARTIELLE":
-        final["recommendation"] = (
-            "Des recoupements significatifs existent, mais le doublon n'est pas établi. "
-            "Faire vérifier par le service métier les objectifs, le périmètre, les "
-            "bénéficiaires, la méthodologie et les livrables avant de décider si l'étude "
-            "peut être considérée comme nouvelle. Ne pas conclure automatiquement au rejet."
-        )
-    else:
-        final["recommendation"] = (
-            "Aucune correspondance suffisamment étayée n'a été retenue parmi les "
-            "références examinées. Cela ne prouve pas à lui seul que l'étude est nouvelle ; "
-            "vérifier le périmètre du registre et faire valider le résultat par le service métier."
-        )
     case_titles = {
         "CAS_1_CORRESPONDANCE_FORTE": "Forte correspondance",
         "CAS_2_CORRESPONDANCE_PARTIELLE": "Correspondance partielle",
@@ -577,26 +366,16 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     }
     per_reference = []
     for row in matched_rows:
-        item = next((
-            entry for entry in model_refs
-            if isinstance(entry, dict)
-            and any(
-                _resolve_reference(entry.get(key)) is row
-                for key in ("source_id", "reference_id", "id", "filename", "source", "title", "reference")
-            )
-        ), {})
-        level = str(item.get("level", "")).casefold().strip()
-        is_strong = (
-            row_levels.get(row.id) == "forte"
-            or level in {"forte", "forte correspondance", "strong", "high"}
-            or (not level and case_id == "CAS_1_CORRESPONDANCE_FORTE" and row is matched_rows[0])
-        )
+        item = next((item for item in model_refs if isinstance(item, dict)
+                     and str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
+                     in {Path(row.file_path).name, str(row.title or "")}), {})
+        level = str(item.get("level", "")).casefold()
         per_reference.append({
             "source_id": row.id,
             "source": Path(row.file_path).name,
             "title": str(row.title or ""),
             "document_type": row.get_document_type_display(),
-            "level": "forte" if is_strong else "partielle",
+            "level": "forte" if level == "forte" or (not level and case_id == "CAS_1_CORRESPONDANCE_FORTE" and row is matched_rows[0]) else "partielle",
             "explanation": str(item.get("explanation") or final.get("explanation", ""))[:1200],
             "common_points": [str(x)[:400] for x in item.get("common_points", final.get("common_points", []))[:8]],
             "differences": [str(x)[:400] for x in item.get("differences", final.get("differences", []))[:8]],
@@ -614,11 +393,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "case_id": case_id,
             "case_title": case_titles[case_id],
             "model": OLLAMA_MODEL,
-            "decision": {
-                "CAS_1_CORRESPONDANCE_FORTE": "SIMILAIRE",
-                "CAS_2_CORRESPONDANCE_PARTIELLE": "SIMILARITÉ PARTIELLE",
-                "CAS_4_AUCUNE_ETUDE_PERTINENTE": "DIFFERENT",
-            }[case_id],
+            "decision": str(final.get("decision", case_id)),
             "explanation": str(final.get("explanation", ""))[:2500],
             "matched_reference": reference_name,
             "matched_references": per_reference,
