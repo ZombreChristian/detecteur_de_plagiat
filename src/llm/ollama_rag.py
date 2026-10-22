@@ -293,7 +293,7 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
         matched_reference = ""
     elif not isinstance(matched_reference, str) or matched_reference not in valid_sources:
         raise OllamaRAGError(
-            "Qwen3 a identifié une correspondance sans citer exactement une référence fournie."
+            "Qwen2.5:3b a identifié une correspondance sans citer exactement une référence fournie."
         )
     result["matched_reference"] = matched_reference
 
