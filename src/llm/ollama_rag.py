@@ -44,18 +44,19 @@ Compare le sens, même si les formulations diffèrent, et distingue notamment :
 Ne confonds pas la structure administrative générique des TDR avec leur identité.
 N'invente jamais d'information absente. Si les preuves sont insuffisantes, indique-le.
 
-Choisis exactement un cas :
+Choisis exactement un des trois cas métier :
 CAS_1_CORRESPONDANCE_FORTE : une référence couvre essentiellement la même étude
 (même objet et convergence substantielle des dimensions clés).
 CAS_2_CORRESPONDANCE_PARTIELLE : plusieurs dimensions importantes convergent, mais
-des différences ou incertitudes empêchent de conclure à un doublon fort.
-CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE : objectifs/objet comparables, mais la zone
-géographique étudiée est explicitement différente.
+des différences ou incertitudes empêchent de conclure à un doublon fort. Ce cas inclut
+un objet ou des objectifs comparables dans une zone géographique différente : cette
+différence empêche une correspondance forte, mais ne signifie pas à elle seule qu'il
+n'existe aucune correspondance.
 CAS_4_AUCUNE_ETUDE_PERTINENTE : aucune référence récupérée n'est suffisamment
 pertinente au regard de l'objet et des objectifs du TDR.
 
 Réponds exclusivement avec un objet JSON valide, sans Markdown, ayant ces clés :
-case_id (une des quatre valeurs exactes ci-dessus),
+case_id (une des trois valeurs exactes ci-dessus),
 decision (une des valeurs exactes SIMILAIRE, SIMILARITÉ PARTIELLE, DIFFERENT, À EXAMINER),
 confidence (FORTE, MOYENNE ou FAIBLE),
 case_title (titre court en français),
@@ -67,8 +68,9 @@ evidence (tableau d'objets avec source, point, justification),
 missing_information (tableau de chaînes),
 recommendation (une recommandation concrète en français).
 Le cas 1 correspond à decision SIMILAIRE; le cas 2 à SIMILARITÉ PARTIELLE;
-le cas 3 et le cas 4 correspondent à DIFFERENT. Si l'information manque réellement,
-choisis À EXAMINER plutôt que d'inventer une conclusion.
+le cas 4 correspond à DIFFERENT. Le cas 2 inclut les objectifs comparables dans
+une zone géographique différente. Si l'information manque réellement, choisis
+À EXAMINER plutôt que d'inventer une conclusion.
 Pour une correspondance forte, rédige une explication exploitable de 3 à 5 phrases.
 Présente les points communs par dimension (objet, zone, objectifs, méthode, livrables, calendrier)
 et précise les différences réelles, même si elles sont mineures. Les preuves doivent citer
@@ -258,7 +260,6 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
     allowed_cases = {
         "CAS_1_CORRESPONDANCE_FORTE",
         "CAS_2_CORRESPONDANCE_PARTIELLE",
-        "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE",
         "CAS_4_AUCUNE_ETUDE_PERTINENTE",
     }
     allowed_decisions = {"SIMILAIRE", "SIMILARITÉ PARTIELLE", "DIFFERENT", "À EXAMINER"}
@@ -270,7 +271,6 @@ def analyze_tdr_with_rag(candidate_text, ranked_references):
     case_decisions = {
         "CAS_1_CORRESPONDANCE_FORTE": "SIMILAIRE",
         "CAS_2_CORRESPONDANCE_PARTIELLE": "SIMILARITÉ PARTIELLE",
-        "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE": "DIFFERENT",
         "CAS_4_AUCUNE_ETUDE_PERTINENTE": "DIFFERENT",
     }
     if result.get("decision") != "À EXAMINER":
