@@ -480,6 +480,28 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         matched_rows = []
     matched_row = matched_rows[0] if matched_rows else None
     reference_name = Path(matched_row.file_path).name if matched_row else ""
+
+    # La recommandation doit être déterminée à partir du verdict final calculé,
+    # et non reprise aveuglément du texte libre de Qwen, qui peut le contredire.
+    if case_id == "CAS_1_CORRESPONDANCE_FORTE":
+        final["recommendation"] = (
+            "Risque élevé de doublon avec au moins une référence identifiée. "
+            "Suspendre la validation d'une nouvelle étude jusqu'à une comparaison "
+            "métier des objectifs, activités, livrables et bénéficiaires."
+        )
+    elif case_id == "CAS_2_CORRESPONDANCE_PARTIELLE":
+        final["recommendation"] = (
+            "Des recoupements significatifs existent, mais le doublon n'est pas établi. "
+            "Faire vérifier par le service métier les objectifs, le périmètre, les "
+            "bénéficiaires, la méthodologie et les livrables avant de décider si l'étude "
+            "peut être considérée comme nouvelle. Ne pas conclure automatiquement au rejet."
+        )
+    else:
+        final["recommendation"] = (
+            "Aucune correspondance suffisamment étayée n'a été retenue parmi les "
+            "références examinées. Cela ne prouve pas à lui seul que l'étude est nouvelle ; "
+            "vérifier le périmètre du registre et faire valider le résultat par le service métier."
+        )
     case_titles = {
         "CAS_1_CORRESPONDANCE_FORTE": "Forte correspondance",
         "CAS_2_CORRESPONDANCE_PARTIELLE": "Correspondance partielle",
