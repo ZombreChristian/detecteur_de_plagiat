@@ -1,7 +1,7 @@
 """Moteur RAG autonome dédié à la vérification des TDR.
 
 La recherche lexicale et sémantique classe toutes les références indexées.
-Qwen analyse ensuite les cinq meilleures candidates et renvoie un verdict global unique.
+Qwen analyse ensuite les trois meilleures candidates et renvoie un verdict global unique.
 """
 from __future__ import annotations
 
@@ -201,7 +201,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
 
     # Le classement sert uniquement à retrouver les références candidates.
     # Qwen reste responsable du raisonnement et du verdict métier. On lui fournit
-    # cinq références pour limiter les faux négatifs dus à une reformulation.
+    # trois références pour limiter les faux négatifs dus à une reformulation.
     ranked = _rank_all_references(candidate, rows)
     if not ranked:
         raise IndependentTDRError("Aucune référence TDR exploitable n'a été trouvée.")
