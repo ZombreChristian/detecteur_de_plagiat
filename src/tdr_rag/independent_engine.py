@@ -21,7 +21,7 @@ if str(FRONTEND_DIR) not in sys.path:
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen2.5:3b"))
+OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
 OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 # Limiter le contexte et le lot d’évaluation aide les machines à mémoire partagée.
 # Un contexte plus large évite de couper les sections utiles des TDR longs.
