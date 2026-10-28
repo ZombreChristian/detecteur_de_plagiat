@@ -229,7 +229,7 @@ Dans votre fichier privé `frontend/.env`, configurez les variables suivantes av
 TDR_LLM_PROVIDER=openai_compatible
 TDR_LLM_BASE_URL=https://adresse-confirmee-par-le-fournisseur/api
 TDR_LLM_API_KEY=votre-cle-api
-TDR_LLM_MODEL=qwen3.6-35b
+TDR_LLM_MODEL=qwen3.8-27b
 TDR_RAG_TIMEOUT_SECONDS=300
 ```
 
@@ -238,3 +238,16 @@ L'URL de base doit être celle attendue par le serveur : le SDK ajoute le chemin
 Redémarrez ensuite le service Django/API pour recharger les variables d'environnement et lancez une analyse TDR de test. Si la requête échoue, vérifiez la clé, le chemin API, le nom du modèle et la disponibilité du tunnel. Une URL Cloudflare temporaire peut changer ou devenir indisponible.
 
 **Confidentialité :** en mode distant, le texte du TDR candidat et le contenu des trois références récupérées sont transmis au fournisseur pour arbitrage. N'utilisez ce mode que si vous êtes autorisée à transmettre ces documents. Ne publiez jamais `frontend/.env`, une clé API ou un mot de passe dans GitHub. La configuration `.env.example` ne contient aucune clé réelle.
+
+
+### Modèles distants et preuve du modèle utilisé
+
+Les modèles affichés dans l'interface du fournisseur peuvent être sélectionnés par leur identifiant exact, par exemple `qwen3.8-27b` ou `huihui-27b-abliterated`, à condition que l'API accepte bien ces mêmes identifiants. Pour changer de modèle, modifiez `TDR_LLM_MODEL` dans le fichier privé `frontend/.env`.
+
+Dans le résultat technique de l'analyse RAG, `rag_analysis.model_audit` indique :
+- `provider` : fournisseur configuré ;
+- `requested_model` : identifiant envoyé par TDRDOC-SCAN ;
+- `reported_model` : identifiant renvoyé par le serveur dans la réponse, lorsqu'il est fourni ;
+- `request_id` : identifiant de la requête renvoyé par le serveur, lorsqu'il est fourni.
+
+Le champ `rag_analysis.model` affiche le nom déclaré par le serveur, ou à défaut le nom demandé. Pour une preuve plus forte, comparez `reported_model` et `request_id` avec les journaux du serveur fournisseur : un serveur compatible peut renvoyer un alias ou ne pas exposer de preuve indépendante de l'instance réellement exécutée.
