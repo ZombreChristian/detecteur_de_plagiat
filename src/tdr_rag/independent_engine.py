@@ -96,17 +96,43 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                     timeout=OLLAMA_TIMEOUT,
                     max_retries=0,
                 )
-                response = client.chat.completions.create(
-                    model=TDR_LLM_REMOTE_MODEL,
-                    messages=messages,
-                    response_format={"type": "json_object"},
-                    temperature=0,
-                    max_tokens=token_budget,
-                )
+                # Certains serveurs OpenAI-compatibles n'implémentent pas
+                # response_format correctement. Alterner le mode JSON strict et
+                # le mode prompt évite de répéter trois requêtes identiques.
+                request_kwargs = {
+                    "model": TDR_LLM_REMOTE_MODEL,
+                    "messages": messages,
+                    "temperature": 0,
+                    "max_tokens": token_budget,
+                }
+                if attempt != 2:
+                    request_kwargs["response_format"] = {"type": "json_object"}
+                response = client.chat.completions.create(**request_kwargs)
                 # Preuve technique retournée par le serveur : modèle, identifiant de requête.
                 llm_audit["reported_model"] = getattr(response, "model", None)
                 llm_audit["request_id"] = getattr(response, "id", None)
-                last_content = (response.choices[0].message.content or "").strip()
+                if not response.choices:
+                    raise ValueError("Le serveur LLM n'a renvoyé aucun choix (choices vide).")
+                choice = response.choices[0]
+                message = choice.message
+                last_content = (getattr(message, "content", None) or "").strip()
+                # Conserver les métadonnées utiles pour diagnostiquer les réponses vides.
+                finish_reason = getattr(choice, "finish_reason", None)
+                if not last_content:
+                    refusal = (getattr(message, "refusal", None) or "").strip()
+                    reasoning = (getattr(message, "reasoning_content", None) or "").strip()
+                    details = []
+                    if finish_reason:
+                        details.append(f"finish_reason={finish_reason}")
+                    if refusal:
+                        details.append(f"refusal={refusal[:160]}")
+                    if reasoning:
+                        details.append("reasoning_content présent mais content vide")
+                    raise ValueError(
+                        "Réponse vide du serveur OpenAI-compatible"
+                        + (f" ({'; '.join(details)})" if details else "")
+                        + ". Vérifier le format JSON pris en charge et les limites de génération."
+                    )
             elif TDR_LLM_PROVIDER == "ollama":
                 response = requests.post(
                     f"{OLLAMA_URL}/api/chat",
