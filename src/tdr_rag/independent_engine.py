@@ -20,8 +20,15 @@ if str(FRONTEND_DIR) not in sys.path:
     sys.path.insert(0, str(FRONTEND_DIR))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 
+# Le fournisseur local Ollama reste le défaut. Le mode openai_compatible permet
+# d'utiliser un serveur distant compatible avec le SDK OpenAI sans changer le RAG.
+TDR_LLM_PROVIDER = os.getenv("TDR_LLM_PROVIDER", "ollama").strip().lower()
+TDR_LLM_BASE_URL = os.getenv("TDR_LLM_BASE_URL", "").strip().rstrip("/")
+TDR_LLM_API_KEY = os.getenv("TDR_LLM_API_KEY", "").strip()
+TDR_LLM_REMOTE_MODEL = os.getenv("TDR_LLM_MODEL", "").strip()
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
+ACTIVE_MODEL = TDR_LLM_REMOTE_MODEL if TDR_LLM_PROVIDER in {"openai_compatible", "openai-compatible", "remote"} and TDR_LLM_REMOTE_MODEL else OLLAMA_MODEL
 OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 # Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
 # uniquement sur les trois références les mieux classées.
@@ -58,27 +65,62 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                 "Reste concis et termine toutes les accolades et tous les guillemets."
             )
         try:
-            response = requests.post(
-                f"{OLLAMA_URL}/api/chat",
-                json={
-                    "model": OLLAMA_MODEL,
-                    "stream": False,
-                    "format": "json",
-                    "think": False,
-                    "keep_alive": "5m",
-                    "options": {"temperature": 0, "num_predict": token_budget},
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt + retry_note},
-                    ],
-                },
-                timeout=OLLAMA_TIMEOUT,
-            )
-            response.raise_for_status()
-            payload = response.json()
-            last_content = (payload.get("message") or {}).get("content", "").strip()
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt + retry_note},
+            ]
+            if TDR_LLM_PROVIDER in {"openai_compatible", "openai-compatible", "remote"}:
+                if not TDR_LLM_BASE_URL:
+                    raise ValueError(
+                        "TDR_LLM_BASE_URL est requis pour le fournisseur openai_compatible."
+                    )
+                if not TDR_LLM_API_KEY:
+                    raise ValueError(
+                        "TDR_LLM_API_KEY est requis pour le fournisseur openai_compatible."
+                    )
+                if not TDR_LLM_REMOTE_MODEL:
+                    raise ValueError(
+                        "TDR_LLM_MODEL est requis pour le fournisseur openai_compatible."
+                    )
+                from openai import OpenAI
+
+                client = OpenAI(
+                    base_url=TDR_LLM_BASE_URL,
+                    api_key=TDR_LLM_API_KEY,
+                    timeout=OLLAMA_TIMEOUT,
+                    max_retries=0,
+                )
+                response = client.chat.completions.create(
+                    model=TDR_LLM_REMOTE_MODEL,
+                    messages=messages,
+                    response_format={"type": "json_object"},
+                    temperature=0,
+                    max_tokens=token_budget,
+                )
+                last_content = (response.choices[0].message.content or "").strip()
+            elif TDR_LLM_PROVIDER == "ollama":
+                response = requests.post(
+                    f"{OLLAMA_URL}/api/chat",
+                    json={
+                        "model": ACTIVE_MODEL,
+                        "stream": False,
+                        "format": "json",
+                        "think": False,
+                        "keep_alive": "5m",
+                        "options": {"temperature": 0, "num_predict": token_budget},
+                        "messages": messages,
+                    },
+                    timeout=OLLAMA_TIMEOUT,
+                )
+                response.raise_for_status()
+                payload = response.json()
+                last_content = (payload.get("message") or {}).get("content", "").strip()
+            else:
+                raise ValueError(
+                    "TDR_LLM_PROVIDER invalide. Valeurs acceptées : ollama, openai_compatible."
+                )
             if not last_content:
-                raise ValueError("Ollama a renvoyé une réponse vide.")
+                raise ValueError("Le fournisseur LLM a renvoyé une réponse vide.")
             parsed = json.loads(last_content)
             if not isinstance(parsed, dict):
                 raise ValueError("La réponse JSON n'est pas un objet.")
@@ -87,7 +129,7 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
             last_error = exc
     preview = re.sub(r"\\s+", " ", last_content)[:240]
     raise IndependentTDRError(
-        f"Qwen ({OLLAMA_MODEL}) a renvoyé un JSON invalide après 3 tentatives. "
+        f"Le fournisseur LLM ({ACTIVE_MODEL}) a renvoyé un JSON invalide après 3 tentatives. "
         f"Dernière erreur : {last_error}. Début de la réponse : {preview!r}"
     ) from last_error
 
