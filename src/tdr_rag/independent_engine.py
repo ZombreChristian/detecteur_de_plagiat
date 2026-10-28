@@ -35,7 +35,7 @@ OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 RAG_TOP_K = 3
 REFERENCE_CHARS = 3800
 CANDIDATE_CHARS = 9000
-OUTPUT_TOKENS = 1800
+OUTPUT_TOKENS = 4096
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
@@ -61,7 +61,7 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
     # Une première tentative normale, puis deux reprises avec davantage de tokens
     # et une consigne explicite de produire un objet JSON complet.
     for attempt in range(3):
-        token_budget = min(max(tokens, 600) * (attempt + 1), 1800)
+        token_budget = min(max(tokens, 4096) * (attempt + 1), 8192)
         retry_note = ""
         if attempt:
             retry_note = (
