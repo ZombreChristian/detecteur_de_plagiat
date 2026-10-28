@@ -26,17 +26,16 @@ from src.indexing.reference_index import (
 )
 from src.passages.passage_engine import analyze_document_pair, adjusted_hybrid_score
 from src.similarity.contextual_engine import analyze_context
-from src.similarity.ai_judge import judge_documents, OLLAMA_ENABLED, OLLAMA_MODEL
+from src.llm.ollama_rag import analyze_tdr_with_rag, OllamaRAGError
 from src.preprocessing.clean_text import clean_text
 from src.similarity.model_manager import get_model, get_model_info
 
 
-THRESHOLDS = {"plagiarism": 0.55, "duplicate": 0.70}
+THRESHOLDS = {"plagiarism": 0.55}
 LEXICAL_WEIGHT = float(os.getenv("SIMILARITY_LEXICAL_WEIGHT", "0.30"))
 SEMANTIC_WEIGHT = float(os.getenv("SIMILARITY_SEMANTIC_WEIGHT", "0.70"))
 TOP_SOURCES = int(os.getenv("SIMILARITY_REFERENCE_TOP_K", "10"))
 TOP_PASSAGE_SOURCES = int(os.getenv("SIMILARITY_PASSAGE_TOP_K", "5"))
-AI_JUDGE_MAX_CALLS = int(os.getenv("AI_JUDGE_MAX_CALLS", "1"))
 
 if abs((LEXICAL_WEIGHT + SEMANTIC_WEIGHT) - 1.0) > 1e-6:
     raise RuntimeError("SIMILARITY_LEXICAL_WEIGHT + SIMILARITY_SEMANTIC_WEIGHT doit être égal à 1.0")
@@ -102,7 +101,7 @@ def _semantic_scores(candidate_embedding: np.ndarray, reference_embeddings: np.n
 
 
 def score_documents(candidate_text: str, kind: str):
-    if kind not in THRESHOLDS:
+    if kind not in ("plagiarism", "duplicate"):
         raise HTTPException(404, "Mode inconnu. Utilisez plagiarism ou duplicate.")
 
     candidate = clean_text(candidate_text)
@@ -247,31 +246,102 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
 
     ranked = score_documents(candidate, kind)
     if not ranked:
+        if kind == "duplicate":
+            raise HTTPException(
+                409,
+                "Aucune référence TDR n'est indexée dans la base. Impossible de comparer ce document.",
+            )
         raise HTTPException(
             500,
             f"Aucun document de référence indexé pour le mode « {kind} ».",
         )
 
-    # Le seuil choisi dans l'interface est uniquement un seuil de décision.
-    # Le formulaire envoie un pourcentage (ex. 70) alors que le moteur compare
-    # les scores sur une échelle 0-1 (ex. 0.70).
+    best = ranked[0]
+
+    # Parcours TDR : les scores servent uniquement à récupérer des documents.
+    # Qwen est le seul arbitre métier. Aucun seuil et aucun moteur de passages
+    # ne sont exécutés dans ce parcours.
+    if kind == "duplicate":
+        try:
+            rag_analysis = analyze_tdr_with_rag(candidate, ranked)
+        except OllamaRAGError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "TDR_RAG_UNAVAILABLE",
+                    "message": str(exc),
+                    "hint": (
+                        "Démarrez Ollama et vérifiez que qwen3:8b est installé "
+                        "(ollama list). Vérifiez aussi OLLAMA_MODEL dans frontend/.env."
+                    ),
+                },
+            ) from exc
+
+        ranked_by_name = {item["source"]: item for item in ranked}
+        used_names = rag_analysis.get("references_used", [])
+        sources = []
+        for source_name in used_names:
+            item = ranked_by_name.get(source_name)
+            if not item:
+                continue
+            sources.append({
+                "source_id": item["id"],
+                "source": item["source"],
+                "title": item.get("title") or item["source"],
+                # Ce score sert à ordonner la récupération uniquement.
+                "retrieval_score": item["hybrid_score"],
+                "tfidf_score": item["tfidf_score"],
+                "semantic_score": item["semantic_score"],
+                "hybrid_score": item["hybrid_score"],
+                "matches": [],
+            })
+
+        matched_reference = rag_analysis.get("matched_reference", "")
+        matched_item = ranked_by_name.get(matched_reference)
+        # N'afficher comme source de comparaison que la référence explicitement
+        # retenue par Qwen. Les autres documents ont servi à la récupération RAG,
+        # mais ne doivent pas être présentés comme pertinents par défaut.
+        if matched_item:
+            sources = [source for source in sources if source["source"] == matched_reference]
+        else:
+            sources = []
+        final_decision = rag_analysis["decision"]
+
+        return {
+            "mode": "duplicate",
+            "decision": final_decision,
+            "threshold": None,
+            "threshold_percent": None,
+            "decision_provider": "ollama",
+            "rag_analysis": rag_analysis,
+            "lexical_weight": LEXICAL_WEIGHT,
+            "semantic_weight": SEMANTIC_WEIGHT,
+            "best_source": matched_reference if matched_item else "",
+            "best_source_id": matched_item["id"] if matched_item else None,
+            "candidate_document_html": html.escape(candidate),
+            # Pour les TDR, ne pas afficher les scores de récupération comme
+            # s'il s'agissait d'un score de verdict.
+            "tfidf_score": None,
+            "semantic_score": None,
+            "hybrid_score": None,
+            "novelty_score": None,
+            "contextual_analysis": None,
+            "contextual_explanation": rag_analysis.get("explanation", ""),
+            "sources": sources,
+            "matches": [],
+        }
+
+    # Parcours rapports : seuil et moteur contextuel historiques conservés.
     if threshold is None:
         threshold = THRESHOLDS[kind]
     else:
         threshold = float(threshold)
         if threshold > 1.0:
             threshold /= 100.0
-
     if not 0.01 <= threshold <= 1.0:
         raise HTTPException(400, "Le seuil de décision doit être compris entre 1 % et 100 %.")
-    best = ranked[0]
+
     passage_groups = []
-
-    # Qwen vérifie uniquement le 3e résultat du classement.
-    ai_target_id = ranked[2]["id"] if len(ranked) >= 3 else None
-    ai_calls = 0
-
-    # L'analyse lourde des passages est limitée aux sources les plus proches.
     for item in ranked[:TOP_PASSAGE_SOURCES]:
         document = item["_document"]
         source_text = document.extracted_text or document.cleaned_text
@@ -313,35 +383,10 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             )
 
         contextual = analyze_context(candidate, source_text)
-
-        ai_judgment = None
-        # Test volontaire : Qwen vérifie uniquement le 3e résultat.
-        if (
-            OLLAMA_ENABLED
-            and item["id"] == ai_target_id
-            and ai_calls < AI_JUDGE_MAX_CALLS
-        ):
-            ai_judgment = judge_documents(
-                candidate,
-                source_text,
-                contextual_analysis=contextual,
-                technical_evidence={
-                    "rank": 3,
-                    "tfidf_score": item["tfidf_score"],
-                    "semantic_score": item["semantic_score"],
-                    "hybrid_score": detail["hybrid_score"],
-                    "coverage": detail["coverage"],
-                },
-            )
-            if ai_judgment is not None:
-                ai_calls += 1
-
         passage_groups.append(
             {
                 "source_id": item["id"],
                 "source": item["source"],
-                # Ces trois scores proviennent désormais des correspondances
-                # de passages, et non plus de la comparaison globale initiale.
                 "document_score": detail["hybrid_score"],
                 "tfidf_score": detail["tfidf_score"],
                 "semantic_score": detail["semantic_score"],
@@ -351,9 +396,6 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
                 "contextual_analysis": contextual,
                 "contextual_verdict": contextual["verdict"],
                 "contextual_confidence": contextual["confidence"],
-                "ai_judgment": ai_judgment,
-                "ai_verdict": ai_judgment.get("verdict") if ai_judgment else None,
-                "ai_confidence": ai_judgment.get("confidence") if ai_judgment else None,
                 "passages_candidate": detail["passages_candidate"],
                 "passages_source": detail["passages_source"],
                 "source_document": source_text,
@@ -362,15 +404,7 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             }
         )
 
-    # La décision et les scores affichés utilisent une preuve mixte :
-    # TF-IDF documentaire indépendant + sémantique issue des passages.
-    # Le TF-IDF ne sert jamais de filtre pour accepter/refuser une correspondance
-    # sémantique.
     evidence_groups = [group for group in passage_groups if group.get("matches")]
-    # La preuve contextuelle intervient après les passages : elle permet à
-    # l'IA d'écarter les faux rapprochements dus à la structure générique
-    # des TDR, sans modifier les scores TF-IDF/sémantique calculés.
-    # Le verdict Qwen du 3e résultat ne remplace pas le meilleur résultat global.
     evidence_groups.sort(
         key=lambda group: (
             group.get("contextual_verdict") == "SIMILAIRE",
@@ -384,87 +418,34 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         score_decision = decision(best_evidence["hybrid_score"], threshold)
         contextual = best_evidence.get("contextual_analysis", {})
         context_verdict = best_evidence.get("contextual_verdict", "À EXAMINER")
-        ai_judgment = best_evidence.get("ai_judgment")
-        ai_verdict = best_evidence.get("ai_verdict")
-
-        # Si Ollama est disponible, son jugement global est l'arbitre final
-        # pour cette paire. Les moteurs numériques restent des preuves.
-        if ai_verdict == "SIMILAIRE":
-            final_decision = "SIMILAIRE"
-        elif ai_verdict == "DIFFERENT":
-            final_decision = "DIFFERENT"
-        elif ai_verdict == "A_EXAMINER":
-            final_decision = "À EXAMINER"
-        else:
-            final_decision = None
-
-        # Fallback complet vers la logique existante si le modèle local
-        # n'est pas installé, arrêté ou ne renvoie pas un JSON exploitable.
-
-        # Le seuil reste la porte d'entrée de la décision, mais l'identité
-        # contextuelle peut maintenant expliquer ou invalider une proximité
-        # purement textuelle. Une divergence contextuelle ambiguë ne transforme
-        # plus automatiquement un score élevé en DIFFERENT : elle passe par
-        # À EXAMINER. Seule une contradiction forte et explicite est bloquante.
-        overlaps = contextual.get("specific_overlap", {})
-        dims = contextual.get("dimensions", {})
-        hard_conflict = (
-            context_verdict == "DIFFERENT"
-            and contextual.get("confidence") == "FORTE"
-            and (
-                any(
-                    dims.get(name, {}).get("score") is not None
-                    and dims.get(name, {}).get("score") < 0.45
-                    for name in ("objet", "secteur", "zone")
-                )
-                or any(
-                    dims.get(name, {}).get("score") is not None
-                    and dims.get(name, {}).get("score") < 0.45
-                    and overlaps.get(name) is not None
-                    and overlaps.get(name) < 0.10
-                    for name in ("objet", "secteur", "zone")
-                )
-            )
-        )
-
-        if final_decision is None:
-            if score_decision == "DIFFERENT":
-                final_decision = "DIFFERENT"
-            elif hard_conflict:
-                final_decision = "DIFFERENT"
-            elif context_verdict == "À EXAMINER":
-                final_decision = "À EXAMINER"
-            elif context_verdict == "DIFFERENT":
-                final_decision = "À EXAMINER"
-            else:
-                final_decision = "SIMILAIRE"
-
+        final_decision = "DIFFERENT" if score_decision == "DIFFERENT" else context_verdict
         result_tfidf = best_evidence["tfidf_score"]
         result_semantic = best_evidence["semantic_score"]
         result_hybrid = best_evidence["hybrid_score"]
         result_source = best_evidence["source"]
         result_source_id = best_evidence["source_id"]
+        contextual_for_response = contextual
+        explanation_for_response = _contextual_explanation(contextual)
     else:
         final_decision = "DIFFERENT"
-        result_tfidf = 0.0
-        result_semantic = 0.0
-        result_hybrid = 0.0
+        result_tfidf = result_semantic = result_hybrid = 0.0
         result_source = best["source"]
         result_source_id = best["id"]
+        contextual_for_response = None
+        explanation_for_response = "Aucune correspondance de passages exploitable n'a été trouvée."
 
-    # Les sources présentées sont celles effectivement comparées par passages.
-    # Leur ordre est celui de la preuve obtenue, pas celui du seul score global.
     displayed_sources = sorted(
         passage_groups,
         key=lambda group: group.get("hybrid_score", 0.0),
         reverse=True,
     )
-
     return {
         "mode": kind,
         "decision": final_decision,
         "threshold": threshold,
         "threshold_percent": round(threshold * 100, 2),
+        "decision_provider": "contextual_engine",
+        "rag_analysis": None,
         "lexical_weight": LEXICAL_WEIGHT,
         "semantic_weight": SEMANTIC_WEIGHT,
         "best_source": result_source,
@@ -478,23 +459,8 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         "semantic_score": result_semantic,
         "hybrid_score": result_hybrid,
         "novelty_score": round(max(0.0, 1 - result_hybrid), 4),
-        "contextual_analysis": (
-            best_evidence["contextual_analysis"]
-            if best_evidence is not None
-            else None
-        ),
-        "contextual_explanation": (
-            _contextual_explanation(best_evidence["contextual_analysis"])
-            if best_evidence is not None
-            else "Aucune analyse contextuelle disponible."
-        ),
-        "ai_judgment": (
-            best_evidence.get("ai_judgment")
-            if best_evidence is not None
-            else None
-        ),
-        "ai_model": OLLAMA_MODEL if OLLAMA_ENABLED else None,
-        "ai_enabled": OLLAMA_ENABLED,
+        "contextual_analysis": contextual_for_response,
+        "contextual_explanation": explanation_for_response,
         "sources": displayed_sources[:TOP_SOURCES],
         "matches": passage_groups,
     }
@@ -509,14 +475,21 @@ async def lifespan(app: FastAPI):
     print(f"[similarity] Modèle : {model_info['name']}")
     get_model()
 
-    try:
+    def initialize_reference_data():
+        # Django ORM et call_command('migrate') sont synchrones. Le lifespan
+        # FastAPI est asynchrone : exécuter toute l'initialisation DB dans un
+        # thread évite l'erreur SynchronousOnlyOperation.
         stats = ensure_reference_index()
+        _warm_reference_runtime_indexes()
+        return stats
+
+    try:
+        stats = await run_in_threadpool(initialize_reference_data)
         print(
             "[similarity] Références : "
             f"{stats['created_or_updated']} préparée(s), "
             f"{stats['skipped']} déjà indexée(s)."
         )
-        _warm_reference_runtime_indexes()
     except Exception as exc:
         print(f"[similarity] Initialisation PostgreSQL/index impossible : {exc}")
 
@@ -559,7 +532,7 @@ def health():
 
 @app.post("/api/detect/{kind}")
 async def detect(kind: str, file: UploadFile = File(...), threshold: float | None = Form(None)):
-    if kind not in THRESHOLDS:
+    if kind not in ("plagiarism", "duplicate"):
         raise HTTPException(
             404,
             "Mode inconnu. Utilisez plagiarism ou duplicate.",
@@ -595,3 +568,25 @@ async def compare(file_a: UploadFile = File(...), file_b: UploadFile = File(...)
     if result is None:
         raise HTTPException(400, "Les deux documents doivent contenir du texte.")
     return result
+
+
+@app.post("/api/tdr-rag/analyze")
+async def analyze_tdr_rag_independent(file: UploadFile = File(...)):
+    """Point d'entrée dédié au moteur RAG indépendant des TDR."""
+    if not file.filename or Path(file.filename).suffix.lower() not in {".docx", ".pdf"}:
+        raise HTTPException(400, "Formats acceptés : DOCX et PDF.")
+    from src.tdr_rag.independent_engine import (
+        analyze_tdr_independently,
+        extract_tdr_document,
+        IndependentTDRError,
+    )
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            safe_name = re.sub(r"[^\w.\- ]", "_", file.filename)
+            path = Path(directory) / safe_name
+            path.write_bytes(await file.read())
+            candidate_text = extract_tdr_document(path)
+        result = await run_in_threadpool(analyze_tdr_independently, candidate_text)
+        return result
+    except IndependentTDRError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
