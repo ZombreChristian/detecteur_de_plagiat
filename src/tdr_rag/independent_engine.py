@@ -52,6 +52,12 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
     """Appelle Ollama avec reprises en cas de JSON invalide ou de génération tronquée."""
     last_error = None
     last_content = ""
+    llm_audit = {
+        "provider": TDR_LLM_PROVIDER,
+        "requested_model": ACTIVE_MODEL,
+        "reported_model": None,
+        "request_id": None,
+    }
     # Une première tentative normale, puis deux reprises avec davantage de tokens
     # et une consigne explicite de produire un objet JSON complet.
     for attempt in range(3):
@@ -97,12 +103,16 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                     temperature=0,
                     max_tokens=token_budget,
                 )
+                # Preuve technique retournée par le serveur : modèle, identifiant de requête.
+                llm_audit["reported_model"] = getattr(response, "model", None)
+                llm_audit["request_id"] = getattr(response, "id", None)
                 last_content = (response.choices[0].message.content or "").strip()
             elif TDR_LLM_PROVIDER == "ollama":
                 response = requests.post(
                     f"{OLLAMA_URL}/api/chat",
                     json={
-                        "model": ACTIVE_MODEL,
+                        "model": llm_audit.get("reported_model") or ACTIVE_MODEL,
+            "model_audit": llm_audit,
                         "stream": False,
                         "format": "json",
                         "think": False,
@@ -114,6 +124,7 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                 )
                 response.raise_for_status()
                 payload = response.json()
+                llm_audit["reported_model"] = payload.get("model") or OLLAMA_MODEL
                 last_content = (payload.get("message") or {}).get("content", "").strip()
             else:
                 raise ValueError(
@@ -124,6 +135,7 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
             parsed = json.loads(last_content)
             if not isinstance(parsed, dict):
                 raise ValueError("La réponse JSON n'est pas un objet.")
+            parsed["_llm_audit"] = dict(llm_audit)
             return parsed
         except Exception as exc:
             last_error = exc
@@ -332,6 +344,12 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         tokens=1800,
     )
 
+    llm_audit = final.pop("_llm_audit", {
+        "provider": TDR_LLM_PROVIDER,
+        "requested_model": ACTIVE_MODEL,
+        "reported_model": None,
+        "request_id": None,
+    })
     case_id = str(final.get("case_id", "CAS_4_AUCUNE_ETUDE_PERTINENTE"))
     if case_id not in CASES:
         case_id = "CAS_4_AUCUNE_ETUDE_PERTINENTE"
