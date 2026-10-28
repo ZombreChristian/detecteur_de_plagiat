@@ -1,0 +1,185 @@
+{% load static %}
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TDRDOC-SCAN — Analyse TDR RAG</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}">
+<link rel="stylesheet" href="{% static 'css/institutional.css' %}">
+<script src="{% static 'js/theme.js' %}"></script>
+<style>
+.progress-panel{display:none;margin-top:22px;padding:20px;border:1px solid var(--hairline);border-radius:var(--radius-m);background:var(--panel)}
+.progress-panel.active{display:block}.progress-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;font-weight:650}
+.progress-track{height:10px;overflow:hidden;background:var(--panel-raised);border-radius:999px}
+.progress-fill{height:100%;width:3%;background:var(--gold);border-radius:999px;transition:width .5s ease}
+.progress-fill.waiting{background:linear-gradient(90deg,var(--gold) 0%,#d7c48d 50%,var(--gold) 100%);background-size:200% 100%;animation:progress-shimmer 1.6s linear infinite}
+@keyframes progress-shimmer{from{background-position:100% 0}to{background-position:-100% 0}}
+.progress-status{margin:12px 0 4px;color:var(--text);font-weight:650}.progress-detail,.progress-note{font-size:.9rem;color:var(--text-dim);margin:0}.progress-note{font-size:.8rem;margin-top:8px}
+.progress-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:18px}
+.progress-step{padding:10px 8px;border:1px solid var(--hairline);border-radius:var(--radius-s);color:var(--text-dim);font-size:.82rem;text-align:center}
+.progress-step.current{border-color:var(--gold);background:var(--gold-wash);color:var(--text);font-weight:700}.progress-step.done{border-color:var(--hairline);color:var(--text-dim)}
+.progress-error{display:none;margin-top:12px;padding:12px;border:1px solid #e8c4c4;background:#fff6f6;color:#842c2c;border-radius:var(--radius-s)}
+.document-drop{display:block;width:100%;padding:18px;border:1px dashed var(--hairline);border-radius:var(--radius-s);background:var(--panel-raised);color:var(--text)}
+@media(max-width:700px){.progress-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.ctxbar .actions{flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){.progress-fill.waiting{animation:none}.progress-fill{transition:none}}
+</style>
+</head>
+<body>
+<div class="console">
+<aside class="rail">
+<div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div>
+<nav class="rail-nav">
+<a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg></span><span>Tableau de bord</span></a>
+<a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v5h5"></path><path d="m10 15 2 2 4-4"></path></svg></span><span>Vérifier un TDR</span></a>
+<a class="rail-link active" href="{% url 'detector:tdr_rag_independent' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"></path><circle cx="12" cy="12" r="8"></circle></svg></span><span>Analyse TDR — RAG complet</span></a>
+<a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v8M8 12h8"></path></svg></span><span>Nouvelle analyse</span></a>
+<a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v5l3 2"></path><path d="M5 5 3 7"></path></svg></span><span>Historique</span></a>
+<a class="rail-link" href="{% url 'detector:account_settings' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span><span>Mon compte</span></a>
+{% if request.user.is_staff %}<a class="rail-link" href="{% url 'detector:administration' %}"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path><path d="M9 12l2 2 4-4"></path></svg></span><span>Administration</span></a>{% endif %}
+</nav>
+<div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div>
+</aside>
+<main class="main">
+<div class="ctxbar"><div><h1>Analyse TDR — RAG complet</h1><div class="lede">Vérifier si un projet d'étude correspond à un document déjà présent dans le registre</div></div><div class="actions"><a class="btn" href="{% url 'detector:dashboard' %}">← Tableau de bord</a><a class="btn" href="{% url 'detector:resultats' %}">Historique</a></div></div>
+{% if messages %}<div class="page-pad">{% for message in messages %}<div class="notice">{{ message }}</div>{% endfor %}</div>{% endif %}
+<div class="page-pad">
+<section class="panel national-bar-red">
+<div class="panel-head"><div><div class="engine-kicker muted">Moteur de comparaison documentaire</div><h2>Vérifier si une étude existe déjà</h2></div></div>
+<div class="panel-body">
+<p class="muted">Déposez un TDR au format Word ou PDF. Qwen compare son contenu aux TDR et rapports d'étude de référence indexés dans PostgreSQL et explique si un document correspondant, proche ou non pertinent est présent dans le registre.</p>
+<div class="notice"><strong>Comment fonctionne l'analyse ?</strong><p class="muted" style="margin:6px 0 0">La recherche lexicale et sémantique classe les références du registre, puis sélectionne les trois meilleures candidates. Ces scores servent uniquement à retrouver des documents ; Qwen examine ensuite leur contenu et formule le verdict. Un TDR présent dans le registre ne prouve pas, à lui seul, que l'étude a été exécutée ; un rapport d'étude constitue un document distinct à consulter.</p></div>
+<form id="tdr-analysis-form" method="post" enctype="multipart/form-data">
+{% csrf_token %}
+<label for="tdr_document">Document TDR à analyser</label>
+<input class="document-drop" id="tdr_document" name="tdr_document" type="file" accept=".docx,.pdf" required>
+<p class="muted">Formats acceptés : Word (.docx) et PDF (.pdf).</p>
+<button class="btn btn-primary" id="analyze-button" type="submit">Analyser le TDR</button>
+</form>
+<section id="progress-panel" class="progress-panel" role="status" aria-live="polite">
+<div class="progress-heading"><span>Analyse en cours</span><span id="elapsed-time">00:00</span></div>
+<div class="progress-track" role="progressbar" aria-label="Progression indicative de l'analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow="3"><div id="progress-fill" class="progress-fill waiting"></div></div>
+<p id="progress-status" class="progress-status">Préparation du document…</p>
+<p id="progress-detail" class="progress-detail">Le traitement peut prendre plusieurs minutes selon la taille de la base et le temps de réponse de Qwen.</p>
+<p class="progress-note">La progression est indicative : le serveur ne transmet pas encore l'avancement réel de chaque opération.</p>
+<div class="progress-steps">
+<div class="progress-step current" data-step="0">1. Réception du document</div>
+<div class="progress-step" data-step="1">2. Extraction du texte</div>
+<div class="progress-step" data-step="2">3. Chargement des références</div>
+<div class="progress-step" data-step="3">4. Recherche des similarités</div>
+<div class="progress-step" data-step="4">5. Sélection des références</div>
+<div class="progress-step" data-step="5">6. Analyse par Qwen</div>
+<div class="progress-step" data-step="6">7. Préparation du verdict</div>
+<div class="progress-step" data-step="7">8. Enregistrement du résultat</div>
+</div>
+<div id="progress-error" class="progress-error" role="alert"></div>
+</section>
+</div></section>
+</div>
+<script>
+(() => {
+  const form = document.getElementById("tdr-analysis-form");
+  const file = document.getElementById("tdr_document");
+  const button = document.getElementById("analyze-button");
+  const panel = document.getElementById("progress-panel");
+  const fill = document.getElementById("progress-fill");
+  const bar = panel.querySelector('[role="progressbar"]');
+  const status = document.getElementById("progress-status");
+  const detail = document.getElementById("progress-detail");
+  const elapsed = document.getElementById("elapsed-time");
+  const errorBox = document.getElementById("progress-error");
+  const steps = Array.from(document.querySelectorAll(".progress-step"));
+  let startedAt = 0;
+  let timer = null;
+  let currentIndex = 0;
+  const stages = [
+    {at:0, pct:5, title:"1/8 — Réception du document…", detail:"Le fichier sélectionné est envoyé au serveur."},
+    {at:2, pct:15, title:"2/8 — Extraction du texte…", detail:"Lecture du PDF ou du document Word et récupération du texte exploitable."},
+    {at:5, pct:25, title:"3/8 — Chargement des références…", detail:"Chargement des TDR et rapports d'étude de référence déjà indexés dans PostgreSQL."},
+    {at:10, pct:40, title:"4/8 — Recherche des similarités…", detail:"Classement lexical et sémantique du corpus (30 % lexical, 70 % sémantique)."},
+    {at:16, pct:52, title:"5/8 — Sélection des 3 références…", detail:"Les trois documents les mieux classés sont transmis à l'analyse approfondie."},
+    {at:22, pct:72, title:"6/8 — Analyse par Qwen…", detail:"Qwen compare l'objet, les objectifs, les activités, la zone, la méthode et les livrables."},
+    {at:45, pct:88, title:"7/8 — Préparation du verdict…", detail:"Le moteur prépare une conclusion globale et ses explications."},
+    {at:60, pct:95, title:"8/8 — Finalisation du résultat…", detail:"Le résultat est enregistré dans l'historique."}
+  ];
+  function renderStage(index) {
+    currentIndex = Math.max(currentIndex, Math.min(index, stages.length - 1));
+    const stage = stages[currentIndex];
+    fill.style.width = stage.pct + "%";
+    bar.setAttribute("aria-valuenow", String(stage.pct));
+    status.textContent = stage.title;
+    detail.textContent = stage.detail;
+    steps.forEach((node, i) => {
+      node.classList.toggle("current", i === currentIndex);
+      node.classList.toggle("done", i < currentIndex);
+    });
+  }
+  function tick() {
+    const seconds = Math.floor((Date.now() - startedAt) / 1000);
+    elapsed.textContent = String(Math.floor(seconds / 60)).padStart(2,"0") + ":" + String(seconds % 60).padStart(2,"0");
+    let index = 0;
+    stages.forEach((stage, i) => { if (seconds >= stage.at) index = i; });
+    renderStage(index);
+  }
+  form.addEventListener("submit", async (event) => {
+    if (!file.files || !file.files.length || button.disabled) return;
+    event.preventDefault();
+    const formData = new FormData(form);
+    if (timer) clearInterval(timer);
+    panel.classList.add("active");
+    errorBox.style.display = "none";
+    button.disabled = true;
+    button.textContent = "Analyse en cours…";
+    file.disabled = true;
+    startedAt = Date.now();
+    currentIndex = 0;
+    tick();
+    timer = setInterval(tick, 1000);
+    panel.scrollIntoView({behavior:"smooth", block:"nearest"});
+    try {
+      const response = await fetch(form.action || window.location.href, {
+        method: "POST",
+        body: formData,
+        credentials: "same-origin",
+        headers: {"X-Requested-With":"XMLHttpRequest"}
+      });
+      const html = await response.text();
+      if (!response.ok) throw new Error("Le serveur a répondu avec le statut " + response.status + ".");
+      if (response.redirected && response.url && new URL(response.url).pathname !== window.location.pathname) {
+        if (timer) clearInterval(timer);
+        elapsed.textContent = elapsed.textContent + " · terminé";
+        fill.classList.remove("waiting");
+        fill.style.width = "100%";
+        bar.setAttribute("aria-valuenow", "100");
+        status.textContent = "Analyse terminée — ouverture des résultats…";
+        detail.textContent = "Le verdict a été produit et enregistré.";
+        steps.forEach(node => { node.classList.remove("current"); node.classList.add("done"); });
+        window.setTimeout(() => { window.location.assign(response.url); }, 450);
+        return;
+      }
+      // Si Django renvoie la page avec un message d'erreur ou de validation,
+      // on affiche sa réponse au lieu de laisser le formulaire bloqué.
+      if (timer) clearInterval(timer);
+      document.open();
+      document.write(html);
+      document.close();
+    } catch (error) {
+      if (timer) clearInterval(timer);
+      fill.classList.remove("waiting");
+      fill.style.width = "100%";
+      bar.setAttribute("aria-valuenow", "100");
+      status.textContent = "L'analyse n'a pas pu être terminée.";
+      detail.textContent = "Vérifiez la connexion au serveur puis réessayez.";
+      errorBox.textContent = error.message || "Une erreur inattendue est survenue.";
+      errorBox.style.display = "block";
+      button.disabled = false;
+      button.textContent = "Réessayer l'analyse";
+      file.disabled = false;
+    }
+  });
+})();
+</script>
+</section>
+</main>
+</body>
+</html>
