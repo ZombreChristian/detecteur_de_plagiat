@@ -26,7 +26,13 @@ BASE_URL = (
 API_KEY = os.getenv("TDR_LLM_API_KEY", "").strip()
 
 # Liste utilisée si aucun nom de modèle n'est passé en argument.
-DEFAULT_MODELS = ["qwen3.5-9b", "qwen3.6-35b"]
+DEFAULT_MODELS = [
+    "qwen3.6-35b",
+    "huihui-27b-abliterated",
+    "qwen3-coder-next",
+    "qwen3.5-9b",
+    "qwen3.8-27b",
+]
 MODELS = sys.argv[1:] or DEFAULT_MODELS
 
 if not API_KEY:
