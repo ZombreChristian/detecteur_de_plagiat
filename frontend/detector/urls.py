@@ -1,5 +1,13 @@
 from django.urls import path
 from . import views
+from .admin_permissions import administration_permissions as administration_user_permissions
+from .admin_views import (
+    administration,
+    administration_permissions,
+    administration_role_delete,
+    administration_roles,
+    administration_users,
+)
 
 app_name = "detector"
 urlpatterns = [
@@ -15,9 +23,14 @@ urlpatterns = [
     path("analyse-tdr-rag/", views.tdr_rag_independent, name="tdr_rag_independent"),
     path("analyser/", views.analyser, name="analyser"),
     path("resultats/", views.resultats, name="resultats"),
-    path("administration/", views.administration, name="administration"),
+    path("administration/", administration, name="administration"),
+    path("administration/roles/", administration_roles, name="administration_roles"),
+    path("administration/roles/<int:pk>/supprimer/", administration_role_delete, name="administration_role_delete"),
+    path("administration/utilisateurs/", administration_users, name="administration_users"),
+    path("administration/permissions/", administration_permissions, name="administration_permissions"),
     path("administration/recuperation/", views.administration_recovery, name="administration_recovery"),
     path("administration/utilisateur/<int:pk>/", views.administration_utilisateur, name="administration_utilisateur"),
+    path("administration/utilisateur/<int:pk>/permissions/", administration_user_permissions, name="administration_user_permissions"),
     path("administration/utilisateur/<int:pk>/supprimer/", views.administration_utilisateur_supprimer, name="administration_utilisateur_supprimer"),
     path("inscription/", views.signup_view, name="signup"),
     path("analyse/<int:pk>/", views.analysis_detail, name="analysis_detail"),
