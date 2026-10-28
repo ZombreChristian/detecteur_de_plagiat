@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 venv/
 env/
+frontend/media/*
 
 # Models / generated data
 modeles/*
