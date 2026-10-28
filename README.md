@@ -213,3 +213,28 @@ La somme des poids lexical et sémantique doit être égale à 1. Les seuils de 
 ## Branche de développement
 
 Le travail de cette évolution se fait sur `feature/testsimilarity`. Ne pas modifier `main`, `suite_developpement` ou `feature/fusion` dans le cadre de cette évolution sans autorisation explicite.
+
+
+## Utiliser un serveur LLM distant compatible OpenAI pour le RAG TDR
+
+Le fournisseur par défaut reste **Ollama local** avec `qwen3:8b`. Pour utiliser à la place un serveur distant compatible avec l'API Chat Completions, installez les dépendances à jour :
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Dans votre fichier privé `frontend/.env`, configurez les variables suivantes avec les valeurs confirmées par l'administrateur du serveur :
+
+```dotenv
+TDR_LLM_PROVIDER=openai_compatible
+TDR_LLM_BASE_URL=https://adresse-confirmee-par-le-fournisseur/api
+TDR_LLM_API_KEY=votre-cle-api
+TDR_LLM_MODEL=qwen3.6-35b
+TDR_RAG_TIMEOUT_SECONDS=300
+```
+
+L'URL de base doit être celle attendue par le serveur : le SDK ajoute le chemin `/chat/completions`. Le chemin `/api` donné dans un exemple externe n'est pas garanti ; vérifiez auprès du fournisseur s'il faut utiliser `/api`, `/v1` ou un autre préfixe. Le nom du modèle doit également correspondre à celui publié par le serveur.
+
+Redémarrez ensuite le service Django/API pour recharger les variables d'environnement et lancez une analyse TDR de test. Si la requête échoue, vérifiez la clé, le chemin API, le nom du modèle et la disponibilité du tunnel. Une URL Cloudflare temporaire peut changer ou devenir indisponible.
+
+**Confidentialité :** en mode distant, le texte du TDR candidat et le contenu des trois références récupérées sont transmis au fournisseur pour arbitrage. N'utilisez ce mode que si vous êtes autorisée à transmettre ces documents. Ne publiez jamais `frontend/.env`, une clé API ou un mot de passe dans GitHub. La configuration `.env.example` ne contient aucune clé réelle.
