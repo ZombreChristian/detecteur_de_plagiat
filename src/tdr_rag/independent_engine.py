@@ -25,7 +25,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 TDR_LLM_PROVIDER = os.getenv("TDR_LLM_PROVIDER", "openai_compatible").strip().lower()
 TDR_LLM_BASE_URL = (os.getenv("TDR_LLM_BASE_URL") or "https://meyer-variable-halo-labeled.trycloudflare.com/api").strip().rstrip("/")
 TDR_LLM_API_KEY = os.getenv("TDR_LLM_API_KEY", "").strip()
-TDR_LLM_REMOTE_MODEL = (os.getenv("TDR_LLM_MODEL") or "qwen3.6-35b").strip()
+TDR_LLM_REMOTE_MODEL = (os.getenv("TDR_LLM_MODEL") or "qwen3.5-9b").strip()
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
 ACTIVE_MODEL = TDR_LLM_REMOTE_MODEL if TDR_LLM_PROVIDER in {"openai_compatible", "openai-compatible", "remote"} and TDR_LLM_REMOTE_MODEL else OLLAMA_MODEL
@@ -35,7 +35,7 @@ OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 RAG_TOP_K = 3
 REFERENCE_CHARS = 2200
 CANDIDATE_CHARS = 6000
-OUTPUT_TOKENS = 2048
+OUTPUT_TOKENS = 1200
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
@@ -49,7 +49,7 @@ class IndependentTDRError(RuntimeError):
 
 
 def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKENS) -> dict:
-    """Appelle Ollama avec reprises en cas de JSON invalide ou de génération tronquée."""
+    """Appelle le fournisseur configuré avec reprises limitées en cas de JSON invalide."""
     last_error = None
     last_content = ""
     llm_audit = {
@@ -375,7 +375,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             f"- ID={row.id} | TYPE={row.get_document_type_display()} | TITRE={row.title} | FICHIER={Path(row.file_path).name}"
             for _, _, _, row in selected
         ),
-        tokens=1800,
+        tokens=1200,
     )
 
     llm_audit = final.pop("_llm_audit", {
