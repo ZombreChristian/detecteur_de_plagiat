@@ -20,9 +20,9 @@ if str(FRONTEND_DIR) not in sys.path:
     sys.path.insert(0, str(FRONTEND_DIR))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 
-# Le fournisseur local Ollama reste le défaut. Le mode openai_compatible permet
-# d'utiliser un serveur distant compatible avec le SDK OpenAI sans changer le RAG.
-TDR_LLM_PROVIDER = os.getenv("TDR_LLM_PROVIDER", "ollama").strip().lower()
+# Le fournisseur distant compatible OpenAI est utilisé par défaut pour l'arbitrage TDR.
+# Ollama reste disponible si TDR_LLM_PROVIDER=ollama est explicitement configuré.
+TDR_LLM_PROVIDER = os.getenv("TDR_LLM_PROVIDER", "openai_compatible").strip().lower()
 TDR_LLM_BASE_URL = os.getenv("TDR_LLM_BASE_URL", "").strip().rstrip("/")
 TDR_LLM_API_KEY = os.getenv("TDR_LLM_API_KEY", "").strip()
 TDR_LLM_REMOTE_MODEL = os.getenv("TDR_LLM_MODEL", "").strip()
