@@ -20,7 +20,7 @@ base_url = (
     or "https://meyer-variable-halo-labeled.trycloudflare.com/api"
 ).strip().rstrip("/")
 api_key = os.getenv("TDR_LLM_API_KEY", "").strip()
-model = (os.getenv("TDR_LLM_MODEL") or "qwen3.5-9b").strip()
+model = (os.getenv("TDR_LLM_MODEL") or "qwen3.6-35b").strip()
 
 if not api_key:
     sys.exit(
