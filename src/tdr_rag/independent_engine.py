@@ -23,9 +23,9 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 # Le fournisseur distant compatible OpenAI est utilisé par défaut pour l'arbitrage TDR.
 # Ollama reste disponible si TDR_LLM_PROVIDER=ollama est explicitement configuré.
 TDR_LLM_PROVIDER = os.getenv("TDR_LLM_PROVIDER", "openai_compatible").strip().lower()
-TDR_LLM_BASE_URL = os.getenv("TDR_LLM_BASE_URL", "https://meyer-variable-halo-labeled.trycloudflare.com/api").strip().rstrip("/")
+TDR_LLM_BASE_URL = (os.getenv("TDR_LLM_BASE_URL") or "https://meyer-variable-halo-labeled.trycloudflare.com/api").strip().rstrip("/")
 TDR_LLM_API_KEY = os.getenv("TDR_LLM_API_KEY", "").strip()
-TDR_LLM_REMOTE_MODEL = os.getenv("TDR_LLM_MODEL", "qwen3.6-35b").strip()
+TDR_LLM_REMOTE_MODEL = (os.getenv("TDR_LLM_MODEL") or "qwen3.6-35b").strip()
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
 ACTIVE_MODEL = TDR_LLM_REMOTE_MODEL if TDR_LLM_PROVIDER in {"openai_compatible", "openai-compatible", "remote"} and TDR_LLM_REMOTE_MODEL else OLLAMA_MODEL
