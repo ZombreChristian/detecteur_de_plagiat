@@ -1,0 +1,318 @@
+"""Arbitrage RAG des TDR par Qwen3:8b via Ollama local.
+
+La recherche des références est effectuée par le moteur existant. Ce module
+transmet au modèle le TDR à analyser et les références récupérées; il ne
+remplace ni l'index PostgreSQL ni le moteur de récupération.
+"""
+import json
+import os
+import re
+
+import requests
+
+
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+OLLAMA_TIMEOUT = max(300.0, float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "300")))
+# Paramètres d’inférence réglables sans modifier le code ni les règles métier.
+OLLAMA_NUM_CTX = max(4096, int(os.getenv("OLLAMA_NUM_CTX", "8192")))
+OLLAMA_NUM_BATCH = min(128, max(16, int(os.getenv("OLLAMA_NUM_BATCH", "64"))))
+# Qwen3:8b a besoin d'un contexte suffisant pour comparer plusieurs TDR.
+# Les limites ci-dessous gardent le prompt assez riche sans dépasser le contexte local.
+RAG_REFERENCE_TOP_K = min(3, max(3, int(os.getenv("TDR_RAG_REFERENCE_TOP_K", "3"))))
+MAX_CANDIDATE_CHARS = min(10000, max(5000, int(os.getenv("TDR_RAG_CANDIDATE_MAX_CHARS", "8000"))))
+MAX_REFERENCE_CHARS = min(3200, max(1800, int(os.getenv("TDR_RAG_REFERENCE_MAX_CHARS", "2600"))))
+MAX_OUTPUT_TOKENS = min(1800, max(800, int(os.getenv("TDR_RAG_MAX_OUTPUT_TOKENS", "1200"))))
+
+
+class OllamaRAGError(RuntimeError):
+    """Le service Ollama ou sa réponse n'est pas exploitable."""
+
+
+_SYSTEM_PROMPT = """Tu es un expert chargé d'évaluer si un nouveau terme de référence (TDR)
+correspond à une étude déjà réalisée parmi les références fournies.
+Tu fais une analyse RAG : tu t'appuies uniquement sur le TDR candidat et sur les
+extraits/références récupérés. Les scores de recherche servent seulement à retrouver
+des références, jamais à décider du résultat.
+
+Compare le sens, même si les formulations diffèrent, et distingue notamment :
+- objet réel de l'étude et problématique;
+- secteur et activités;
+- zone géographique (une zone différente est une différence importante);
+- objectifs et résultats attendus;
+- population cible, période et méthodologie, comme critères complémentaires.
+Ne confonds pas la structure administrative générique des TDR avec leur identité.
+N'invente jamais d'information absente. Si les preuves sont insuffisantes, indique-le.
+
+Choisis exactement un des trois cas métier :
+CAS_1_CORRESPONDANCE_FORTE : une référence couvre essentiellement la même étude
+(même objet et convergence substantielle des dimensions clés).
+CAS_2_CORRESPONDANCE_PARTIELLE : plusieurs dimensions importantes convergent, mais
+des différences ou incertitudes empêchent de conclure à un doublon fort. Ce cas inclut
+un objet ou des objectifs comparables dans une zone géographique différente : cette
+différence empêche une correspondance forte, mais ne signifie pas à elle seule qu'il
+n'existe aucune correspondance.
+CAS_4_AUCUNE_ETUDE_PERTINENTE : aucune référence récupérée n'est suffisamment
+pertinente au regard de l'objet et des objectifs du TDR.
+
+Réponds exclusivement avec un objet JSON valide, sans Markdown, ayant ces clés :
+case_id (une des trois valeurs exactes ci-dessus),
+decision (une des valeurs exactes SIMILAIRE, SIMILARITÉ PARTIELLE, DIFFERENT, À EXAMINER),
+confidence (FORTE, MOYENNE ou FAIBLE),
+case_title (titre court en français),
+matched_reference (valeur exacte du champ source d'une référence pertinente parmi celles fournies; ne renvoie pas title; chaîne vide uniquement pour CAS_4),
+explanation (explication claire en français, 2 à 5 phrases),
+common_points (tableau de chaînes),
+differences (tableau de chaînes),
+evidence (tableau d'objets avec source, point, justification),
+missing_information (tableau de chaînes),
+recommendation (une recommandation concrète en français).
+Le cas 1 correspond à decision SIMILAIRE; le cas 2 à SIMILARITÉ PARTIELLE;
+le cas 4 correspond à DIFFERENT. Le cas 2 inclut les objectifs comparables dans
+une zone géographique différente. Si l'information manque réellement, choisis
+À EXAMINER plutôt que d'inventer une conclusion.
+Pour une correspondance forte, rédige une explication exploitable de 3 à 5 phrases.
+Présente les points communs par dimension (objet, zone, objectifs, méthode, livrables, calendrier)
+et précise les différences réelles, même si elles sont mineures. Les preuves doivent citer
+la source exacte et expliquer ce qui concorde dans les textes fournis.
+La recommandation doit dire clairement si le TDR semble reprendre une étude existante,
+si la similarité est partielle, ou si aucune référence pertinente n'a été trouvée.
+Ne cite que les références incluses dans le contexte et donne leurs noms exacts.
+Les notes de scores éventuelles sont des indices de récupération, pas une preuve
+suffisante de l'identité des études."""
+
+
+def _response_json(content):
+    text = (content or "").strip()
+    text = re.sub(r"^\s*<think>.*?</think>\s*", "", text, flags=re.S)
+    text = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", text, flags=re.I)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start, end = text.find("{"), text.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except json.JSONDecodeError as exc:
+                raise OllamaRAGError("Qwen3:8b a renvoyé un JSON invalide.") from exc
+        raise OllamaRAGError("Qwen3:8b n'a pas renvoyé de résultat JSON exploitable.")
+
+
+def _reference_excerpt(candidate_text, source_text, limit):
+    """Sélectionne des paragraphes utiles au TDR sans tronquer uniquement le début."""
+    source_text = (source_text or "").strip()
+    if len(source_text) <= limit:
+        return source_text
+
+    candidate_terms = {
+        term for term in re.findall(r"[\wÀ-ÿ]{4,}", (candidate_text or "").casefold())
+        if term not in {
+            "dans", "pour", "avec", "cette", "étude", "etude", "objectif",
+            "objectifs", "résultats", "resultats", "termes", "référence",
+            "reference", "projet", "ainsi", "entre", "leur", "leurs", "être",
+            "etre", "plus", "tout", "tous", "comme", "afin", "selon",
+        }
+    }
+    blocks = [block.strip() for block in re.split(r"\n{2,}|(?<=[.!?])\s+(?=[A-ZÀ-Ÿ])", source_text) if block.strip()]
+    if not blocks:
+        return source_text[:limit]
+
+    ranked_blocks = []
+    for index, block in enumerate(blocks):
+        terms = set(re.findall(r"[\wÀ-ÿ]{4,}", block.casefold()))
+        overlap = len(candidate_terms & terms)
+        # Favoriser les paragraphes de taille raisonnable et les premières sections,
+        # sans supposer que le début du document contient toutes les informations utiles.
+        score = overlap / max(1, len(terms) ** 0.5) + (0.15 if index < 3 else 0)
+        ranked_blocks.append((score, index, block))
+
+    selected = []
+    used = 0
+    for _, index, block in sorted(ranked_blocks, key=lambda item: (item[0], -item[1]), reverse=True):
+        remaining = limit - used
+        if remaining <= 0:
+            break
+        snippet = block if len(block) <= remaining else block[:remaining]
+        if snippet:
+            selected.append((index, snippet))
+            used += len(snippet) + 2
+    selected.sort(key=lambda item: item[0])
+    return "\n\n".join(block for _, block in selected)[:limit]
+
+
+def _candidate_excerpt(candidate_text, limit):
+    """Préserve les sections déterminantes d'un TDR au lieu de couper au début."""
+    text = (candidate_text or "").strip()
+    if len(text) <= limit:
+        return text
+
+    priority = (
+        "objet", "contexte", "justification", "problématique", "problematique",
+        "objectif", "résultat", "resultat", "zone", "localisation", "bénéficiaire",
+        "beneficiaire", "population", "méthodologie", "methodologie", "livrable",
+        "période", "periode", "activité", "activite",
+    )
+    blocks = [block.strip() for block in re.split(r"\n{2,}|(?<=[.!?])\s+(?=[A-ZÀ-Ÿ])", text) if block.strip()]
+    if not blocks:
+        return text[:limit]
+
+    ranked = []
+    for index, block in enumerate(blocks):
+        folded = block.casefold()
+        heading_bonus = sum(2.0 for term in priority if term in folded[:100])
+        terms = set(re.findall(r"[\wÀ-ÿ]{4,}", folded))
+        ranked.append((heading_bonus + min(len(terms), 80) / 200 + (0.3 if index < 3 else 0), index, block))
+
+    chosen = []
+    used = 0
+    for score, index, block in sorted(ranked, key=lambda item: (item[0], -item[1]), reverse=True):
+        remaining = limit - used
+        if remaining <= 0:
+            break
+        piece = block if len(block) <= remaining else block[:remaining]
+        if piece:
+            chosen.append((index, piece))
+            used += len(piece) + 2
+    chosen.sort(key=lambda item: item[0])
+    return "\n\n".join(piece for _, piece in chosen)[:limit]
+
+
+def analyze_tdr_with_rag(candidate_text, ranked_references):
+    """Arbitre un TDR avec Qwen3:8b à partir des références récupérées par le moteur."""
+    references = []
+    for item in ranked_references[:RAG_REFERENCE_TOP_K]:
+        document = item.get("_document")
+        if document is None:
+            continue
+        source_text = (getattr(document, "extracted_text", None)
+                       or getattr(document, "cleaned_text", None) or "").strip()
+        if not source_text:
+            continue
+        references.append({
+            "source": item.get("source") or item.get("title") or f"Référence {item.get('id')}",
+            "title": item.get("title") or "",
+            "retrieval_scores": {
+                "lexical": item.get("tfidf_score"),
+                "semantic": item.get("semantic_score"),
+                "hybrid": item.get("hybrid_score"),
+            },
+            "text": _reference_excerpt(candidate_text, source_text, MAX_REFERENCE_CHARS),
+        })
+
+    if not references:
+        raise OllamaRAGError("Aucune référence indexée n'a pu être transmise à Qwen3:8b.")
+
+    payload = {
+        "tdr_candidat": _candidate_excerpt(candidate_text, MAX_CANDIDATE_CHARS),
+        "references_recuperees": references,
+        "consigne": (
+            "Analyse le TDR candidat par rapport à chaque référence. Les références "
+            "sont des résultats de recherche, pas nécessairement pertinentes. "
+            "Choisis le cas métier le mieux justifié et cite les éléments probants."
+        ),
+    }
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json={
+                "model": OLLAMA_MODEL,
+                "stream": False,
+                "think": False,
+                "format": "json",
+                "messages": [
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                ],
+                "options": {
+                    "temperature": 0.1,
+                    "num_predict": MAX_OUTPUT_TOKENS,
+                    "num_ctx": OLLAMA_NUM_CTX,
+                    "num_batch": OLLAMA_NUM_BATCH,
+                },
+                # Garder le modèle chargé entre deux analyses évite le coût du rechargement.
+                "keep_alive": os.getenv("OLLAMA_KEEP_ALIVE", "10m"),
+            },
+            timeout=OLLAMA_TIMEOUT,
+        )
+        response.raise_for_status()
+        data = response.json()
+    except requests.Timeout as exc:
+        raise OllamaRAGError(
+            f"Ollama n'a pas répondu dans le délai de {OLLAMA_TIMEOUT:g} secondes. "
+            "Le contexte et la longueur de réponse ont été réduits; vérifiez aussi la charge CPU. Pour un premier chargement, le modèle peut prendre plus de temps."
+        ) from exc
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else "inconnu"
+        body = exc.response.text[:500] if exc.response is not None else str(exc)
+        raise OllamaRAGError(
+            f"Ollama a renvoyé HTTP {status}: {body}"
+        ) from exc
+    except requests.RequestException as exc:
+        raise OllamaRAGError(
+            f"Ollama est inaccessible à {OLLAMA_BASE_URL}. Vérifiez qu'Ollama est démarré "
+            f"et que le modèle « {OLLAMA_MODEL} » est installé."
+        ) from exc
+    except ValueError as exc:
+        raise OllamaRAGError("Ollama a renvoyé une réponse HTTP non valide.") from exc
+
+    message = data.get("message") or {}
+    result = _response_json(message.get("content", ""))
+    allowed_cases = {
+        "CAS_1_CORRESPONDANCE_FORTE",
+        "CAS_2_CORRESPONDANCE_PARTIELLE",
+        "CAS_4_AUCUNE_ETUDE_PERTINENTE",
+    }
+    allowed_decisions = {"SIMILAIRE", "SIMILARITÉ PARTIELLE", "DIFFERENT", "À EXAMINER"}
+    if result.get("case_id") not in allowed_cases or result.get("decision") not in allowed_decisions:
+        raise OllamaRAGError("La réponse de Qwen3:8b ne respecte pas le format de décision attendu.")
+
+    # Le case_id reste la classification canonique, mais on préserve À EXAMINER
+    # si le modèle indique explicitement que les preuves ne suffisent pas.
+    case_decisions = {
+        "CAS_1_CORRESPONDANCE_FORTE": "SIMILAIRE",
+        "CAS_2_CORRESPONDANCE_PARTIELLE": "SIMILARITÉ PARTIELLE",
+        "CAS_4_AUCUNE_ETUDE_PERTINENTE": "DIFFERENT",
+    }
+    if result.get("decision") != "À EXAMINER":
+        result["decision"] = case_decisions[result["case_id"]]
+
+    for key in ("common_points", "differences", "missing_information"):
+        value = result.get(key)
+        if not isinstance(value, list):
+            value = []
+        result[key] = [str(item).strip()[:700] for item in value if isinstance(item, (str, int, float)) and str(item).strip()][:12]
+
+    if not isinstance(result.get("evidence"), list):
+        result["evidence"] = []
+    for key in ("case_title", "explanation", "recommendation", "confidence"):
+        if not isinstance(result.get(key), str):
+            result[key] = ""
+    valid_sources = {ref["source"] for ref in references}
+    matched_reference = result.get("matched_reference")
+    if result["case_id"] == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
+        matched_reference = ""
+    elif not isinstance(matched_reference, str) or matched_reference not in valid_sources:
+        raise OllamaRAGError(
+            "Qwen3:8b a identifié une correspondance sans citer exactement une référence fournie."
+        )
+    result["matched_reference"] = matched_reference
+
+    # Ne conserver que les preuves rattachées à une source effectivement fournie à Qwen.
+    validated_evidence = []
+    for item in result["evidence"]:
+        if not isinstance(item, dict):
+            continue
+        source_name = item.get("source")
+        if source_name not in valid_sources:
+            continue
+        validated_evidence.append({
+            "source": source_name,
+            "point": str(item.get("point") or "")[:300],
+            "justification": str(item.get("justification") or "")[:700],
+        })
+    result["evidence"] = validated_evidence
+    result["model"] = OLLAMA_MODEL
+    result["provider"] = "ollama"
+    result["references_used"] = [ref["source"] for ref in references]
+    result["retrieval_top_k"] = len(references)
+    return result
