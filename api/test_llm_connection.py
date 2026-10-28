@@ -36,9 +36,18 @@ try:
     client = OpenAI(base_url=base_url, api_key=api_key, timeout=120, max_retries=0)
     response = client.chat.completions.create(
         model=model,
-        messages=[{"role": "user", "content": "Bonjour"}],
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Réponds directement, sans raisonnement détaillé, en une seule phrase courte : "
+                    "écris uniquement « Connexion LLM réussie »."
+                ),
+            }
+        ],
         temperature=0,
-        max_tokens=256,
+        # 256 tokens peut être insuffisant si le modèle consomme des tokens de réflexion.
+        max_tokens=1024,
     )
     print(f"Modèle retourné : {getattr(response, 'model', None)}")
     if not response.choices:
