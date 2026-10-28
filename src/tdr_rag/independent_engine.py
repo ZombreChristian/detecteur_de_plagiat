@@ -33,9 +33,9 @@ OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 # Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
 # uniquement sur les trois références les mieux classées.
 RAG_TOP_K = 3
-REFERENCE_CHARS = 3800
-CANDIDATE_CHARS = 9000
-OUTPUT_TOKENS = 4096
+REFERENCE_CHARS = 2200
+CANDIDATE_CHARS = 6000
+OUTPUT_TOKENS = 2048
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
@@ -61,7 +61,7 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
     # Une première tentative normale, puis deux reprises avec davantage de tokens
     # et une consigne explicite de produire un objet JSON complet.
     for attempt in range(3):
-        token_budget = min(max(tokens, 4096) * (attempt + 1), 8192)
+        token_budget = min(max(tokens, 1024) * (attempt + 1), 4096)
         retry_note = ""
         if attempt:
             retry_note = (
@@ -164,9 +164,20 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
             return parsed
         except Exception as exc:
             last_error = exc
+            # Cloudflare 524 signifie que le proxy a expiré après 120 s.
+            # Ne pas relancer immédiatement une génération qui vient déjà de dépasser
+            # la limite : cela aggrave la charge et ne rend pas la réponse complète.
+            if getattr(exc, "status_code", None) == 524 or "Error code: 524" in str(exc):
+                raise IndependentTDRError(
+                    "Le serveur LLM distant a dépassé le délai Cloudflare (HTTP 524, "
+                    "environ 120 secondes). La génération a été interrompue ; aucun verdict "
+                    "incomplet n'a été enregistré. Attendez au moins 120 secondes puis "
+                    "relancez l'analyse. Si l'erreur persiste, le serveur distant doit être "
+                    "vérifié par son administrateur."
+                ) from exc
     preview = re.sub(r"\\s+", " ", last_content)[:240]
     raise IndependentTDRError(
-        f"Le fournisseur LLM ({ACTIVE_MODEL}) a renvoyé un JSON invalide après 3 tentatives. "
+        f"Le fournisseur LLM ({ACTIVE_MODEL}) n'a pas produit de JSON valide après 3 tentatives. "
         f"Dernière erreur : {last_error}. Début de la réponse : {preview!r}"
     ) from last_error
 
@@ -292,8 +303,6 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         reference_blocks.append(
             "DOCUMENT DE RÉFÉRENCE\n"
             f"TITRE: {row.title}\nTYPE DE DOCUMENT: {row.get_document_type_display()}\nFICHIER: {Path(row.file_path).name}\n"
-            f"SCORES DE RÉCUPÉRATION (indicatifs seulement): lexical={lexical:.3f}, "
-            f"sémantique={semantic:.3f}, combiné={hybrid:.3f}\n"
             f"CONTENU DU DOCUMENT DE RÉFÉRENCE:\n"
             f"{_excerpt(row.extracted_text or row.cleaned_text, REFERENCE_CHARS)}"
         )
