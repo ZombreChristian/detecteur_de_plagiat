@@ -1,2 +1,854 @@
 {% load static %}
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TDRDOC-SCAN — Vérification du TDR</title><link rel="stylesheet" href="{% static 'css/app.css' %}?v=20261020"><link rel="stylesheet" href="{% static 'css/institutional.css' %}?v=20261020"><script src="{% static 'js/theme.js' %}?v=20261020"></script></head><body><div class="console"><aside class="rail"><div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div><nav class="rail-nav"><a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">▦</span><span>Tableau de bord</span></a>{% if perms.detector.can_verify_tdr %}<a class="rail-link active" href="{% url 'detector:reception' %}"><span class="ico">✓</span><span>Vérifier un TDR</span></a>{% endif %}{% if perms.detector.can_analyze_report %}<a class="rail-link" href="{% url 'detector:analyser' %}"><span class="ico">+</span><span>Nouvelle analyse</span></a>{% endif %}{% if perms.detector.can_view_history %}<a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico">◷</span><span>Historique</span></a>{% endif %}<a class="rail-link" href="{% url 'detector:account_settings' %}"><span class="ico">⚙</span><span>Mon compte</span></a>{% if perms.detector.can_manage_users %}<details class="rail-admin-menu"><summary class="rail-link"><span class="ico">◆</span><span>Administration</span><span class="admin-chevron">⌄</span></summary><div class="rail-subnav"><a href="{% url 'detector:administration_roles' %}">Gestion des rôles</a><a href="{% url 'detector:administration_users' %}">Gestion des utilisateurs</a><a href="{% url 'detector:administration_permissions' %}">Gestion des permissions</a></div></details>{% endif %}</nav><div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div></aside><main class="main"><div class="ctxbar"><div><h1>Vérification du TDR</h1><div class="lede">Doublon à la programmation, puis réception du rapport associé</div></div></div><div class="page-pad">{% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}<div class="engines" id="workflow-content"><section class="panel national-bar-red"><div class="panel-head"><h2>Étape 1 — Vérifier le TDR</h2><span class="muted mono" style="font-size:12px">doublon</span></div><div class="panel-body"><p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Déposez le nouveau TDR. Il est comparé au registre des TDR déjà présents par similarité sémantique.</p><form id="tdr-form" method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="mode" value="tdr"><div class="field"><label>Document TDR (.docx ou .pdf)</label><input id="tdr-file" type="file" name="document" accept=".docx,.pdf" required></div><div class="field"><label for="tdr-threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="tdr-threshold" type="range" name="threshold" min="1" max="100" value="70"><output id="tdr-threshold-value">70 %</output></div><small class="muted">Ajustez le seuil selon le niveau de proximité retenu.</small></div><button id="tdr-button" class="btn btn-primary" type="submit">Vérifier le TDR</button></form></div></section><section class="panel national-bar-green" style="{% if not request.session.validated_tdr_name %}opacity:.6{% endif %}"><div class="panel-head"><h2>Étape 2 — Réceptionner le rapport</h2><span class="muted mono" style="font-size:12px">plagiat</span></div><div class="panel-body">{% if request.session.validated_tdr_name %}<p style="margin:0 0 4px;font-size:13.5px">TDR validé : <strong>{{ request.session.validated_tdr_name }}</strong></p><p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Le rapport associé peut maintenant être soumis au contrôle de plagiat.</p><form id="report-form" method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="mode" value="report"><div class="field"><label>Rapport d'étude (.docx ou .pdf)</label><input id="report-file" type="file" name="document" accept=".docx,.pdf" required></div><div class="field"><label for="report-threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="report-threshold" type="range" name="threshold" min="1" max="100" value="55"><output id="report-threshold-value">55 %</output></div><small class="muted">Ajustez le seuil selon le niveau de proximité retenu.</small></div><button id="report-button" class="btn btn-primary" type="submit">Contrôler le rapport</button></form>{% else %}<p class="muted" style="font-size:13.5px;line-height:1.6">Verrouillé — cette étape s'active après validation d'un TDR jugé différent de ceux déjà présents dans le registre.</p>{% endif %}</div></section></div><section id="processing" class="proc national-bar-red" aria-live="polite"><div class="proc-head"><strong id="processing-title">Analyse en cours</strong><span class="pct" id="progress-percent">0 %</span></div><div class="proc-track"><span id="progress-fill"></span></div><div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span id="process-text">Lecture du document et préparation du contrôle.</span></div></div></section></div></main></div><script>const processing=document.getElementById('processing'),fill=document.getElementById('progress-fill'),pct=document.getElementById('progress-percent'),txt=document.getElementById('process-text'),title=document.getElementById('processing-title'),tdrThreshold=document.getElementById('tdr-threshold'),tdrThresholdValue=document.getElementById('tdr-threshold-value'),reportThreshold=document.getElementById('report-threshold'),reportThresholdValue=document.getElementById('report-threshold-value');if(tdrThreshold)tdrThreshold.addEventListener('input',()=>tdrThresholdValue.textContent=tdrThreshold.value+' %');if(reportThreshold)reportThreshold.addEventListener('input',()=>reportThresholdValue.textContent=reportThreshold.value+' %');function attachProgress(form,file,button,isReport){if(!form)return;form.addEventListener('submit',function(){if(!file.files.length)return;title.textContent=isReport?'Contrôle du rapport en cours':'Analyse du TDR en cours';const stages=isReport?['Lecture du rapport et extraction du contenu.','Recherche de recouvrements textuels.','Analyse sémantique et recherche de paraphrases.','Calcul du score et identification des passages proches.']:['Lecture du document et extraction du contenu.','Calcul de la similarité lexicale (TF-IDF).','Analyse sémantique du contenu du TDR.','Calcul du score hybride et décision.'];processing.classList.add('show');button.disabled=true;button.textContent='Analyse en cours…';let p=0,stage=0;const timer=setInterval(function(){p=Math.min(p+3+Math.floor(Math.random()*5),96);fill.style.width=p+'%';pct.textContent=p+' %';const next=p<25?0:p<52?1:p<80?2:3;if(next!==stage){stage=next;txt.textContent=stages[stage];}},450);window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});});}attachProgress(document.getElementById('tdr-form'),document.getElementById('tdr-file'),document.getElementById('tdr-button'),false);attachProgress(document.getElementById('report-form'),document.getElementById('report-file'),document.getElementById('report-button'),true);</script></body></html>
+
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <title>TDRDOC-SCAN — Vérification du TDR</title>
+
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=20261020">
+  <link rel="stylesheet" href="{% static 'css/institutional.css' %}?v=20261020">
+
+  <script src="{% static 'js/theme.js' %}?v=20261020"></script>
+</head>
+
+<body>
+
+<div class="console">
+
+  <!-- =========================================================
+       SIDEBAR
+       ========================================================= -->
+  <aside class="rail">
+
+    <div class="rail-brand">
+      <div class="brand">
+        <span class="brand-mark">TDRDOC-SCAN</span>
+      </div>
+    </div>
+
+    <nav class="rail-nav">
+
+      <!-- Tableau de bord -->
+      <a class="rail-link" href="{% url 'detector:dashboard' %}">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="4" y="4" width="6" height="6" rx="1"></rect>
+            <rect x="14" y="4" width="6" height="6" rx="1"></rect>
+            <rect x="4" y="14" width="6" height="6" rx="1"></rect>
+            <rect x="14" y="14" width="6" height="6" rx="1"></rect>
+          </svg>
+        </span>
+        <span>Tableau de bord</span>
+      </a>
+
+
+      <!-- Vérifier un TDR -->
+      {% if perms.detector.can_verify_tdr %}
+      <a class="rail-link active" href="{% url 'detector:reception' %}">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7 3h7l4 4v14H7z"></path>
+            <path d="M14 3v5h5"></path>
+            <path d="m10 15 2 2 4-4"></path>
+          </svg>
+        </span>
+        <span>Vérifier un TDR</span>
+      </a>
+      {% endif %}
+
+
+      <!-- Nouvelle analyse -->
+      {% if perms.detector.can_analyze_report %}
+      <a class="rail-link" href="{% url 'detector:analyser' %}">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="8"></circle>
+            <path d="M12 8v8M8 12h8"></path>
+          </svg>
+        </span>
+        <span>Nouvelle analyse</span>
+      </a>
+      {% endif %}
+
+
+      <!-- Historique -->
+      {% if perms.detector.can_view_history %}
+      <a class="rail-link" href="{% url 'detector:resultats' %}">
+        <span class="ico">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="8"></circle>
+            <path d="M12 8v5l3 2"></path>
+            <path d="M5 5 3 7"></path>
+          </svg>
+        </span>
+        <span>Historique</span>
+      </a>
+      {% endif %}
+
+
+      <!-- Mon compte -->
+      <a class="rail-link" href="{% url 'detector:account_settings' %}">
+        <span class="ico">⚙</span>
+        <span>Mon compte</span>
+      </a>
+
+
+      <!-- =====================================================
+           ADMINISTRATION
+           ===================================================== -->
+      {% if perms.detector.can_manage_users or perms.detector.can_manage_settings %}
+
+      <details class="rail-admin-menu">
+
+        <summary class="rail-link">
+
+          <span class="ico">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3 19 6v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path>
+              <path d="M9 12l2 2 4-4"></path>
+            </svg>
+          </span>
+
+          <span>Administration</span>
+
+          <span class="admin-chevron">⌄</span>
+
+        </summary>
+
+
+        <div class="rail-subnav">
+
+          {% if perms.detector.can_manage_settings %}
+          <a href="{% url 'detector:administration_roles' %}">
+            Gestion des rôles
+          </a>
+
+          <a href="{% url 'detector:administration_permissions' %}">
+            Gestion des permissions
+          </a>
+          {% endif %}
+
+
+          {% if perms.detector.can_manage_users %}
+          <a href="{% url 'detector:administration_users' %}">
+            Gestion des utilisateurs
+          </a>
+          {% endif %}
+
+        </div>
+
+      </details>
+
+      {% endif %}
+
+    </nav>
+
+
+    <!-- =====================================================
+         UTILISATEUR
+         ===================================================== -->
+    <div class="rail-foot">
+
+      <div class="rail-user">
+
+        <strong>
+          {{ request.user.get_full_name|default:request.user.username }}
+        </strong>
+
+        <small>
+          Session active
+        </small>
+
+      </div>
+
+
+      <a
+        class="rail-logout"
+        href="{% url 'detector:logout' %}"
+      >
+        Déconnexion
+      </a>
+
+    </div>
+
+  </aside>
+
+
+  <!-- =========================================================
+       CONTENU PRINCIPAL
+       ========================================================= -->
+  <main class="main">
+
+    <div class="ctxbar">
+
+      <div>
+
+        <h1>
+          Vérification du TDR
+        </h1>
+
+        <div class="lede">
+          Doublon à la programmation, puis réception du rapport associé
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div class="page-pad">
+
+
+      <!-- Messages Django -->
+      {% for message in messages %}
+      <div class="alert">
+        {{ message }}
+      </div>
+      {% endfor %}
+
+
+      <!-- =====================================================
+           WORKFLOW
+           ===================================================== -->
+      <div
+        class="engines"
+        id="workflow-content"
+      >
+
+
+        <!-- ===================================================
+             ÉTAPE 1 — TDR
+             =================================================== -->
+        {% if perms.detector.can_verify_tdr %}
+
+        <section class="panel national-bar-red">
+
+          <div class="panel-head">
+
+            <h2>
+              Étape 1 — Vérifier le TDR
+            </h2>
+
+            <span
+              class="muted mono"
+              style="font-size:12px"
+            >
+              doublon
+            </span>
+
+          </div>
+
+
+          <div class="panel-body">
+
+            <p
+              class="muted"
+              style="
+                margin:0 0 18px;
+                font-size:13.5px;
+                line-height:1.55
+              "
+            >
+              Déposez le TDR à vérifier.
+              Le système le compare aux études déjà enregistrées
+              et présente les correspondances pertinentes.
+            </p>
+
+
+            <form
+              id="tdr-form"
+              method="post"
+              enctype="multipart/form-data"
+            >
+
+              {% csrf_token %}
+
+              <input
+                type="hidden"
+                name="mode"
+                value="tdr"
+              >
+
+
+              <!-- Document -->
+              <div class="field">
+
+                <label for="tdr-file">
+                  Document TDR (.docx ou .pdf)
+                </label>
+
+                <input
+                  id="tdr-file"
+                  type="file"
+                  name="document"
+                  accept=".docx,.pdf"
+                  required
+                >
+
+              </div>
+
+
+              <!-- Seuil -->
+              <div class="field">
+
+                <label for="tdr-threshold">
+                  Seuil de similarité avant analyse
+                </label>
+
+                <div
+                  style="
+                    display:flex;
+                    gap:12px;
+                    align-items:center
+                  "
+                >
+
+                  <input
+                    id="tdr-threshold"
+                    type="range"
+                    name="threshold"
+                    min="1"
+                    max="100"
+                    value="70"
+                  >
+
+                  <output id="tdr-threshold-value">
+                    70 %
+                  </output>
+
+                </div>
+
+                <small class="muted">
+                  Ajustez le seuil selon le niveau de proximité retenu.
+                </small>
+
+              </div>
+
+
+              <!-- Bouton -->
+              <button
+                id="tdr-button"
+                class="btn btn-primary"
+                type="submit"
+              >
+                Vérifier le TDR
+              </button>
+
+            </form>
+
+          </div>
+
+        </section>
+
+        {% endif %}
+
+
+        <!-- ===================================================
+             ÉTAPE 2 — RAPPORT
+             =================================================== -->
+        {% if perms.detector.can_analyze_report %}
+
+        <section
+          class="panel national-bar-green"
+          style="
+            {% if not request.session.validated_tdr_name %}
+              opacity:.6
+            {% endif %}
+          "
+        >
+
+          <div class="panel-head">
+
+            <h2>
+              Étape 2 — Réceptionner le rapport
+            </h2>
+
+            <span
+              class="muted mono"
+              style="font-size:12px"
+            >
+              plagiat
+            </span>
+
+          </div>
+
+
+          <div class="panel-body">
+
+
+            {% if request.session.validated_tdr_name %}
+
+              <p
+                style="
+                  margin:0 0 4px;
+                  font-size:13.5px
+                "
+              >
+                TDR validé :
+
+                <strong>
+                  {{ request.session.validated_tdr_name }}
+                </strong>
+              </p>
+
+
+              <p
+                class="muted"
+                style="
+                  margin:0 0 18px;
+                  font-size:13.5px;
+                  line-height:1.55
+                "
+              >
+                Le rapport associé peut maintenant être soumis
+                au contrôle de plagiat.
+              </p>
+
+
+              <form
+                id="report-form"
+                method="post"
+                enctype="multipart/form-data"
+              >
+
+                {% csrf_token %}
+
+                <input
+                  type="hidden"
+                  name="mode"
+                  value="report"
+                >
+
+
+                <!-- Document -->
+                <div class="field">
+
+                  <label for="report-file">
+                    Rapport d'étude (.docx ou .pdf)
+                  </label>
+
+                  <input
+                    id="report-file"
+                    type="file"
+                    name="document"
+                    accept=".docx,.pdf"
+                    required
+                  >
+
+                </div>
+
+
+                <!-- Seuil -->
+                <div class="field">
+
+                  <label for="report-threshold">
+                    Seuil de similarité avant analyse
+                  </label>
+
+                  <div
+                    style="
+                      display:flex;
+                      gap:12px;
+                      align-items:center
+                    "
+                  >
+
+                    <input
+                      id="report-threshold"
+                      type="range"
+                      name="threshold"
+                      min="1"
+                      max="100"
+                      value="55"
+                    >
+
+                    <output id="report-threshold-value">
+                      55 %
+                    </output>
+
+                  </div>
+
+                  <small class="muted">
+                    Ajustez le seuil selon le niveau de proximité retenu.
+                  </small>
+
+                </div>
+
+
+                <button
+                  id="report-button"
+                  class="btn btn-primary"
+                  type="submit"
+                >
+                  Contrôler le rapport
+                </button>
+
+              </form>
+
+
+            {% else %}
+
+              <p
+                class="muted"
+                style="
+                  font-size:13.5px;
+                  line-height:1.6
+                "
+              >
+                Verrouillé — cette étape s'active après validation
+                d'un TDR jugé différent de ceux déjà présents
+                dans le registre.
+              </p>
+
+            {% endif %}
+
+          </div>
+
+        </section>
+
+        {% endif %}
+
+      </div>
+
+
+      <!-- =====================================================
+           PROGRESSION DE L'ANALYSE
+           ===================================================== -->
+      <section
+        id="processing"
+        class="proc national-bar-red"
+        aria-live="polite"
+      >
+
+        <div class="proc-head">
+
+          <strong id="processing-title">
+            Analyse en cours
+          </strong>
+
+          <span
+            class="pct"
+            id="progress-percent"
+          >
+            0 %
+          </span>
+
+        </div>
+
+
+        <div class="proc-track">
+
+          <span id="progress-fill"></span>
+
+        </div>
+
+
+        <div class="proc-steps">
+
+          <div class="proc-step current">
+
+            <span class="mark">
+              ›
+            </span>
+
+            <span id="process-text">
+              Lecture du document et préparation du contrôle.
+            </span>
+
+          </div>
+
+        </div>
+
+      </section>
+
+    </div>
+
+  </main>
+
+</div>
+
+
+<!-- =========================================================
+     JAVASCRIPT
+     ========================================================= -->
+<script>
+
+const processing =
+  document.getElementById('processing');
+
+const fill =
+  document.getElementById('progress-fill');
+
+const pct =
+  document.getElementById('progress-percent');
+
+const txt =
+  document.getElementById('process-text');
+
+const title =
+  document.getElementById('processing-title');
+
+
+const tdrThreshold =
+  document.getElementById('tdr-threshold');
+
+const tdrThresholdValue =
+  document.getElementById('tdr-threshold-value');
+
+
+const reportThreshold =
+  document.getElementById('report-threshold');
+
+const reportThresholdValue =
+  document.getElementById('report-threshold-value');
+
+
+// =========================================================
+// SEUIL TDR
+// =========================================================
+
+if (tdrThreshold) {
+
+  tdrThreshold.addEventListener(
+    'input',
+    function () {
+
+      tdrThresholdValue.textContent =
+        tdrThreshold.value + ' %';
+
+    }
+  );
+
+}
+
+
+// =========================================================
+// SEUIL RAPPORT
+// =========================================================
+
+if (reportThreshold) {
+
+  reportThreshold.addEventListener(
+    'input',
+    function () {
+
+      reportThresholdValue.textContent =
+        reportThreshold.value + ' %';
+
+    }
+  );
+
+}
+
+
+// =========================================================
+// PROGRESSION
+// =========================================================
+
+function attachProgress(
+  form,
+  file,
+  button,
+  isReport
+) {
+
+  if (!form || !file || !button) {
+    return;
+  }
+
+
+  form.addEventListener(
+    'submit',
+    function () {
+
+      if (!file.files.length) {
+        return;
+      }
+
+
+      // -----------------------------------------------------
+      // Titre
+      // -----------------------------------------------------
+
+      title.textContent =
+        isReport
+          ? 'Contrôle du rapport en cours'
+          : 'Analyse du TDR en cours';
+
+
+      // -----------------------------------------------------
+      // Étapes du rapport
+      // -----------------------------------------------------
+
+      const reportStages = [
+
+        'Lecture du rapport et extraction du contenu.',
+
+        'Recherche de recouvrements textuels.',
+
+        'Analyse sémantique et recherche de paraphrases.',
+
+        'Calcul du score et identification des passages proches.'
+
+      ];
+
+
+      // -----------------------------------------------------
+      // Étapes du TDR
+      //
+      // Qwen3 + Ollama est conservé ici.
+      // -----------------------------------------------------
+
+      const tdrStages = [
+
+        'Réception et extraction du TDR.',
+
+        'Chargement des TDR et documents de référence.',
+
+        'Recherche lexicale et sémantique des documents proches.',
+
+        'Sélection des références les plus pertinentes.',
+
+        'Comparaison du contenu par Qwen3 via Ollama.',
+
+        'Évaluation des objectifs, méthodes, zones et livrables.',
+
+        'Préparation du verdict et des justifications.',
+
+        'Enregistrement du résultat et des références consultables.'
+
+      ];
+
+
+      const stages =
+        isReport
+          ? reportStages
+          : tdrStages;
+
+
+      // -----------------------------------------------------
+      // Affichage
+      // -----------------------------------------------------
+
+      processing.classList.add('show');
+
+      button.disabled = true;
+
+      button.textContent =
+        'Analyse en cours…';
+
+
+      let p = 0;
+
+      let stage = 0;
+
+
+      // -----------------------------------------------------
+      // Animation
+      // -----------------------------------------------------
+
+      const timer =
+        setInterval(
+          function () {
+
+            p = Math.min(
+              p +
+                3 +
+                Math.floor(Math.random() * 5),
+              96
+            );
+
+
+            fill.style.width =
+              p + '%';
+
+
+            pct.textContent =
+              p + ' %';
+
+
+            // Rapport : 4 étapes
+            // TDR : 8 étapes
+            const divisor =
+              isReport
+                ? 25
+                : 12.5;
+
+
+            const maxStage =
+              stages.length - 1;
+
+
+            const next =
+              Math.min(
+                Math.floor(p / divisor),
+                maxStage
+              );
+
+
+            if (next !== stage) {
+
+              stage = next;
+
+              txt.textContent =
+                stages[stage];
+
+            }
+
+          },
+          450
+        );
+
+
+      // -----------------------------------------------------
+      // Nettoyage
+      // -----------------------------------------------------
+
+      window.addEventListener(
+        'pagehide',
+        function () {
+
+          clearInterval(timer);
+
+        },
+        {
+          once: true
+        }
+      );
+
+    }
+  );
+
+}
+
+
+// =========================================================
+// INITIALISATION TDR
+// =========================================================
+
+attachProgress(
+  document.getElementById('tdr-form'),
+  document.getElementById('tdr-file'),
+  document.getElementById('tdr-button'),
+  false
+);
+
+
+// =========================================================
+// INITIALISATION RAPPORT
+// =========================================================
+
+attachProgress(
+  document.getElementById('report-form'),
+  document.getElementById('report-file'),
+  document.getElementById('report-button'),
+  true
+);
+
+</script>
+
+</body>
+</html>

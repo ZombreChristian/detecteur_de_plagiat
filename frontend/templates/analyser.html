@@ -1,2 +1,692 @@
 {% load static %}
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TDRDOC-SCAN — Nouvelle analyse</title><link rel="stylesheet" href="{% static 'css/app.css' %}?v=20261020"><link rel="stylesheet" href="{% static 'css/institutional.css' %}?v=20261020"><script src="{% static 'js/theme.js' %}?v=20261020"></script></head><body><div class="console"><aside class="rail"><div class="rail-brand"><div class="brand"><span class="brand-mark">TDRDOC-SCAN</span></div></div><nav class="rail-nav"><a class="rail-link" href="{% url 'detector:dashboard' %}"><span class="ico">▦</span><span>Tableau de bord</span></a>{% if perms.detector.can_verify_tdr %}<a class="rail-link" href="{% url 'detector:reception' %}"><span class="ico">✓</span><span>Vérifier un TDR</span></a>{% endif %}{% if perms.detector.can_analyze_report %}<a class="rail-link active" href="{% url 'detector:analyser' %}"><span class="ico">+</span><span>Nouvelle analyse</span></a>{% endif %}{% if perms.detector.can_view_history %}<a class="rail-link" href="{% url 'detector:resultats' %}"><span class="ico">◷</span><span>Historique</span></a>{% endif %}<a class="rail-link" href="{% url 'detector:account_settings' %}"><span class="ico">⚙</span><span>Mon compte</span></a>{% if perms.detector.can_manage_users %}<details class="rail-admin-menu"><summary class="rail-link"><span class="ico">◆</span><span>Administration</span><span class="admin-chevron">⌄</span></summary><div class="rail-subnav"><a href="{% url 'detector:administration_roles' %}">Gestion des rôles</a><a href="{% url 'detector:administration_users' %}">Gestion des utilisateurs</a><a href="{% url 'detector:administration_permissions' %}">Gestion des permissions</a></div></details>{% endif %}</nav><div class="rail-foot"><div class="rail-user"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>Session active</small></div><a class="rail-logout" href="{% url 'detector:logout' %}">Déconnexion</a></div></aside><main class="main"><div class="ctxbar"><div><h1>Nouvelle analyse</h1><div class="lede">Contrôle libre d'un document, hors parcours de réception guidé</div></div></div><div class="page-pad">{% for message in messages %}<div class="alert">{{ message }}</div>{% endfor %}<section class="panel national-bar-red" id="form-card" style="max-width:640px"><div class="panel-head"><h2>Choisir le contrôle à effectuer</h2></div><div class="panel-body"><form id="analysis-form" method="post" enctype="multipart/form-data">{% csrf_token %}<div class="field"><label>Type de contrôle</label><select id="analysis-mode" name="mode"><option value="duplicate">Doublon — TDR / objet d'étude</option><option value="plagiarism">Plagiat — rapport d'étude</option></select></div><div class="field"><label>Document à contrôler (.docx ou .pdf)</label><input id="document-input" type="file" name="document" accept=".docx,.pdf" required></div><div class="field"><label for="threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="threshold" type="range" name="threshold" min="1" max="100" step="1" value="55" style="flex:1"><output id="threshold-value">55 %</output></div><small class="muted">Un score égal ou supérieur à ce seuil sera considéré comme SIMILAIRE.</small></div><button id="submit-button" class="btn btn-primary" type="submit">Lancer la vérification</button></form></div></section><section id="loading" class="proc national-bar-green" aria-live="polite" style="max-width:640px"><div class="proc-head"><strong id="loading-title">Analyse en cours</strong><span class="pct" id="loading-percent">0 %</span></div><div class="proc-track"><span id="progress-bar"></span></div><div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span id="loading-text">Lecture du document et préparation du contrôle.</span></div></div></section></div></main></div><script>const form=document.getElementById('analysis-form'),loading=document.getElementById('loading'),button=document.getElementById('submit-button'),input=document.getElementById('document-input'),mode=document.getElementById('analysis-mode'),threshold=document.getElementById('threshold'),thresholdValue=document.getElementById('threshold-value');function updateThreshold(){const value=mode.value==='duplicate'?70:55;threshold.value=value;thresholdValue.textContent=value+' %';}mode.addEventListener('change',updateThreshold);updateThreshold();threshold.addEventListener('input',()=>thresholdValue.textContent=threshold.value+' %');const bar=document.getElementById('progress-bar'),percent=document.getElementById('loading-percent'),text=document.getElementById('loading-text'),title=document.getElementById('loading-title');form.addEventListener('submit',function(){if(!input.files.length)return;const isDuplicate=mode.value==='duplicate';title.textContent=isDuplicate?'Vérification du TDR en cours':'Contrôle du rapport en cours';const stages=isDuplicate?['Lecture du document et extraction du contenu.','Calcul de la similarité lexicale (TF-IDF).','Analyse sémantique et recherche des TDR proches.','Calcul du score hybride et prise de décision.']:['Lecture du rapport et extraction du contenu.','Recherche de recouvrements textuels.','Analyse sémantique et recherche de paraphrases.','Calcul du score et identification des passages proches.'];loading.classList.add('visible');button.disabled=true;button.textContent='Traitement en cours…';let p=0,stage=0;const timer=setInterval(function(){p=Math.min(p+(stage<2?4:2),94);bar.style.width=p+'%';percent.textContent=p+' %';const next=p<25?0:p<50?1:p<76?2:3;if(next!==stage){stage=next;text.textContent=stages[stage];}},450);window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});});</script></body></html>
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <title>TDRDOC-SCAN — Nouvelle analyse</title>
+
+  <link rel="stylesheet"
+        href="{% static 'css/app.css' %}?v=20261028">
+
+  <link rel="stylesheet"
+        href="{% static 'css/institutional.css' %}?v=20261028">
+
+  <script src="{% static 'js/theme.js' %}?v=20261028"></script>
+
+  <style>
+    #threshold-field[hidden] {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="console">
+
+  <!-- =========================================================
+       SIDEBAR
+       ========================================================= -->
+  <aside class="rail">
+
+    <div class="rail-brand">
+      <div class="brand">
+        <span class="brand-mark">TDRDOC-SCAN</span>
+      </div>
+    </div>
+
+    <nav class="rail-nav">
+
+      <!-- Tableau de bord -->
+      <a class="rail-link"
+         href="{% url 'detector:dashboard' %}">
+        <span class="ico">▦</span>
+        <span>Tableau de bord</span>
+      </a>
+
+
+      <!-- Vérification TDR -->
+      {% if perms.detector.can_verify_tdr %}
+      <a class="rail-link"
+         href="{% url 'detector:reception' %}">
+        <span class="ico">✓</span>
+        <span>Vérifier un TDR</span>
+      </a>
+      {% endif %}
+
+
+      <!-- Nouvelle analyse -->
+      {% if perms.detector.can_analyze_report %}
+      <a class="rail-link active"
+         href="{% url 'detector:analyser' %}">
+        <span class="ico">+</span>
+        <span>Nouvelle analyse</span>
+      </a>
+      {% endif %}
+
+
+      <!-- Historique -->
+      {% if perms.detector.can_view_history %}
+      <a class="rail-link"
+         href="{% url 'detector:resultats' %}">
+        <span class="ico">◷</span>
+        <span>Historique</span>
+      </a>
+      {% endif %}
+
+
+      <!-- Mon compte -->
+      <a class="rail-link"
+         href="{% url 'detector:account_settings' %}">
+        <span class="ico">⚙</span>
+        <span>Mon compte</span>
+      </a>
+
+
+      <!-- =====================================================
+           ADMINISTRATION
+           ===================================================== -->
+
+      {% if perms.detector.can_manage_users or perms.detector.can_manage_settings %}
+
+      <details class="rail-admin-menu">
+
+        <summary class="rail-link">
+          <span class="ico">◆</span>
+          <span>Administration</span>
+          <span class="admin-chevron">⌄</span>
+        </summary>
+
+        <div class="rail-subnav">
+
+          {% if perms.detector.can_manage_settings %}
+
+          <a href="{% url 'detector:administration_roles' %}">
+            Gestion des rôles
+          </a>
+
+          <a href="{% url 'detector:administration_permissions' %}">
+            Gestion des permissions
+          </a>
+
+          {% endif %}
+
+
+          {% if perms.detector.can_manage_users %}
+
+          <a href="{% url 'detector:administration_users' %}">
+            Gestion des utilisateurs
+          </a>
+
+          {% endif %}
+
+        </div>
+
+      </details>
+
+      {% endif %}
+
+    </nav>
+
+
+    <!-- =====================================================
+         UTILISATEUR
+         ===================================================== -->
+
+    <div class="rail-foot">
+
+      <div class="rail-user">
+
+        <strong>
+          {{ request.user.get_full_name|default:request.user.username }}
+        </strong>
+
+        <small>
+          Session active
+        </small>
+
+      </div>
+
+      <a class="rail-logout"
+         href="{% url 'detector:logout' %}">
+        Déconnexion
+      </a>
+
+    </div>
+
+  </aside>
+
+
+  <!-- =========================================================
+       CONTENU PRINCIPAL
+       ========================================================= -->
+
+  <main class="main">
+
+    <div class="ctxbar">
+
+      <div>
+
+        <h1>
+          Nouvelle analyse
+        </h1>
+
+        <div class="lede">
+          Contrôle libre d'un document, hors parcours de réception guidé
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div class="page-pad">
+
+
+      <!-- =====================================================
+           MESSAGES DJANGO
+           ===================================================== -->
+
+      {% for message in messages %}
+
+      <div class="alert">
+        {{ message }}
+      </div>
+
+      {% endfor %}
+
+
+      <!-- =====================================================
+           FORMULAIRE D'ANALYSE
+           ===================================================== -->
+
+      <section class="panel national-bar-red"
+               id="form-card"
+               style="max-width:640px">
+
+        <div class="panel-head">
+
+          <h2>
+            Choisir le contrôle à effectuer
+          </h2>
+
+        </div>
+
+
+        <div class="panel-body">
+
+          <form id="analysis-form"
+                method="post"
+                enctype="multipart/form-data">
+
+            {% csrf_token %}
+
+
+            <!-- =================================================
+                 TYPE DE CONTRÔLE
+                 ================================================= -->
+
+            <div class="field">
+
+              <label for="analysis-mode">
+                Type de contrôle
+              </label>
+
+              <select id="analysis-mode"
+                      name="mode">
+
+                <option value="duplicate">
+                  Doublon — TDR / objet d'étude
+                </option>
+
+                <option value="plagiarism">
+                  Plagiat — rapport d'étude
+                </option>
+
+              </select>
+
+            </div>
+
+
+            <!-- =================================================
+                 DOCUMENT
+                 ================================================= -->
+
+            <div class="field">
+
+              <label for="document-input">
+                Document à contrôler (.docx ou .pdf)
+              </label>
+
+              <input id="document-input"
+                     type="file"
+                     name="document"
+                     accept=".docx,.pdf"
+                     required>
+
+            </div>
+
+
+            <!-- =================================================
+                 SEUIL
+                 ================================================= -->
+
+            <div class="field"
+                 id="threshold-field">
+
+              <label for="threshold">
+                Seuil de similarité avant analyse
+              </label>
+
+
+              <div style="display:flex;
+                          gap:12px;
+                          align-items:center">
+
+                <input id="threshold"
+                       type="range"
+                       name="threshold"
+                       min="1"
+                       max="100"
+                       step="1"
+                       value="55"
+                       style="flex:1">
+
+                <output id="threshold-value">
+                  55 %
+                </output>
+
+              </div>
+
+
+              <small class="muted">
+
+                Un score égal ou supérieur à ce seuil
+                sera considéré comme SIMILAIRE.
+
+              </small>
+
+            </div>
+
+
+            <!-- =================================================
+                 BOUTON
+                 ================================================= -->
+
+            <button id="submit-button"
+                    class="btn btn-primary"
+                    type="submit">
+
+              Lancer la vérification
+
+            </button>
+
+          </form>
+
+        </div>
+
+      </section>
+
+
+      <!-- =====================================================
+           ZONE DE PROGRESSION
+           ===================================================== -->
+
+      <section id="loading"
+               class="proc national-bar-green"
+               aria-live="polite"
+               style="max-width:640px">
+
+        <div class="proc-head">
+
+          <strong id="loading-title">
+            Analyse en cours
+          </strong>
+
+          <span class="pct"
+                id="loading-percent">
+            0 %
+          </span>
+
+        </div>
+
+
+        <div class="proc-track">
+
+          <span id="progress-bar"></span>
+
+        </div>
+
+
+        <div class="proc-steps">
+
+          <div class="proc-step current">
+
+            <span class="mark">
+              ›
+            </span>
+
+            <span id="loading-text">
+              Lecture du document et préparation du contrôle.
+            </span>
+
+          </div>
+
+        </div>
+
+      </section>
+
+    </div>
+
+  </main>
+
+</div>
+
+
+<!-- ===========================================================
+     JAVASCRIPT
+     =========================================================== -->
+
+<script>
+
+const form =
+  document.getElementById('analysis-form');
+
+const loading =
+  document.getElementById('loading');
+
+const button =
+  document.getElementById('submit-button');
+
+const input =
+  document.getElementById('document-input');
+
+const mode =
+  document.getElementById('analysis-mode');
+
+const thresholdField =
+  document.getElementById('threshold-field');
+
+const threshold =
+  document.getElementById('threshold');
+
+const thresholdValue =
+  document.getElementById('threshold-value');
+
+
+/* =============================================================
+   GESTION DU SEUIL
+   ============================================================= */
+
+function updateThreshold() {
+
+  const isDuplicate =
+    mode.value === 'duplicate';
+
+
+  /*
+   * Pour les TDR :
+   *
+   * Le moteur utilise son seuil configuré
+   * côté serveur.
+   *
+   * On ne demande donc pas à l'utilisateur
+   * de modifier ce seuil ici.
+   */
+
+  thresholdField.hidden =
+    isDuplicate;
+
+  threshold.disabled =
+    isDuplicate;
+
+  threshold.required =
+    !isDuplicate;
+
+
+  /*
+   * Pour le rapport :
+   *
+   * le seuil reste configurable.
+   */
+
+  if (!isDuplicate) {
+
+    thresholdValue.textContent =
+      threshold.value + ' %';
+
+  }
+
+}
+
+
+/* Changement de mode */
+
+mode.addEventListener(
+  'change',
+  updateThreshold
+);
+
+
+/* Initialisation */
+
+updateThreshold();
+
+
+/* Modification du slider */
+
+threshold.addEventListener(
+  'input',
+  function () {
+
+    thresholdValue.textContent =
+      threshold.value + ' %';
+
+  }
+);
+
+
+/* =============================================================
+   PROGRESSION
+   ============================================================= */
+
+const bar =
+  document.getElementById('progress-bar');
+
+const percent =
+  document.getElementById('loading-percent');
+
+const text =
+  document.getElementById('loading-text');
+
+const title =
+  document.getElementById('loading-title');
+
+
+/* =============================================================
+   SOUMISSION
+   ============================================================= */
+
+form.addEventListener(
+  'submit',
+  function () {
+
+    /*
+     * Sécurité :
+     * aucun fichier sélectionné.
+     */
+
+    if (!input.files.length) {
+      return;
+    }
+
+
+    const isDuplicate =
+      mode.value === 'duplicate';
+
+
+    /* ---------------------------------------------------------
+       TITRE
+       --------------------------------------------------------- */
+
+    title.textContent =
+      isDuplicate
+        ? 'Vérification du TDR en cours'
+        : 'Contrôle du rapport en cours';
+
+
+    /* ---------------------------------------------------------
+       ÉTAPES TDR
+       --------------------------------------------------------- */
+
+    const duplicateStages = [
+
+      'Réception et extraction du TDR.',
+
+      'Chargement des TDR et rapports de référence.',
+
+      'Recherche lexicale et sémantique des documents proches.',
+
+      'Sélection des références les plus pertinentes.',
+
+      'Comparaison du contenu par Qwen3 via Ollama.',
+
+      'Évaluation des objectifs, méthodes, zones et livrables.',
+
+      'Préparation du verdict et des justifications.',
+
+      'Enregistrement du résultat et des références consultables.'
+
+    ];
+
+
+    /* ---------------------------------------------------------
+       ÉTAPES RAPPORT
+       --------------------------------------------------------- */
+
+    const plagiarismStages = [
+
+      'Lecture du rapport et extraction du contenu.',
+
+      'Recherche de recouvrements textuels.',
+
+      'Analyse sémantique et recherche de paraphrases.',
+
+      'Calcul du score et identification des passages proches.'
+
+    ];
+
+
+    const stages =
+      isDuplicate
+        ? duplicateStages
+        : plagiarismStages;
+
+
+    /* ---------------------------------------------------------
+       AFFICHAGE DU CHARGEMENT
+       --------------------------------------------------------- */
+
+    loading.classList.add(
+      'visible'
+    );
+
+
+    button.disabled =
+      true;
+
+    button.textContent =
+      'Traitement en cours…';
+
+
+    /*
+     * IMPORTANT :
+     *
+     * On ne désactive PAS le champ input.
+     *
+     * Un input file désactivé peut être exclu
+     * de la requête multipart POST.
+     */
+
+
+    let p = 0;
+
+    let stage = 0;
+
+
+    /* ---------------------------------------------------------
+       SIMULATION DE PROGRESSION
+       --------------------------------------------------------- */
+
+    const timer =
+      setInterval(
+        function () {
+
+          p = Math.min(
+            p + (stage < 2 ? 4 : 2),
+            94
+          );
+
+
+          bar.style.width =
+            p + '%';
+
+
+          percent.textContent =
+            p + ' %';
+
+
+          /*
+           * Passage à l'étape suivante.
+           */
+
+          const next =
+            Math.min(
+              Math.floor(
+                p / 12.5
+              ),
+              stages.length - 1
+            );
+
+
+          if (next !== stage) {
+
+            stage =
+              next;
+
+            text.textContent =
+              stages[stage];
+
+          }
+
+        },
+        450
+      );
+
+
+    /*
+     * Arrêt du timer lorsque
+     * la page est quittée.
+     */
+
+    window.addEventListener(
+      'pagehide',
+      function () {
+
+        clearInterval(timer);
+
+      },
+      {
+        once: true
+      }
+    );
+
+  }
+);
+
+</script>
+
+</body>
+</html>

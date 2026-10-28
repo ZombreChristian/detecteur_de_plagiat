@@ -192,14 +192,37 @@ def _document_content_type(uploaded):
 @login_required
 def dashboard(request):
     base = Analysis.objects.filter(user=request.user).order_by("-created_at")
-    q = request.GET.get("q", "").strip(); decision = request.GET.get("decision", "all"); mode = request.GET.get("mode", "all")
-    if q: base = base.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
-    if decision in ("SIMILAIRE", "DIFFERENT", "À EXAMINER"): base = base.filter(decision=decision)
-    if mode in ("duplicate", "plagiarism"): base = base.filter(mode=mode)
-    paginator = Paginator(base, 10); page_obj = paginator.get_page(request.GET.get("page", 1))
-    total = Analysis.objects.filter(user=request.user).count(); similar = Analysis.objects.filter(user=request.user, decision="SIMILAIRE").count(); different = Analysis.objects.filter(user=request.user, decision="DIFFERENT").count(); to_review = Analysis.objects.filter(user=request.user, decision="À EXAMINER").count(); tdr_checks = Analysis.objects.filter(user=request.user, mode="duplicate").count(); report_checks = Analysis.objects.filter(user=request.user, mode="plagiarism").count()
-    registry_total = StudyDocument.objects.count(); registry_tdr = StudyDocument.objects.filter(document_type="TDR").count(); registry_rapport = StudyDocument.objects.filter(document_type="RAPPORT").count(); has_admin = get_user_model().objects.filter(is_staff=True, is_active=True).exists()
-    return render(request, "dashboard.html", {"recent": page_obj.object_list, "page_obj": page_obj, "total_filtered": paginator.count, "q": q, "selected_decision": decision, "selected_mode": mode, "total": total, "similar": similar, "different": different, "to_review": to_review, "tdr_checks": tdr_checks, "report_checks": report_checks, "registry_total": registry_total, "registry_tdr": registry_tdr, "registry_rapport": registry_rapport, "has_admin": has_admin})
+    q = request.GET.get("q", "").strip()
+    decision = request.GET.get("decision", "all")
+    mode = request.GET.get("mode", "all")
+    if q:
+        base = base.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
+    if decision in ("SIMILAIRE", "SIMILARITÉ PARTIELLE", "DIFFERENT", "À EXAMINER"):
+        base = base.filter(decision=decision)
+    if mode in ("duplicate", "plagiarism"):
+        base = base.filter(mode=mode)
+    paginator = Paginator(base, 10)
+    page_obj = paginator.get_page(request.GET.get("page", 1))
+
+    total = Analysis.objects.filter(user=request.user).count()
+    similar = Analysis.objects.filter(user=request.user, decision="SIMILAIRE").count()
+    different = Analysis.objects.filter(user=request.user, decision="DIFFERENT").count()
+    to_review = Analysis.objects.filter(user=request.user, decision="À EXAMINER").count()
+    tdr_checks = Analysis.objects.filter(user=request.user, mode="duplicate").count()
+    report_checks = Analysis.objects.filter(user=request.user, mode="plagiarism").count()
+    registry_total = StudyDocument.objects.count()
+    registry_tdr = StudyDocument.objects.filter(document_type="TDR").count()
+    registry_rapport = StudyDocument.objects.filter(document_type="RAPPORT").count()
+    has_admin = get_user_model().objects.filter(is_staff=True, is_active=True).exists()
+    return render(request, "dashboard.html", {
+        "recent": page_obj.object_list, "page_obj": page_obj, "total_filtered": paginator.count,
+        "q": q, "selected_decision": decision, "selected_mode": mode,
+        "total": total, "similar": similar, "different": different, "to_review": to_review,
+        "tdr_checks": tdr_checks, "report_checks": report_checks,
+        "registry_total": registry_total, "registry_tdr": registry_tdr, "registry_rapport": registry_rapport,
+        "has_admin": has_admin,
+    })
+
 
 
 def _save_uploaded_document(uploaded):

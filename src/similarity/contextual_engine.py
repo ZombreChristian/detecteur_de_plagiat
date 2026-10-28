@@ -249,6 +249,25 @@ def _specific_overlap(left, right):
     return len(left_tokens & right_tokens) / len(union) if union else 0.0
 
 
+def _named_location_tokens(text):
+    """Extrait les noms géographiques explicitement présents dans le texte."""
+    candidates = re.findall(
+        r"\b[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿÀ-ÖØ-Þ]*(?:[-'][A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿÀ-ÖØ-Þ]*)*\b",
+        text or "",
+    )
+    ignored = {
+        "Contexte", "Justification", "Objectifs", "Objectif", "Résultats",
+        "Méthodologie", "Approche", "Zone", "Zones", "Population",
+        "Diagnostic", "Termes", "Référence", "Année", "Dans", "Cette",
+        "Le", "La", "Les", "Un", "Une",
+    }
+    return {
+        _normalize(token)
+        for token in candidates
+        if len(token) >= 5 and token not in ignored
+    }
+
+
 def analyze_context(candidate_text, source_text):
     """Compare les dimensions contextuelles sans modifier les scores existants."""
     candidate = extract_context(candidate_text)
@@ -319,6 +338,13 @@ def analyze_context(candidate_text, source_text):
     sector_overlap = _specific_overlap(candidate["secteur"], source["secteur"])
     activity_overlap = _specific_overlap(candidate["activites"], source["activites"])
     zone_overlap = _specific_overlap(candidate["zone"], source["zone"])
+    candidate_locations = _named_location_tokens(candidate["zone"])
+    source_locations = _named_location_tokens(source["zone"])
+    location_overlap = (
+        len(candidate_locations & source_locations) / len(candidate_locations | source_locations)
+        if candidate_locations and source_locations
+        else None
+    )
 
     # Un faible recouvrement lexical n'est PAS une contradiction à lui seul :
     # une reformulation peut changer presque tous les mots tout en conservant
@@ -344,9 +370,17 @@ def analyze_context(candidate_text, source_text):
             and zone_overlap < 0.10
         )
     )
+    geographic_conflict = (
+        location_overlap is not None
+        and location_overlap == 0.0
+        and dimensions["zone"]["score"] is not None
+        and dimensions["zone"]["score"] < 0.82
+    )
+
     strong_identity_conflict = (
         any(score < 0.40 for score in identity_conflicts)
         or specific_identity_conflict
+        or geographic_conflict
     )
 
     if strong_identity_conflict:
@@ -385,6 +419,7 @@ def analyze_context(candidate_text, source_text):
             "secteur": round(float(sector_overlap), 4) if sector_overlap is not None else None,
             "activites": round(float(activity_overlap), 4) if activity_overlap is not None else None,
             "zone": round(float(zone_overlap), 4) if zone_overlap is not None else None,
+            "localisation_noms": round(float(location_overlap), 4) if location_overlap is not None else None,
         },
         "identity_profile": {
             "objet": candidate["objet"],

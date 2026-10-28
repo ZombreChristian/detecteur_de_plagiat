@@ -1,354 +1,253 @@
 # TDRDOC-SCAN — Détecteur de plagiat et de doublon d'études
 
-Application de détection de doublons de TDR et de plagiat de rapports d'études. Le moteur combine une similarité lexicale et une similarité sémantique.
+TDRDOC-SCAN compare les termes de référence (TDR) soumis par les utilisateurs à un corpus de références indexé et détecte les ressemblances entre rapports d'études. L'application comprend une interface Django, une API FastAPI, PostgreSQL, un moteur lexical/sémantique et un arbitrage RAG local par Qwen3 via Ollama pour les TDR.
 
-## 1. Principe général
+> **Branche de développement :** `feature/testsimilarity`. Les changements décrits ici ne doivent pas être fusionnés dans `main` sans autorisation explicite.
 
-Le projet fonctionne en deux phases distinctes.
+## Fonctionnement
 
-### Phase A — Préparation du corpus de référence
+### Analyse des TDR : recherche de références + arbitrage RAG
 
-Cette phase est réalisée avant les analyses utilisateurs.
+1. Le texte du TDR déposé est extrait et nettoyé.
+2. Le moteur lexical et sémantique recherche les références les plus pertinentes dans l'index PostgreSQL.
+3. Les références récupérées et le TDR candidat sont transmis à **Qwen3 via Ollama local**.
+4. Qwen3 compare notamment l'objet, les activités, la zone géographique, les objectifs, les résultats attendus et, lorsque l'information est disponible, la population cible, la période et la méthodologie.
+5. L'application présente le cas métier retenu, son explication, les points communs, les différences, les éléments probants et les informations manquantes.
 
-```text
-Documents DOCX de référence
-        ↓
-Extraction du texte
-        ↓
-Nettoyage / prétraitement
-        ↓
-Calcul des embeddings
-        ↓
-Stockage dans PostgreSQL
-        ↓
-Index prêt pour les analyses
-```
+Les scores lexicaux, sémantiques et hybrides servent à **retrouver les références**. Ils ne déterminent pas à eux seuls le verdict final d'un TDR.
 
-Les embeddings des documents de référence sont donc calculés une fois et réutilisés. Ils ne sont pas recalculés à chaque upload.
+Les quatre cas métier sont :
+- **Cas 1 — Correspondance forte** : une référence couvre essentiellement la même étude.
+- **Cas 2 — Correspondance partielle** : plusieurs dimensions convergent, mais des différences ou incertitudes importantes subsistent.
+- **Cas 3 — Même objectif, zone différente** : l'objet ou les objectifs sont comparables, mais la zone géographique est explicitement différente.
+- **Cas 4 — Aucune étude pertinente** : aucune des références récupérées n'est suffisamment pertinente.
 
-### Phase B — Analyse d'un fichier uploadé
+Le modèle doit justifier sa décision à partir du TDR et des références fournies. Si Ollama est inaccessible, si le modèle manque ou si sa réponse est inexploitable, l'API renvoie une erreur explicite : elle ne remplace pas silencieusement l'arbitrage RAG par une décision basée uniquement sur les scores.
 
-```text
-Fichier DOCX uploadé
-        ↓
-Extraction
-        ↓
-Nettoyage
-        ├──────────────────┐
-        ↓                  ↓
-     TF-IDF             Embedding
-        ↓                  ↓
-Score lexical       Similarité cosinus
-        └─────────┬────────┘
-                  ↓
-       Score hybride 30/70
-                  ↓
-       Classement des références
-                  ↓
-     Analyse détaillée des passages
-                  ↓
-               Résultat
-```
+### Analyse des rapports d'études
 
-**Important :** le fichier uploadé est uniquement un candidat de comparaison. Il n'est pas ajouté automatiquement à la base des documents de référence.
+Le mode rapports conserve le calcul de similarité lexicale et sémantique, l'analyse des passages et le seuil de décision du mode plagiat. Les poids par défaut du score hybride sont de 30 % pour le lexical et de 70 % pour le sémantique.
 
-## 2. Architecture des données
+### Index de référence
 
-PostgreSQL contient notamment les informations préparées pour chaque document de référence :
+Les documents de référence sont préparés et indexés séparément. Un document candidat envoyé pour analyse **n'est pas ajouté automatiquement** au corpus de référence.
 
-- métadonnées du document ;
-- texte extrait ;
-- texte nettoyé ;
-- embedding ;
-- modèle utilisé pour l'embedding ;
-- hash du contenu ;
-- date d'indexation.
+## Architecture
 
-Le modèle de similarité est sauvegardé localement afin de ne pas être téléchargé à chaque démarrage.
+- **Interface utilisateur :** Django dans `frontend/`
+- **API de détection :** FastAPI dans `api/app.py`
+- **Base de données :** PostgreSQL
+- **Extraction :** documents DOCX et PDF pris en charge par l'API
+- **Recherche de références :** TF-IDF, embeddings multilingues et similarité cosinus
+- **Arbitrage des TDR :** Qwen3 local via Ollama et contexte de références récupérées (RAG)
+- **Modèle d'embeddings par défaut :** `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
 
-## 3. Prérequis
+## Prérequis
 
-Installer :
+Installer les outils suivants :
 
 - Python 3.11 recommandé ;
 - PostgreSQL ;
 - Git ;
-- les dépendances Python du projet.
+- Ollama pour l'analyse RAG des TDR ;
+- le modèle local Qwen3 choisi pour le projet, par défaut `qwen3:8b).
 
-Le projet peut également utiliser Docker pour PostgreSQL si le fichier `docker-compose.yml` est configuré pour cela.
+Vérifier que la machine dispose des ressources suffisantes pour exécuter le modèle local. La première utilisation du modèle d'embeddings peut nécessiter un téléchargement depuis Hugging Face.
 
-## 4. Installation sous Windows
+## Installation sous Windows
 
-Depuis PowerShell, placer le terminal dans la racine du projet :
+Ouvrir PowerShell et se placer dans le dossier du dépôt :
 
 ```powershell
 cd C:\Users\Leslie\Desktop\Plagiat\detecteur_de_plagiat
 ```
 
-### 4.1 Créer l'environnement virtuel
+### 1. Créer ou activer l'environnement virtuel
+
+Si l'environnement virtuel n'existe pas encore :
 
 ```powershell
 python -m venv venv
-venv\Scripts\activate
+.\venv\Scripts\Activate.ps1
 ```
 
-Si l'environnement existe déjà, il suffit de l'activer :
+S'il existe déjà :
 
 ```powershell
-venv\Scripts\activate
+.\venv\Scripts\Activate.ps1
 ```
 
-### 4.2 Installer les dépendances
+### 2. Installer les dépendances Python
 
-Depuis la racine du projet :
+Depuis la racine du dépôt :
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-## 5. Configurer PostgreSQL
+### 3. Configurer les variables d'environnement
 
-Créer le fichier `frontend/.env` à partir de `frontend/.env.example`.
-
-Les paramètres PostgreSQL doivent correspondre à la base utilisée par Django.
-
-Exemple :
-
-```text
-POSTGRES_DB=detecteur_plagiat
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_HOST=127.0.0.1
-POSTGRES_PORT=5432
-```
-
-Si PostgreSQL est lancé avec Docker et que le projet fournit le service correspondant :
+Créer `frontend/.env` en copiant le modèle :
 
 ```powershell
-docker compose up -d postgres
+Copy-Item frontend/.env.example frontend/.env
 ```
 
-## 6. Première préparation de la base de documents
+Ouvrir ensuite `frontend/.env` et adapter les paramètres PostgreSQL, Django et, si nécessaire, FastAPI et les e-mails. **Ne jamais publier le vrai fichier `.env` ni ses mots de passe.** Le fichier `.env.example` contient des valeurs d'exemple à remplacer.
 
-Cette étape est **importante**. Elle prépare le corpus de référence avant le premier test.
+Les paramètres RAG sont documentés dans `frontend/.env.example` :
 
-Depuis la racine du projet :
+```dotenv
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen3:8b
+OLLAMA_TIMEOUT_SECONDS=180
+TDR_RAG_REFERENCE_TOP_K=3
+TDR_RAG_CANDIDATE_MAX_CHARS=18000
+TDR_RAG_REFERENCE_MAX_CHARS=7000
+```
+
+Ces variables contrôlent l'adresse d'Ollama, le modèle, le délai maximal et la quantité de texte transmise au modèle. Il n'est pas nécessaire de copier le contenu d'un fichier `.env` privé dans le dépôt.
+
+### 4. Installer et vérifier Ollama pour l'analyse des TDR
+
+Installer Ollama depuis le site officiel : https://ollama.com/
+
+Puis, dans un terminal :
+
+```powershell
+ollama pull qwen3:8b
+ollama list
+```
+
+Vérifier qu'Ollama est démarré et que le modèle configuré dans `OLLAMA_MODEL` apparaît dans la liste. Le service doit être accessible depuis la machine où FastAPI s'exécute. Si le modèle est absent ou si Ollama ne répond pas, l'arbitrage RAG des TDR échouera explicitement.
+
+## Préparer la base de référence
+
+Depuis la racine du dépôt :
 
 ```powershell
 cd frontend
 python manage.py migrate
-```
-
-Puis, toujours dans le dossier `frontend` :
-
-```powershell
 python manage.py prepare_reference_index
 ```
 
-### Que fait `prepare_reference_index` ?
+La commande d'indexation prépare les documents de référence présents dans les emplacements configurés par le projet. Elle extrait et nettoie leur texte, calcule les embeddings et enregistre les informations d'indexation dans la base.
 
-Pour chaque document DOCX présent dans le corpus de référence, la commande :
-
-1. extrait le texte ;
-2. nettoie et prétraite le texte ;
-3. calcule son embedding avec `paraphrase-multilingual-MiniLM-L12-v2` ;
-4. enregistre l'embedding dans PostgreSQL ;
-5. enregistre également le texte extrait, le texte nettoyé et les métadonnées ;
-6. calcule un hash permettant de détecter si le document a changé.
-
-Si un document est déjà indexé et n'a pas changé, son embedding n'est pas recalculé.
-
-### Forcer la réindexation
-
-Si tu veux volontairement recalculer les embeddings de tout le corpus :
+Si le contenu d'une référence n'a pas changé et qu'il est déjà indexé, son embedding peut être réutilisé. Pour forcer une réindexation complète, uniquement si nécessaire :
 
 ```powershell
 python manage.py prepare_reference_index --force
 ```
 
-**Attention :** `--force` est réservé aux besoins de maintenance. Il ne faut pas l'utiliser avant chaque test.
+Ne pas lancer cette commande avant chaque analyse. Vérifier que les documents de référence sont placés dans les dossiers attendus par la configuration du projet et que les deux corpus (TDR et rapports) sont correctement alimentés.
 
-## 7. Première exécution du modèle
+## Démarrer l'application
 
-Le modèle utilisé est :
-
-`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
-
-Lors de sa première utilisation, s'il n'est pas encore présent localement, il est téléchargé depuis Hugging Face.
-
-Il est ensuite sauvegardé localement dans :
-
-`modeles/paraphrase-multilingual-MiniLM-L12-v2/`
-
-Les prochaines exécutions réutilisent cette copie locale.
-
-Un `HF_TOKEN` peut être ajouté dans `frontend/.env` pour authentifier le téléchargement Hugging Face et bénéficier de limites plus élevées.
-
-## 8. Démarrage de l'application
-
-Il faut lancer **deux serveurs**.
+Lancer les services dans des terminaux séparés.
 
 ### Terminal 1 — API FastAPI
 
-Depuis la racine du projet :
+Depuis la racine du dépôt, avec l'environnement virtuel activé :
 
 ```powershell
 uvicorn api.app:app --reload --port 8000
 ```
 
-### Terminal 2 — application Django
+### Terminal 2 — Interface Django
 
-Ouvrir un deuxième terminal, activer l'environnement virtuel puis :
+Dans un deuxième terminal :
 
 ```powershell
-cd C:\Users\Leslie\Desktop\Plagiat\detecteur_de_plagiat\frontend
-venv\..\venv\Scripts\activate
+cd C:\Users\Leslie\Desktop\Plagiat\detecteur_de_plagiat
+.\venv\Scripts\Activate.ps1
+cd frontend
 python manage.py runserver 127.0.0.1:8001
 ```
 
-Si l'environnement virtuel est déjà actif, utiliser simplement :
+Si l'environnement virtuel est déjà activé, ne l'activez pas une deuxième fois.
+
+Accès locaux :
+- Interface Django : http://127.0.0.1:8001/
+- État de l'API : http://127.0.0.1:8000/api/health
+- Documentation interactive FastAPI : http://127.0.0.1:8000/docs
+
+## Paramètres de similarité
+
+Les paramètres suivants sont définis dans `frontend/.env.example` et peuvent être adaptés dans `frontend/.env` :
+
+- `SIMILARITY_LEXICAL_WEIGHT=0.30` : poids du score lexical ;
+- `SIMILARITY_SEMANTIC_WEIGHT=0.70` : poids du score sémantique ;
+- `SIMILARITY_REFERENCE_TOP_K=10` : nombre de références considérées par la recherche générale ;
+- `SIMILARITY_PASSAGE_TOP_K=3` : nombre de sources utilisées pour l'analyse détaillée des passages ;
+- `TDR_RAG_REFERENCE_TOP_K=3` : nombre maximal de références envoyées à Qwen3 pour l'arbitrage RAG.
+
+La somme des poids lexical et sémantique doit être égale à 1. Les seuils de similarité restent utilisés pour le mode rapports. Pour les TDR, le verdict métier provient de l'arbitrage Qwen3 à partir des références récupérées, pas d'un seuil numérique fixe.
+
+## Dépannage
+
+**Ollama est inaccessible ou le modèle est introuvable**
+- Vérifier que l'application Ollama est démarrée.
+- Exécuter `ollama list` et confirmer le nom exact du modèle.
+- Vérifier `OLLAMA_BASE_URL` et `OLLAMA_MODEL` dans `frontend/.env`.
+- Consulter le message d'erreur retourné par l'API. Une indisponibilité de Qwen3 empêche de conclure l'analyse RAG du TDR.
+
+**Aucune référence n'est trouvée**
+- Vérifier que PostgreSQL est démarré et que les paramètres de connexion sont corrects.
+- Vérifier que les documents de référence attendus sont présents.
+- Exécuter les migrations Django, puis `python manage.py prepare_reference_index` depuis `frontend/`.
+
+**Le modèle d'embeddings se télécharge au premier lancement**
+- Cela peut être normal si le modèle n'est pas encore présent dans le répertoire local configuré.
+- Vérifier la connexion Internet et l'espace disque. Les lancements suivants peuvent réutiliser la copie locale.
+
+**L'API ne démarre pas**
+- Vérifier que l'environnement virtuel est activé et que les dépendances sont installées.
+- Vérifier que le terminal se trouve à la racine du dépôt avant de lancer `uvicorn api.app:app --reload --port 8000`.
+
+## Sécurité
+
+- Ne pas committer `frontend/.env`, mots de passe, clés secrètes ou jetons d'accès.
+- Utiliser des valeurs sécurisées pour `DJANGO_SECRET_KEY` en dehors du développement local.
+- Les valeurs de `.env.example` sont des exemples et doivent être adaptées à l'environnement utilisé.
+
+## Branche de développement
+
+Le travail de cette évolution se fait sur `feature/testsimilarity`. Ne pas modifier `main`, `suite_developpement` ou `feature/fusion` dans le cadre de cette évolution sans autorisation explicite.
+
+
+## Utiliser un serveur LLM distant compatible OpenAI pour le RAG TDR
+
+Le fournisseur par défaut reste **Ollama local** avec `qwen3:8b`. Pour utiliser à la place un serveur distant compatible avec l'API Chat Completions, installez les dépendances à jour :
 
 ```powershell
-python manage.py runserver 127.0.0.1:8001
+python -m pip install -r requirements.txt
 ```
 
-## 9. Ordre recommandé pour un nouveau poste
+Dans votre fichier privé `frontend/.env`, configurez les variables suivantes avec les valeurs confirmées par l'administrateur du serveur :
 
-```text
-1. Cloner le projet
-        ↓
-2. Activer le venv
-        ↓
-3. Installer les dépendances
-        ↓
-4. Configurer PostgreSQL et frontend/.env
-        ↓
-5. cd frontend
-        ↓
-6. python manage.py migrate
-        ↓
-7. python manage.py prepare_reference_index
-        ↓
-8. Revenir à la racine
-        ↓
-9. uvicorn api.app:app --reload --port 8000
-        ↓
-10. Dans un deuxième terminal : runserver Django
-        ↓
-11. Effectuer les tests
+```dotenv
+TDR_LLM_PROVIDER=openai_compatible
+TDR_LLM_BASE_URL=https://adresse-confirmee-par-le-fournisseur/api
+TDR_LLM_API_KEY=votre-cle-api
+TDR_LLM_MODEL=qwen3.8-27b
+TDR_RAG_TIMEOUT_SECONDS=300
 ```
 
-## 10. Ce qui se passe lors des exécutions suivantes
+L'URL de base doit être celle attendue par le serveur : le SDK ajoute le chemin `/chat/completions`. Le chemin `/api` donné dans un exemple externe n'est pas garanti ; vérifiez auprès du fournisseur s'il faut utiliser `/api`, `/v1` ou un autre préfixe. Le nom du modèle doit également correspondre à celui publié par le serveur.
 
-Une fois la préparation terminée, il n'est normalement plus nécessaire de lancer `prepare_reference_index` avant chaque test.
+Redémarrez ensuite le service Django/API pour recharger les variables d'environnement et lancez une analyse TDR de test. Si la requête échoue, vérifiez la clé, le chemin API, le nom du modèle et la disponibilité du tunnel. Une URL Cloudflare temporaire peut changer ou devenir indisponible.
 
-Au démarrage suivant :
+**Confidentialité :** en mode distant, le texte du TDR candidat et le contenu des trois références récupérées sont transmis au fournisseur pour arbitrage. N'utilisez ce mode que si vous êtes autorisée à transmettre ces documents. Ne publiez jamais `frontend/.env`, une clé API ou un mot de passe dans GitHub. La configuration `.env.example` ne contient aucune clé réelle.
 
-- PostgreSQL contient déjà les embeddings des références ;
-- le modèle est déjà présent localement ;
-- les documents de référence inchangés ne sont pas ré-embeddés ;
-- l'index TF-IDF est préparé en mémoire ;
-- un upload ne calcule l'embedding que du document candidat ;
-- le candidat n'est pas ajouté automatiquement au corpus de référence.
 
-Le temps d'analyse doit donc être nettement inférieur au temps de préparation initiale.
+### Modèles distants et preuve du modèle utilisé
 
-## 11. Calcul du score hybride
+Les modèles affichés dans l'interface du fournisseur peuvent être sélectionnés par leur identifiant exact, par exemple `qwen3.8-27b` ou `huihui-27b-abliterated`, à condition que l'API accepte bien ces mêmes identifiants. Pour changer de modèle, modifiez `TDR_LLM_MODEL` dans le fichier privé `frontend/.env`.
 
-Le score final utilise :
+Dans le résultat technique de l'analyse RAG, `rag_analysis.model_audit` indique :
+- `provider` : fournisseur configuré ;
+- `requested_model` : identifiant envoyé par TDRDOC-SCAN ;
+- `reported_model` : identifiant renvoyé par le serveur dans la réponse, lorsqu'il est fourni ;
+- `request_id` : identifiant de la requête renvoyé par le serveur, lorsqu'il est fourni.
 
-```text
-30 % × score lexical
-+
-70 % × score sémantique
-=
-score hybride
-```
-
-### Similarité lexicale
-
-Elle utilise TF-IDF et la similarité cosinus pour mesurer les ressemblances de vocabulaire et de formulations entre le document candidat et les références.
-
-### Similarité sémantique
-
-Elle utilise les embeddings produits par Sentence Transformer puis une similarité cosinus. Elle permet de détecter des formulations différentes mais ayant un sens proche.
-
-### Score hybride
-
-`score_hybride = 0,30 × score_lexical + 0,70 × score_sémantique`
-
-Les seuils actuels sont :
-
-- doublon TDR : `0,70` ;
-- plagiat rapport : `0,55`.
-
-Ces seuils devront être calibrés avec des documents annotés avant une utilisation en production.
-
-## 12. Optimisation des temps de calcul
-
-Le système a été conçu pour éviter les opérations coûteuses à chaque upload :
-
-1. le modèle n'est téléchargé qu'une seule fois ;
-2. le modèle est réutilisé en mémoire pendant le processus FastAPI ;
-3. les embeddings du corpus sont stockés dans PostgreSQL ;
-4. les embeddings des références ne sont pas recalculés si le contenu n'a pas changé ;
-5. l'index TF-IDF des références est conservé en mémoire ;
-6. l'analyse détaillée des passages est limitée aux meilleures références.
-
-## 13. Vérifier l'état du moteur
-
-Une fois FastAPI lancé, consulter :
-
-`http://127.0.0.1:8000/api/health`
-
-Cette route permet notamment de vérifier :
-
-- que l'API fonctionne ;
-- que le modèle est disponible ;
-- le nombre de références indexées pour les modes `duplicate` et `plagiarism` ;
-- les index de références déjà chargés en mémoire.
-
-La documentation interactive de l'API est disponible sur :
-
-`http://127.0.0.1:8000/docs`
-
-## 14. Endpoints principaux
-
-- `POST /api/detect/duplicate` — comparaison avec les TDR de référence ;
-- `POST /api/detect/plagiarism` — comparaison avec les rapports de référence ;
-- `POST /api/compare` — comparaison directe de deux documents.
-
-## 15. Historique
-
-Les résultats des analyses utilisateurs sont conservés dans l'historique de l'application.
-
-En revanche, un document uploadé n'est **pas automatiquement ajouté** à la base des documents de référence.
-
-## 16. Structure simplifiée
-
-```text
-detecteur_de_plagiat/
-├── api/
-│   └── app.py
-├── frontend/
-│   ├── manage.py
-│   ├── frontend/
-│   └── detector/
-├── src/
-│   ├── extraction/
-│   ├── preprocessing/
-│   ├── indexing/
-│   ├── passages/
-│   └── similarity/
-├── donnees/
-│   ├── TDR/
-│   └── Rapport d'etude/
-├── modeles/
-└── README.md
-```
-
-## 17. Branche de développement
-
-Cette évolution est développée **uniquement sur `feature/testsimilarity`**.
-
-`main`, `suite_developpement` et `feature/fusion` ne doivent pas être modifiées dans le cadre de cette évolution.
+Le champ `rag_analysis.model` affiche le nom déclaré par le serveur, ou à défaut le nom demandé. Pour une preuve plus forte, comparez `reported_model` et `request_id` avec les journaux du serveur fournisseur : un serveur compatible peut renvoyer un alias ou ne pas exposer de preuve indépendante de l'instance réellement exécutée.

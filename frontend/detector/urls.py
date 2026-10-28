@@ -20,6 +20,7 @@ urlpatterns = [
     path("mon-compte/", views.account_settings, name="account_settings"),
     path("", views.dashboard, name="dashboard"),
     path("reception/", views.reception, name="reception"),
+    path("analyse-tdr-rag/", views.tdr_rag_independent, name="tdr_rag_independent"),
     path("analyser/", views.analyser, name="analyser"),
     path("resultats/", views.resultats, name="resultats"),
     path("administration/", administration, name="administration"),
