@@ -22,7 +22,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 
 # Le fournisseur local Ollama reste le défaut. Le mode openai_compatible permet
 # d'utiliser un serveur distant compatible avec le SDK OpenAI sans changer le RAG.
-TDR_LLM_PROVIDER = os.getenv("TDR_LLM_PROVIDER", "ollama").strip().lower()
+TDR_LLM_PROVIDER = os.getenv("TDR_LLM_PROVIDER", "openai_compatible").strip().lower()
 TDR_LLM_BASE_URL = os.getenv("TDR_LLM_BASE_URL", "").strip().rstrip("/")
 TDR_LLM_API_KEY = os.getenv("TDR_LLM_API_KEY", "").strip()
 TDR_LLM_REMOTE_MODEL = os.getenv("TDR_LLM_MODEL", "").strip()
@@ -111,8 +111,7 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                 response = requests.post(
                     f"{OLLAMA_URL}/api/chat",
                     json={
-                        "model": llm_audit.get("reported_model") or ACTIVE_MODEL,
-            "model_audit": llm_audit,
+                        "model": ACTIVE_MODEL,
                         "stream": False,
                         "format": "json",
                         "think": False,
@@ -452,7 +451,8 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "rag_analysis": {
             "case_id": case_id,
             "case_title": case_titles[case_id],
-            "model": OLLAMA_MODEL,
+            "model": llm_audit.get("reported_model") or ACTIVE_MODEL,
+            "model_audit": llm_audit,
             "decision": str(final.get("decision", case_id)),
             "explanation": str(final.get("explanation", ""))[:2500],
             "matched_reference": reference_name,
