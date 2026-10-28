@@ -10,7 +10,7 @@ from docx import Document as DocxDocument
 from docx.shared import RGBColor
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login, logout, get_user_model, update_session_auth_hash
+from django.contrib.auth import authenticate, login, logout, get_user_model, update_session_auth_hash
 from django.contrib.auth.models import Group, Permission
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -27,10 +27,18 @@ from openpyxl import Workbook
 from pypdf import PdfReader
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_LEFT
-from .forms import LoginForm, SignUpForm, AdminUserCreateForm, AdminUserUpdateForm, PasswordRecoveryForm, UserPasswordChangeForm
+from .forms import (
+    LoginForm,
+    SignUpForm,
+    AdminUserCreateForm,
+    AdminUserUpdateForm,
+    PasswordRecoveryForm,
+    UserPasswordChangeForm,
+)
 from .models import Analysis, StudyDocument
 
 
@@ -44,30 +52,69 @@ def login_view(request):
     return render(request, "login.html", {"form": form})
 
 
+
 def password_reset_request(request):
     if request.user.is_authenticated:
         return redirect("detector:dashboard")
+
     form = PasswordRecoveryForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         user = form.user
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
-        reset_path = reverse("detector:password_reset_confirm", kwargs={"uidb64": uid, "token": token})
+        reset_path = reverse(
+            "detector:password_reset_confirm",
+            kwargs={"uidb64": uid, "token": token},
+        )
         base_url = getattr(settings, "PUBLIC_APP_URL", "").rstrip("/")
-        reset_url = f"{base_url}{reset_path}" if base_url else f"{'https' if request.is_secure() else 'http'}://{request.get_host()}{reset_path}"
-        context = {"email": user.email, "user": user, "domain": request.get_host(), "site_name": "TDRDOC-SCAN", "protocol": "https" if request.is_secure() else "http", "uid": uid, "token": token, "reset_url": reset_url}
+        if base_url:
+            reset_url = f"{base_url}{reset_path}"
+        else:
+            reset_url = f"{'https' if request.is_secure() else 'http'}://{request.get_host()}{reset_path}"
+        context = {
+            "email": user.email,
+            "user": user,
+            "domain": request.get_host(),
+            "site_name": "TDRDOC-SCAN",
+            "protocol": "https" if request.is_secure() else "http",
+            "uid": uid,
+            "token": token,
+            "reset_url": reset_url,
+        }
         subject = render_to_string("password_reset_subject.txt", context).strip()
         message = render_to_string("password_reset_email.txt", context)
-        required = (getattr(settings, "EMAIL_HOST", ""), getattr(settings, "EMAIL_HOST_USER", ""), getattr(settings, "EMAIL_HOST_PASSWORD", ""), getattr(settings, "DEFAULT_FROM_EMAIL", ""))
-        if not all(required):
-            form.add_error(None, "L'envoi e-mail n'est pas configuré. Renseignez EMAIL_HOST, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD et DEFAULT_FROM_EMAIL dans le fichier .env.")
+
+        required_email_settings = (
+            getattr(settings, "EMAIL_HOST", ""),
+            getattr(settings, "EMAIL_HOST_USER", ""),
+            getattr(settings, "EMAIL_HOST_PASSWORD", ""),
+            getattr(settings, "DEFAULT_FROM_EMAIL", ""),
+        )
+        if not all(required_email_settings):
+            form.add_error(
+                None,
+                "L'envoi e-mail n'est pas configuré. Renseignez EMAIL_HOST, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD et DEFAULT_FROM_EMAIL dans le fichier .env.",
+            )
         else:
             try:
-                send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
+                send_mail(
+                    subject,
+                    message,
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                    fail_silently=False,
+                )
             except Exception as exc:
-                form.add_error(None, f"Échec de l'envoi SMTP : {exc}" if settings.DEBUG else "Le message de récupération n'a pas pu être envoyé. Vérifiez la configuration e-mail du serveur.")
+                if settings.DEBUG:
+                    form.add_error(None, f"Échec de l'envoi SMTP : {exc}")
+                else:
+                    form.add_error(
+                        None,
+                        "Le message de récupération n'a pas pu être envoyé. Vérifiez la configuration e-mail du serveur.",
+                    )
             else:
                 return redirect("detector:password_reset_done")
+
     return render(request, "password_reset.html", {"form": form})
 
 
@@ -77,7 +124,10 @@ def password_reset_done(request):
 
 def password_reset_confirm(request, uidb64, token):
     from django.contrib.auth.views import PasswordResetConfirmView
-    view = PasswordResetConfirmView.as_view(template_name="password_reset_confirm.html", success_url="/mot-de-passe-reinitialise/")
+    view = PasswordResetConfirmView.as_view(
+        template_name="password_reset_confirm.html",
+        success_url="/mot-de-passe-reinitialise/",
+    )
     return view(request, uidb64=uidb64, token=token)
 
 
@@ -85,22 +135,25 @@ def password_reset_complete(request):
     return render(request, "password_reset_complete.html")
 
 
+
 def signup_view(request):
     if request.user.is_authenticated:
         return redirect("detector:dashboard")
     form = SignUpForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        form.save()
+        user = form.save()
         messages.success(request, "Votre compte a été créé. Vous pouvez maintenant vous connecter.")
         return redirect("detector:login")
     return render(request, "signup.html", {"form": form})
+
 
 
 @login_required
 def account_settings(request):
     form = UserPasswordChangeForm(request.user, request.POST or None)
     if request.method == "POST" and form.is_valid():
-        form.save(); update_session_auth_hash(request, request.user)
+        form.save()
+        update_session_auth_hash(request, request.user)
         messages.success(request, "Votre mot de passe a été modifié avec succès.")
         return redirect("detector:account_settings")
     return render(request, "account_settings.html", {"form": form})
@@ -111,39 +164,8 @@ def logout_view(request):
     return redirect("detector:login")
 
 
-def _functional_permissions():
-    return list(Permission.objects.filter(content_type__app_label="detector", codename__startswith="can_").order_by("codename"))
-
-
-def _ensure_administrator_role(user):
-    """Synchronise uniquement un vrai administrateur avec le rôle Administrateur."""
-    if not user or not user.is_authenticated:
-        return
-    is_admin = user.is_superuser or user.groups.filter(name="Administrateur").exists()
-    if not is_admin and user.is_staff and not user.groups.exists():
-        # Compatibilité avec une ancienne installation où l'administrateur était uniquement is_staff.
-        is_admin = True
-    if not is_admin:
-        return
-    role, _ = Group.objects.get_or_create(name="Administrateur")
-    permissions = _functional_permissions()
-    if permissions and set(role.permissions.values_list("id", flat=True)) != {p.id for p in permissions}:
-        role.permissions.set(permissions)
-    if not user.groups.filter(pk=role.pk).exists():
-        user.groups.add(role)
-    if not user.is_staff:
-        user.is_staff = True
-        user.save(update_fields=["is_staff"])
-
-
 def _has_permission(user, codename):
-    if not user or not user.is_authenticated:
-        return False
-    if user.is_superuser:
-        return True
-    _ensure_administrator_role(user)
-    return user.has_perm(f"detector.{codename}")
-
+    return bool(user and user.is_authenticated and (user.is_superuser or user.is_staff or user.has_perm(f"detector.{codename}")))
 
 def _require_permission(request, codename, message):
     if _has_permission(request.user, codename):
@@ -152,37 +174,46 @@ def _require_permission(request, codename, message):
     return False
 
 
-def _admin_access(request, codename="can_manage_users"):
-    return request.user.is_authenticated and (request.user.is_superuser or _has_permission(request.user, codename) or _has_permission(request.user, "can_manage_settings"))
-
-
 @login_required
 def administration_utilisateur_supprimer(request, pk):
-    if not _admin_access(request, "can_manage_users"):
-        messages.error(request, "Votre profil ne dispose pas de l'accès à la gestion des utilisateurs.")
+    if not request.user.is_staff:
+        messages.error(request, "Accès réservé aux administrateurs.")
         return redirect("detector:dashboard")
-    User = get_user_model(); target = get_object_or_404(User, pk=pk)
+    User = get_user_model()
+    target = get_object_or_404(User, pk=pk)
     if target.pk == request.user.pk:
         messages.error(request, "Vous ne pouvez pas supprimer votre propre compte.")
-        return redirect("detector:administration_users")
+        return redirect("detector:administration")
     if request.method == "POST":
-        target.is_active = False; target.save(update_fields=["is_active"])
+        target.is_active = False
+        target.save(update_fields=["is_active"])
         messages.success(request, f"Le compte « {target.username} » a été désactivé.")
-        return redirect("detector:administration_users")
-    return render(request, "administration_utilisateur.html", {"target_user": target, "profile_form": AdminUserUpdateForm(instance=target), "groups": Group.objects.order_by("name"), "current_group": target.groups.first(), "delete_confirmation": True})
+        return redirect("detector:administration")
+    return render(request, "administration_utilisateur.html", {
+        "target_user": target,
+        "profile_form": AdminUserUpdateForm(instance=target),
+        "groups": Group.objects.order_by("name"),
+        "current_group": target.groups.first(),
+        "delete_confirmation": True,
+    })
 
 
 def _get_uploaded_docx(request):
-    for field_name in ("document", "tdr_document", "report_document", "file"):
+    candidates = ("document", "tdr_document", "report_document", "file")
+    for field_name in candidates:
         uploaded = request.FILES.get(field_name)
-        if uploaded and uploaded.name: return uploaded
+        if uploaded and uploaded.name:
+            return uploaded
     for uploaded in request.FILES.values():
-        if uploaded and uploaded.name: return uploaded
+        if uploaded and uploaded.name:
+            return uploaded
     return None
 
 
 def _validate_document(uploaded):
-    return bool(uploaded and uploaded.name and Path(uploaded.name).suffix.lower() in {".docx", ".pdf"})
+    if not uploaded or not uploaded.name:
+        return False
+    return Path(uploaded.name).suffix.lower() in {".docx", ".pdf"}
 
 
 def _document_content_type(uploaded):
@@ -192,332 +223,982 @@ def _document_content_type(uploaded):
 @login_required
 def dashboard(request):
     base = Analysis.objects.filter(user=request.user).order_by("-created_at")
-    q = request.GET.get("q", "").strip(); decision = request.GET.get("decision", "all"); mode = request.GET.get("mode", "all")
-    if q: base = base.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
-    if decision in ("SIMILAIRE", "DIFFERENT", "À EXAMINER"): base = base.filter(decision=decision)
-    if mode in ("duplicate", "plagiarism"): base = base.filter(mode=mode)
-    paginator = Paginator(base, 10); page_obj = paginator.get_page(request.GET.get("page", 1))
-    total = Analysis.objects.filter(user=request.user).count(); similar = Analysis.objects.filter(user=request.user, decision="SIMILAIRE").count(); different = Analysis.objects.filter(user=request.user, decision="DIFFERENT").count(); to_review = Analysis.objects.filter(user=request.user, decision="À EXAMINER").count(); tdr_checks = Analysis.objects.filter(user=request.user, mode="duplicate").count(); report_checks = Analysis.objects.filter(user=request.user, mode="plagiarism").count()
-    registry_total = StudyDocument.objects.count(); registry_tdr = StudyDocument.objects.filter(document_type="TDR").count(); registry_rapport = StudyDocument.objects.filter(document_type="RAPPORT").count(); has_admin = get_user_model().objects.filter(is_staff=True, is_active=True).exists()
-    return render(request, "dashboard.html", {"recent": page_obj.object_list, "page_obj": page_obj, "total_filtered": paginator.count, "q": q, "selected_decision": decision, "selected_mode": mode, "total": total, "similar": similar, "different": different, "to_review": to_review, "tdr_checks": tdr_checks, "report_checks": report_checks, "registry_total": registry_total, "registry_tdr": registry_tdr, "registry_rapport": registry_rapport, "has_admin": has_admin})
+    q = request.GET.get("q", "").strip()
+    decision = request.GET.get("decision", "all")
+    mode = request.GET.get("mode", "all")
+    if q:
+        base = base.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
+    if decision in ("SIMILAIRE", "SIMILARITÉ PARTIELLE", "DIFFERENT", "À EXAMINER"):
+        base = base.filter(decision=decision)
+    if mode in ("duplicate", "plagiarism"):
+        base = base.filter(mode=mode)
+    paginator = Paginator(base, 10)
+    page_obj = paginator.get_page(request.GET.get("page", 1))
+
+    total = Analysis.objects.filter(user=request.user).count()
+    similar = Analysis.objects.filter(user=request.user, decision="SIMILAIRE").count()
+    different = Analysis.objects.filter(user=request.user, decision="DIFFERENT").count()
+    to_review = Analysis.objects.filter(user=request.user, decision="À EXAMINER").count()
+    tdr_checks = Analysis.objects.filter(user=request.user, mode="duplicate").count()
+    report_checks = Analysis.objects.filter(user=request.user, mode="plagiarism").count()
+    registry_total = StudyDocument.objects.count()
+    registry_tdr = StudyDocument.objects.filter(document_type="TDR").count()
+    registry_rapport = StudyDocument.objects.filter(document_type="RAPPORT").count()
+    has_admin = get_user_model().objects.filter(is_staff=True, is_active=True).exists()
+    return render(request, "dashboard.html", {
+        "recent": page_obj.object_list, "page_obj": page_obj, "total_filtered": paginator.count,
+        "q": q, "selected_decision": decision, "selected_mode": mode,
+        "total": total, "similar": similar, "different": different, "to_review": to_review,
+        "tdr_checks": tdr_checks, "report_checks": report_checks,
+        "registry_total": registry_total, "registry_tdr": registry_tdr, "registry_rapport": registry_rapport,
+        "has_admin": has_admin,
+    })
+
 
 
 def _save_uploaded_document(uploaded):
-    media_root = Path(settings.MEDIA_ROOT) / "documents"; media_root.mkdir(parents=True, exist_ok=True); storage = FileSystemStorage(location=str(media_root)); uploaded.seek(0); saved_name = storage.save(uploaded.name, uploaded); uploaded.seek(0); return f"documents/{saved_name}"
+    """Conserve chaque document testé dans frontend/media/documents/."""
+    media_root = Path(settings.MEDIA_ROOT) / "documents"
+    media_root.mkdir(parents=True, exist_ok=True)
+    storage = FileSystemStorage(location=str(media_root))
+    uploaded.seek(0)
+    saved_name = storage.save(uploaded.name, uploaded)
+    uploaded.seek(0)
+    return f"documents/{saved_name}"
 
 
 def _document_url(relative_path):
-    if not relative_path: return ""
+    if not relative_path:
+        return ""
     return f"{settings.MEDIA_URL.rstrip('/')}/{relative_path.lstrip('/')}"
 
-
 def _safe_reference_path(document):
-    if not document or not document.file_path: return None
-    root = Path(settings.BASE_DIR).resolve().parent; candidate = (root / document.file_path).resolve()
-    try: candidate.relative_to(root)
-    except ValueError: return None
+    """Retourne le chemin absolu d'une référence uniquement si elle reste dans le projet."""
+    if not document or not document.file_path:
+        return None
+    root = Path(settings.BASE_DIR).resolve().parent
+    candidate = (root / document.file_path).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
     return candidate if candidate.is_file() else None
 
 
 @login_required
 def open_reference_document(request, pk):
-    document = get_object_or_404(StudyDocument, pk=pk, is_reference=True); path = _safe_reference_path(document)
+    """Ouvre/télécharge le document de référence depuis le registre."""
+    document = get_object_or_404(StudyDocument, pk=pk, is_reference=True)
+    path = _safe_reference_path(document)
     if not path:
-        messages.error(request, "Le fichier de référence n'est plus disponible."); return redirect("detector:dashboard")
+        messages.error(request, "Le fichier de référence n'est plus disponible.")
+        return redirect("detector:dashboard")
+
     content_type = "application/pdf" if path.suffix.lower() == ".pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    return FileResponse(path.open("rb"), as_attachment=False, filename=path.name, content_type=content_type)
+    return FileResponse(
+        path.open("rb"),
+        as_attachment=False,
+        filename=path.name,
+        content_type=content_type,
+    )
+
 
 
 def _read_saved_document(path):
-    if not path: return ""
+    """Lit un document sauvegardé uniquement pour les besoins internes."""
+    if not path:
+        return ""
     file_path = Path(settings.MEDIA_ROOT) / str(path).replace("/", os.sep)
-    if not file_path.exists() or file_path.suffix.lower() != ".docx": return ""
-    doc = DocxDocument(file_path); parts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    if not file_path.exists() or file_path.suffix.lower() != ".docx":
+        return ""
+    doc = DocxDocument(file_path)
+    parts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
     for table in doc.tables:
         for row in table.rows:
             cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-            if cells: parts.append(" | ".join(cells))
-    return "\n\n".join(parts)
-
+            if cells:
+                parts.append(" | ".join(cells))
+    return "\\n\\n".join(parts)
 
 def _read_document_from_corpus(filename, mode):
-    root = Path(settings.BASE_DIR).resolve().parent; folder = root / "donnees" / ("TDR" if mode == "duplicate" else "Rapport d'etude")
-    if not folder.exists(): return ""
+    """Recherche le document analysé dans le corpus et retourne son texte complet."""
+    root = Path(settings.BASE_DIR).resolve().parent
+    folder = root / "donnees" / ("TDR" if mode == "duplicate" else "Rapport d'etude")
+    if not folder.exists():
+        return ""
     target = Path(filename).name.strip().lower()
     for path in folder.rglob("*.docx"):
         if path.name.strip().lower() == target:
-            doc = DocxDocument(path); parts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+            doc = DocxDocument(path)
+            parts = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
             for table in doc.tables:
                 for row in table.rows:
                     cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                    if cells: parts.append(" | ".join(cells))
-            return "\n\n".join(parts)
+                    if cells:
+                        parts.append(" | ".join(cells))
+            return "\\n\\n".join(parts)
     return ""
 
 
+
 def _analysis_problem_passages(result):
-    passages=[]; seen=set()
+    """Retourne les passages du document candidat signalés par le moteur."""
+    passages = []
+    seen = set()
     for group in result.get("matches", []) or []:
         for match in group.get("matches", []) or []:
-            passage=(match.get("candidate_passage") or "").strip()
-            if passage and passage not in seen: seen.add(passage); passages.append(passage)
+            passage = (match.get("candidate_passage") or "").strip()
+            if passage and passage not in seen:
+                seen.add(passage)
+                passages.append(passage)
     return sorted(passages, key=len, reverse=True)
 
 
 def _normalized_with_map(text):
-    normalized=[]; positions=[]; previous_space=False
-    for index,char in enumerate(text or ""):
+    """Normalise le texte tout en conservant la correspondance avec les positions originales."""
+    normalized = []
+    positions = []
+    previous_space = False
+    for index, char in enumerate(text or ""):
         if char.isspace():
-            if not previous_space: normalized.append(" "); positions.append(index)
-            previous_space=True; continue
-        normalized.append(char.casefold()); positions.append(index); previous_space=False
-    while normalized and normalized[0]==" ": normalized.pop(0); positions.pop(0)
-    while normalized and normalized[-1]==" ": normalized.pop(); positions.pop()
+            if not previous_space:
+                normalized.append(" ")
+                positions.append(index)
+            previous_space = True
+            continue
+        normalized.append(char.casefold())
+        positions.append(index)
+        previous_space = False
+
+    while normalized and normalized[0] == " ":
+        normalized.pop(0)
+        positions.pop(0)
+    while normalized and normalized[-1] == " ":
+        normalized.pop()
+        positions.pop()
+
     return "".join(normalized), positions
 
 
 def _highlight_text_runs(paragraph, passages):
-    text=paragraph.text
-    if not text or not passages: return
-    normalized_text,positions=_normalized_with_map(text); fragments=[]
+    """Colorie les portions réellement retrouvées dans le paragraphe Word."""
+    text = paragraph.text
+    if not text or not passages:
+        return
+
+    normalized_text, positions = _normalized_with_map(text)
+    fragments = []
+
+    # Les passages du moteur peuvent couvrir plusieurs paragraphes Word.
+    # On recherche donc aussi leurs phrases/fragments à l'intérieur de chaque
+    # paragraphe, plutôt que d'exiger que tout le passage soit sur une seule ligne.
     for passage in passages:
-        normalized_passage,_=_normalized_with_map(passage)
-        if not normalized_passage: continue
-        candidates=[normalized_passage]
+        normalized_passage, _ = _normalized_with_map(passage)
+        if not normalized_passage:
+            continue
+
+        candidates = [normalized_passage]
         for fragment in re.split(r"[.!?;:]+", passage):
-            fragment_norm,_=_normalized_with_map(fragment)
-            if len(fragment_norm)>=45: candidates.append(fragment_norm)
-        if len(normalized_passage)>140:
-            for start in range(0,len(normalized_passage)-59,60):
-                chunk=normalized_passage[start:start+100].strip()
-                if len(chunk)>=45: candidates.append(chunk)
+            fragment_norm, _ = _normalized_with_map(fragment)
+            if len(fragment_norm) >= 45:
+                candidates.append(fragment_norm)
+
+        # Fragments de secours pour les passages très longs ou coupés entre
+        # plusieurs paragraphes.
+        if len(normalized_passage) > 140:
+            for start in range(0, len(normalized_passage) - 59, 60):
+                chunk = normalized_passage[start:start + 100].strip()
+                if len(chunk) >= 45:
+                    candidates.append(chunk)
+
         for candidate in candidates:
-            start=0
+            start = 0
             while candidate:
-                index=normalized_text.find(candidate,start)
-                if index<0: break
-                end=index+len(candidate)-1
-                if index<len(positions) and end<len(positions): fragments.append((positions[index],positions[end]+1))
-                start=index+max(1,len(candidate))
-    if not fragments: return
-    fragments.sort(); merged=[]
-    for start,end in fragments:
-        if not merged or start>merged[-1][1]: merged.append([start,end])
-        else: merged[-1][1]=max(merged[-1][1],end)
-    for run in list(paragraph.runs): run._element.getparent().remove(run._element)
-    cursor=0
-    for start,end in merged:
-        if start>cursor: paragraph.add_run(text[cursor:start])
-        run=paragraph.add_run(text[start:end]); run.font.color.rgb=RGBColor(0xC0,0x00,0x00); run.bold=True; cursor=end
-    if cursor<len(text): paragraph.add_run(text[cursor:])
+                index = normalized_text.find(candidate, start)
+                if index < 0:
+                    break
+                end = index + len(candidate) - 1
+                if index < len(positions) and end < len(positions):
+                    fragments.append((positions[index], positions[end] + 1))
+                start = index + max(1, len(candidate))
+
+    if not fragments:
+        return
+
+    fragments.sort()
+    merged = []
+    for start, end in fragments:
+        if not merged or start > merged[-1][1]:
+            merged.append([start, end])
+        else:
+            merged[-1][1] = max(merged[-1][1], end)
+
+    for run in list(paragraph.runs):
+        run._element.getparent().remove(run._element)
+
+    cursor = 0
+    for start, end in merged:
+        if start > cursor:
+            paragraph.add_run(text[cursor:start])
+        run = paragraph.add_run(text[start:end])
+        run.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
+        run.bold = True
+        cursor = end
+
+    if cursor < len(text):
+        paragraph.add_run(text[cursor:])
 
 
 def _highlight_docx(path, passages):
-    document=DocxDocument(path)
-    for paragraph in document.paragraphs: _highlight_text_runs(paragraph, passages)
+    """Crée une copie Word annotée sans modifier le fichier original."""
+    document = DocxDocument(path)
+    for paragraph in document.paragraphs:
+        _highlight_text_runs(paragraph, passages)
     for table in document.tables:
         for row in table.rows:
             for cell in row.cells:
-                for paragraph in cell.paragraphs: _highlight_text_runs(paragraph, passages)
-    output=BytesIO(); document.save(output); output.seek(0); return output
+                for paragraph in cell.paragraphs:
+                    _highlight_text_runs(paragraph, passages)
+
+    output = BytesIO()
+    document.save(output)
+    output.seek(0)
+    return output
 
 
 def _pdf_text(path):
-    reader=PdfReader(str(path)); return "\n\n".join((page.extract_text() or "").strip() for page in reader.pages if (page.extract_text() or "").strip())
+    reader = PdfReader(str(path))
+    return "\n\n".join(
+        (page.extract_text() or "").strip()
+        for page in reader.pages
+        if (page.extract_text() or "").strip()
+    )
 
 
 def _highlight_pdf(path, passages, title):
+    """Crée un PDF texte annoté en rouge à partir du document analysé."""
     from xml.sax.saxutils import escape
-    output=BytesIO(); doc=SimpleDocTemplate(output,pagesize=A4,rightMargin=42,leftMargin=42,topMargin=42,bottomMargin=42,title=title)
-    normal=ParagraphStyle("AnnotatedNormal",fontName="Helvetica",fontSize=9.5,leading=13,alignment=TA_LEFT,spaceAfter=8); title_style=ParagraphStyle("AnnotatedTitle",parent=normal,fontSize=14,leading=18,spaceAfter=16)
-    story=[Paragraph(escape("TDRDOC-SCAN — Document analysé avec passages signalés"),title_style)]
-    text=_pdf_text(path)
-    for block in re.split(r"\n{2,}",text):
-        block=block.strip()
-        if not block: continue
-        cursor=0; matches=[]
+
+    output = BytesIO()
+    doc = SimpleDocTemplate(
+        output,
+        pagesize=A4,
+        rightMargin=42,
+        leftMargin=42,
+        topMargin=42,
+        bottomMargin=42,
+        title=title,
+    )
+    normal = ParagraphStyle(
+        "AnnotatedNormal",
+        fontName="Helvetica",
+        fontSize=9.5,
+        leading=13,
+        alignment=TA_LEFT,
+        spaceAfter=8,
+    )
+    title_style = ParagraphStyle(
+        "AnnotatedTitle",
+        parent=normal,
+        fontSize=14,
+        leading=18,
+        spaceAfter=16,
+    )
+    story = [
+        Paragraph(
+            escape("TDRDOC-SCAN — Document analysé avec passages signalés"),
+            title_style,
+        )
+    ]
+
+    text = _pdf_text(path)
+    for block in re.split(r"\n{2,}", text):
+        block = block.strip()
+        if not block:
+            continue
+
+        cursor = 0
+        matches = []
         for passage in passages:
-            start=0
+            start = 0
             while True:
-                index=block.find(passage,start)
-                if index<0: break
-                matches.append((index,index+len(passage))); start=index+len(passage)
-        matches.sort(); merged=[]
-        for start,end in matches:
-            if not merged or start>merged[-1][1]: merged.append([start,end])
-            else: merged[-1][1]=max(merged[-1][1],end)
-        pieces=[]
-        for start,end in merged:
-            if start>cursor: pieces.append(escape(block[cursor:start]))
-            pieces.append(f'<font color="#C00000"><b>{escape(block[start:end])}</b></font>'); cursor=end
-        if cursor<len(block): pieces.append(escape(block[cursor:]))
-        story.append(Paragraph("".join(pieces),normal))
-    doc.build(story); output.seek(0); return output
+                index = block.find(passage, start)
+                if index < 0:
+                    break
+                matches.append((index, index + len(passage)))
+                start = index + len(passage)
+
+        matches.sort()
+        merged = []
+        for start, end in matches:
+            if not merged or start > merged[-1][1]:
+                merged.append([start, end])
+            else:
+                merged[-1][1] = max(merged[-1][1], end)
+
+        pieces = []
+        for start, end in merged:
+            if start > cursor:
+                pieces.append(escape(block[cursor:start]))
+            pieces.append(f'<font color="#C00000"><b>{escape(block[start:end])}</b></font>')
+            cursor = end
+        if cursor < len(block):
+            pieces.append(escape(block[cursor:]))
+
+        story.append(Paragraph("".join(pieces), normal))
+
+    doc.build(story)
+    output.seek(0)
+    return output
 
 
 @login_required
 def download_annotated_document(request, pk):
-    if not _require_permission(request,"can_view_history","Votre profil ne dispose pas de l'accès à l'historique."): return redirect("detector:dashboard")
-    analysis=get_object_or_404(Analysis,pk=pk,user=request.user); result=analysis.result_json or {}; uploaded_path=result.get("uploaded_path","")
-    if not uploaded_path: messages.error(request,"Le document original de cette analyse n'est plus disponible."); return redirect("detector:analysis_detail",pk=analysis.pk)
-    path=(Path(settings.MEDIA_ROOT)/str(uploaded_path).replace("/",os.sep)).resolve(); media_root=Path(settings.MEDIA_ROOT).resolve()
-    try: path.relative_to(media_root)
-    except ValueError: messages.error(request,"Le fichier demandé n'est pas autorisé."); return redirect("detector:analysis_detail",pk=analysis.pk)
-    if not path.is_file(): messages.error(request,"Le document original de cette analyse n'est plus disponible."); return redirect("detector:analysis_detail",pk=analysis.pk)
-    passages=_analysis_problem_passages(result); stem=path.stem
-    if path.suffix.lower()==".docx":
-        output=_highlight_docx(path,passages); return FileResponse(output,as_attachment=True,filename=f"{stem}_passages_signales.docx",content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-    if path.suffix.lower()==".pdf":
-        output=_highlight_pdf(path,passages,f"{stem}_passages_signales"); return FileResponse(output,as_attachment=True,filename=f"{stem}_passages_signales.pdf",content_type="application/pdf")
-    messages.error(request,"Format de document non pris en charge."); return redirect("detector:analysis_detail",pk=analysis.pk)
+    """Télécharge le document analysé avec les passages problématiques en rouge."""
+    analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
+    result = analysis.result_json or {}
+    uploaded_path = result.get("uploaded_path", "")
+    if not uploaded_path:
+        messages.error(request, "Le document original de cette analyse n'est plus disponible.")
+        return redirect("detector:analysis_detail", pk=analysis.pk)
+
+    path = (Path(settings.MEDIA_ROOT) / str(uploaded_path).replace("/", os.sep)).resolve()
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    try:
+        path.relative_to(media_root)
+    except ValueError:
+        messages.error(request, "Le fichier demandé n'est pas autorisé.")
+        return redirect("detector:analysis_detail", pk=analysis.pk)
+
+    if not path.is_file():
+        messages.error(request, "Le document original de cette analyse n'est plus disponible.")
+        return redirect("detector:analysis_detail", pk=analysis.pk)
+
+    passages = _analysis_problem_passages(result)
+    stem = path.stem
+
+    if path.suffix.lower() == ".docx":
+        output = _highlight_docx(path, passages)
+        return FileResponse(
+            output,
+            as_attachment=True,
+            filename=f"{stem}_passages_signales.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+
+    if path.suffix.lower() == ".pdf":
+        output = _highlight_pdf(path, passages, f"{stem}_passages_signales")
+        return FileResponse(
+            output,
+            as_attachment=True,
+            filename=f"{stem}_passages_signales.pdf",
+            content_type="application/pdf",
+        )
+
+    messages.error(request, "Format de document non pris en charge.")
+    return redirect("detector:analysis_detail", pk=analysis.pk)
 
 
 @login_required
 def analysis_detail(request, pk):
-    if not _require_permission(request,"can_view_history","Votre profil ne dispose pas de l'accès à l'historique."): return redirect("detector:dashboard")
-    analysis=get_object_or_404(Analysis,pk=pk,user=request.user); result=analysis.result_json or {}; uploaded_path=result.get("uploaded_path","")
-    return render(request,"analysis_detail.html",{"analysis":analysis,"result":result,"document_url":_document_url(uploaded_path),"document_path":uploaded_path})
+    analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
+    result = analysis.result_json or {}
+
+    # Anciennes analyses : masquer les libellés internes de rang que Qwen a parfois
+    # repris dans son texte, sans modifier le résultat enregistré ni les titres des fichiers.
+    rag = result.get("rag_analysis")
+    if isinstance(rag, dict):
+        def clean_reference_labels(value):
+            if not isinstance(value, str):
+                return value
+            value = re.sub(
+                r"(?i)\b(?:les\s+)?TDR\s+des\s+candidats de recherche\s+1\s+et\s+2\b",
+                "les documents de référence examinés",
+                value,
+            )
+            value = re.sub(
+                r"(?i)\bcandidats de recherche\s+1\s+et\s+2\b",
+                "documents de référence examinés",
+                value,
+            )
+            value = re.sub(
+                r"(?i)\bTDR\s+1\s+et\s+2\b",
+                "documents de référence examinés",
+                value,
+            )
+            return value
+
+        for key in ("explanation", "recommendation"):
+            if key in rag:
+                rag[key] = clean_reference_labels(rag[key])
+        for key in ("common_points", "differences", "evidence_from_reference"):
+            if isinstance(rag.get(key), list):
+                rag[key] = [clean_reference_labels(item) for item in rag[key]]
+        if isinstance(rag.get("evidence"), list):
+            for item in rag["evidence"]:
+                if isinstance(item, dict):
+                    for key in ("point", "justification"):
+                        if key in item:
+                            item[key] = clean_reference_labels(item[key])
+
+    uploaded_path = result.get("uploaded_path", "")
+    return render(request, "analysis_detail.html", {
+        "analysis": analysis,
+        "result": result,
+        "document_url": _document_url(uploaded_path),
+        "document_path": uploaded_path,
+    })
 
 
 @login_required
 def reception(request):
-    if not _require_permission(request,"can_verify_tdr","Votre profil ne dispose pas de l'accès à la vérification des TDR."): return redirect("detector:dashboard")
-    if request.method=="GET": return render(request,"reception.html")
-    mode=request.POST.get("mode","tdr"); uploaded=_get_uploaded_docx(request)
-    if not _validate_document(uploaded): messages.error(request,"Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide."); return redirect("detector:reception")
-    uploaded_path=_save_uploaded_document(uploaded)
+    if not _require_permission(request, "can_verify_tdr", "Votre profil ne dispose pas de l'accès à la vérification des TDR."):
+        return redirect("detector:dashboard")
+    if request.method == "GET":
+        return render(request, "reception.html")
+    mode = request.POST.get("mode", "tdr")
+    uploaded = _get_uploaded_docx(request)
+    if not _validate_document(uploaded):
+        messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
+        return redirect("detector:reception")
+    uploaded_path = _save_uploaded_document(uploaded)
+    if mode not in ("tdr", "report"):
+        messages.error(request, "Type de contrôle invalide.")
+        return redirect("detector:reception")
+
+    # Qwen arbitre les TDR via RAG : aucun seuil de similarité n'est demandé.
+    data = {}
+    if mode == "report":
+        try:
+            threshold = float(request.POST.get("threshold", "")) / 100.0
+            if not 0.01 <= threshold <= 1.0:
+                raise ValueError
+        except (TypeError, ValueError):
+            messages.error(request, "Le seuil du rapport doit être compris entre 1 % et 100 %.")
+            return redirect("detector:reception")
+        data["threshold"] = threshold
+
+    # Le contrôle du TDR passe par le même moteur RAG que la page dédiée ; le rapport garde son moteur de plagiat.
+    endpoint = "/api/tdr-rag/analyze" if mode == "tdr" else "/api/detect/plagiarism"
+    start = time.perf_counter()
     try:
-        threshold=float(request.POST.get("threshold",""))/100.0
-        if not 0.01<=threshold<=1.0: raise ValueError
-    except (TypeError,ValueError): messages.error(request,"Le seuil doit être compris entre 1 % et 100 %."); return redirect("detector:reception")
-    endpoint="/api/detect/duplicate" if mode=="tdr" else "/api/detect/plagiarism"; start=time.perf_counter()
-    try:
-        response=requests.post(f"{settings.FASTAPI_URL}{endpoint}",data={"threshold":threshold},files={"file":(uploaded.name,uploaded.file,uploaded.content_type or _document_content_type(uploaded))},timeout=600); response.raise_for_status(); result=response.json(); result["uploaded_path"]=uploaded_path; duration=round((time.perf_counter()-start)*1000); result["duration_ms"]=duration
-        analysis=Analysis.objects.create(user=request.user,document_name=uploaded.name,mode="duplicate" if mode=="tdr" else "plagiarism",decision=result.get("decision",""),hybrid_score=result.get("hybrid_score"),semantic_score=result.get("semantic_score"),tfidf_score=result.get("tfidf_score"),novelty_score=result.get("novelty_score"),result_json=result,duration_ms=duration)
-        request.session["last_result"]=result; request.session["last_analysis_id"]=analysis.id; request.session["last_document_name"]=uploaded.name
-        if mode=="tdr" and result.get("decision")=="DIFFERENT": request.session["validated_tdr_name"]=uploaded.name; messages.success(request,"TDR accepté : aucune similarité suffisante n'a été trouvée. Le document n'a pas été ajouté automatiquement au registre."); return redirect("detector:reception")
-        if mode=="tdr" and result.get("decision")=="SIMILAIRE": messages.error(request,"TDR non retenu : un document similaire existe déjà dans la base.")
-        else: messages.info(request,"Rapport analysé. Consultez le détail des résultats.")
+        upload_payload = {"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))}
+        if mode == "duplicate":
+            response = requests.post(
+                f"{settings.FASTAPI_URL}{endpoint}",
+                files=upload_payload,
+                timeout=1800,
+            )
+        else:
+            response = requests.post(
+                f"{settings.FASTAPI_URL}{endpoint}",
+                data=data,
+                files=upload_payload,
+                timeout=600,
+            )
+        response.raise_for_status()
+        result = response.json()
+        result["uploaded_path"] = uploaded_path
+        duration = round((time.perf_counter() - start) * 1000)
+        result["duration_ms"] = duration
+        analysis = Analysis.objects.create(
+            user=request.user, document_name=uploaded.name,
+            mode="duplicate" if mode == "tdr" else "plagiarism",
+            decision=result.get("decision", ""), hybrid_score=result.get("hybrid_score"),
+            semantic_score=result.get("semantic_score"), tfidf_score=result.get("tfidf_score"),
+            novelty_score=result.get("novelty_score"), result_json=result, duration_ms=duration,
+        )
+        request.session["last_result"] = result
+        request.session["last_analysis_id"] = analysis.id
+        request.session["last_document_name"] = uploaded.name
+        if mode == "tdr" and result.get("decision") == "DIFFERENT":
+            # Le verdict reste distinct selon le cas : une autre zone peut
+            # partager les objectifs sans constituer le même TDR.
+            request.session["validated_tdr_name"] = uploaded.name
+            case_id = (result.get("rag_analysis") or {}).get("case_id")
+            if case_id == "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE":
+                messages.success(request, "Le TDR porte sur une zone différente d'une étude aux objectifs comparables. Consultez le verdict détaillé avant de poursuivre.")
+            else:
+                messages.success(request, "Aucune référence suffisamment pertinente n'a été retenue par Qwen. Le TDR n'a pas été ajouté automatiquement au registre.")
+            return redirect("detector:reception")
+        if mode == "tdr" and result.get("decision") == "SIMILAIRE":
+            messages.error(request, "TDR non retenu : Qwen a identifié une étude correspondant essentiellement au même sujet.")
+        elif mode == "tdr" and result.get("decision") == "SIMILARITÉ PARTIELLE":
+            messages.warning(request, "Des ressemblances importantes ont été identifiées. Consultez le détail et vérifiez les différences avant de conclure.")
+        elif mode == "report":
+            messages.info(request, "Rapport analysé. Consultez le détail des résultats.")
         return redirect("detector:resultats")
-    except requests.RequestException as exc: messages.error(request,f"Le moteur d'analyse est indisponible : {exc}")
+    except requests.RequestException as exc:
+        response = getattr(exc, "response", None)
+        detail = None
+        if response is not None:
+            try:
+                payload = response.json()
+                detail = payload.get("detail", payload)
+                if isinstance(detail, dict):
+                    detail = detail.get("message") or detail.get("error") or str(detail)
+            except (ValueError, AttributeError):
+                detail = None
+        if detail:
+            messages.error(request, f"Analyse non terminée : {detail}")
+        else:
+            messages.error(request, f"Le moteur d'analyse est indisponible : {exc}")
     return redirect("detector:reception")
+
 
 
 @login_required
 def upload_report_for_tdr(request, pk):
-    if not _require_permission(request,"can_analyze_report","Votre profil ne dispose pas de l'accès à l'analyse des rapports."): return redirect("detector:dashboard")
-    tdr=get_object_or_404(Analysis,pk=pk,user=request.user,mode="duplicate",decision="DIFFERENT")
-    if request.method=="GET": return render(request,"report_upload.html",{"tdr":tdr})
-    uploaded=_get_uploaded_docx(request)
-    if not _validate_document(uploaded): messages.error(request,"Veuillez sélectionner un rapport Word (.docx) ou PDF (.pdf) valide."); return redirect("detector:upload_report_for_tdr",pk=tdr.pk)
-    uploaded_path=_save_uploaded_document(uploaded)
+    if not _require_permission(request, "can_analyze_report", "Votre profil ne dispose pas de l'accès à l'analyse des rapports."):
+        return redirect("detector:dashboard")
+    tdr = get_object_or_404(Analysis, pk=pk, user=request.user, mode="duplicate", decision="DIFFERENT")
+    if request.method == "GET":
+        return render(request, "report_upload.html", {"tdr": tdr})
+    uploaded = _get_uploaded_docx(request)
+    if not _validate_document(uploaded):
+        messages.error(request, "Veuillez sélectionner un rapport Word (.docx) ou PDF (.pdf) valide.")
+        return redirect("detector:upload_report_for_tdr", pk=tdr.pk)
+    uploaded_path = _save_uploaded_document(uploaded)
     try:
-        threshold=float(request.POST.get("threshold",""))/100.0
-        if not 0.01<=threshold<=1.0: raise ValueError
-    except (TypeError,ValueError): messages.error(request,"Le seuil doit être compris entre 1 % et 100 %."); return redirect("detector:upload_report_for_tdr",pk=tdr.pk)
-    start=time.perf_counter()
+        threshold = float(request.POST.get("threshold", "")) / 100.0
+        if not 0.01 <= threshold <= 1.0:
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
+        return redirect("detector:upload_report_for_tdr", pk=tdr.pk)
+    start = time.perf_counter()
     try:
-        response=requests.post(f"{settings.FASTAPI_URL}/api/detect/plagiarism",data={"threshold":threshold},files={"file":(uploaded.name,uploaded.file,uploaded.content_type or _document_content_type(uploaded))},timeout=600); response.raise_for_status(); result=response.json(); result["uploaded_path"]=uploaded_path; result["linked_tdr_analysis_id"]=tdr.id; result["linked_tdr_name"]=tdr.document_name; duration=round((time.perf_counter()-start)*1000); result["duration_ms"]=duration
-        report_analysis=Analysis.objects.create(user=request.user,document_name=uploaded.name,mode="plagiarism",decision=result.get("decision",""),hybrid_score=result.get("hybrid_score"),semantic_score=result.get("semantic_score"),tfidf_score=result.get("tfidf_score"),novelty_score=result.get("novelty_score"),result_json=result,duration_ms=duration)
-        request.session["last_result"]=result; request.session["last_analysis_id"]=report_analysis.id; request.session["last_document_name"]=uploaded.name; messages.success(request,"Rapport associé au TDR et analysé avec succès."); return redirect("detector:resultats")
-    except requests.RequestException as exc: messages.error(request,f"Le moteur d'analyse est indisponible : {exc}"); return redirect("detector:upload_report_for_tdr",pk=tdr.pk)
-
+        response = requests.post(
+            f"{settings.FASTAPI_URL}/api/detect/plagiarism",
+            data={"threshold": threshold},
+            files={"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))},
+            timeout=600,
+        )
+        response.raise_for_status()
+        result = response.json()
+        # Le rapport est un candidat de comparaison : son analyse est
+        # conservée dans l'historique, sans enrichissement automatique du registre.
+        result["uploaded_path"] = uploaded_path
+        result["linked_tdr_analysis_id"] = tdr.id
+        result["linked_tdr_name"] = tdr.document_name
+        duration = round((time.perf_counter() - start) * 1000)
+        result["duration_ms"] = duration
+        analysis = Analysis.objects.create(
+            user=request.user, document_name=uploaded.name, mode="plagiarism",
+            decision=result.get("decision", ""), hybrid_score=result.get("hybrid_score"),
+            semantic_score=result.get("semantic_score"), tfidf_score=result.get("tfidf_score"),
+            novelty_score=result.get("novelty_score"), result_json=result, duration_ms=duration,
+        )
+        request.session["last_result"] = result
+        request.session["last_analysis_id"] = analysis.id
+        request.session["last_document_name"] = uploaded.name
+        messages.success(request, "Rapport associé au TDR et analysé avec succès.")
+        return redirect("detector:resultats")
+    except requests.RequestException as exc:
+        messages.error(request, f"Le moteur d'analyse est indisponible : {exc}")
+        return redirect("detector:upload_report_for_tdr", pk=tdr.pk)
 
 @login_required
 def analyser(request):
-    if not _require_permission(request,"can_analyze_report","Votre profil ne dispose pas de l'accès à l'analyse des rapports."): return redirect("detector:dashboard")
-    if request.method!="POST": return render(request,"analyser.html")
-    uploaded=_get_uploaded_docx(request); mode=request.POST.get("mode","plagiarism")
-    if mode not in ("plagiarism","duplicate"): messages.error(request,"Mode d'analyse invalide."); return redirect("detector:analyser")
-    if not _validate_document(uploaded): messages.error(request,"Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide."); return redirect("detector:analyser")
-    uploaded_path=_save_uploaded_document(uploaded)
+    if not _require_permission(request, "can_analyze_report", "Votre profil ne dispose pas de l'accès à l'analyse des rapports."):
+        return redirect("detector:dashboard")
+    if request.method != "POST":
+        return render(request, "analyser.html")
+    uploaded = _get_uploaded_docx(request)
+    mode = request.POST.get("mode", "plagiarism")
+    if mode not in ("plagiarism", "duplicate"):
+        messages.error(request, "Mode d'analyse invalide.")
+        return redirect("detector:analyser")
+    if not _validate_document(uploaded):
+        messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
+        return redirect("detector:analyser")
+    uploaded_path = _save_uploaded_document(uploaded)
+    # Le verdict TDR est arbitré par le moteur RAG/LLM, pas par un seuil utilisateur.
+    # Le seuil reste configurable uniquement pour le contrôle de plagiat des rapports.
+    data = {}
+    if mode == "plagiarism":
+        try:
+            threshold = float(request.POST.get("threshold", "")) / 100.0
+            if not 0.01 <= threshold <= 1.0:
+                raise ValueError
+        except (TypeError, ValueError):
+            messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
+            return redirect("detector:analyser")
+        data["threshold"] = threshold
+    # Tous les contrôles de TDR utilisent le moteur RAG complet ; le contrôle des rapports reste inchangé.
+    endpoint = "/api/tdr-rag/analyze" if mode == "duplicate" else "/api/detect/plagiarism"
+    start = time.perf_counter()
     try:
-        threshold=float(request.POST.get("threshold",""))/100.0
-        if not 0.01<=threshold<=1.0: raise ValueError
-    except (TypeError,ValueError): messages.error(request,"Le seuil doit être compris entre 1 % et 100 %."); return redirect("detector:analyser")
-    endpoint="/api/detect/duplicate" if mode=="duplicate" else "/api/detect/plagiarism"; start=time.perf_counter()
-    try:
-        response=requests.post(f"{settings.FASTAPI_URL}{endpoint}",data={"threshold":threshold},files={"file":(uploaded.name,uploaded.file,uploaded.content_type or _document_content_type(uploaded))},timeout=600); response.raise_for_status(); result=response.json(); result["uploaded_path"]=uploaded_path; duration=round((time.perf_counter()-start)*1000); result["duration_ms"]=duration
-        analysis=Analysis.objects.create(user=request.user,document_name=uploaded.name,mode=mode,decision=result.get("decision",""),hybrid_score=result.get("hybrid_score"),semantic_score=result.get("semantic_score"),tfidf_score=result.get("tfidf_score"),novelty_score=result.get("novelty_score"),result_json=result,duration_ms=duration)
-        request.session["last_result"]=result; request.session["last_analysis_id"]=analysis.id; request.session["last_document_name"]=uploaded.name; return redirect("detector:resultats")
-    except requests.RequestException as exc: messages.error(request,f"Le moteur FastAPI est indisponible : {exc}")
-    except Exception as exc: messages.error(request,f"Erreur pendant l'analyse : {exc}")
-    return render(request,"analyser.html")
+        upload_payload = {"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))}
+        if mode == "tdr":
+            response = requests.post(
+                f"{settings.FASTAPI_URL}{endpoint}",
+                files=upload_payload,
+                timeout=1800,
+            )
+        else:
+            response = requests.post(
+                f"{settings.FASTAPI_URL}{endpoint}",
+                data=data,
+                files=upload_payload,
+                timeout=600,
+            )
+        response.raise_for_status()
+        result = response.json()
+        result["uploaded_path"] = uploaded_path
+        duration = round((time.perf_counter() - start) * 1000)
+        result["duration_ms"] = duration
+        analysis = Analysis.objects.create(
+            user=request.user, document_name=uploaded.name, mode=mode,
+            decision=result.get("decision", ""), hybrid_score=result.get("hybrid_score"),
+            semantic_score=result.get("semantic_score"), tfidf_score=result.get("tfidf_score"),
+            novelty_score=result.get("novelty_score"), result_json=result, duration_ms=duration,
+        )
+        request.session["last_result"] = result
+        request.session["last_analysis_id"] = analysis.id
+        request.session["last_document_name"] = uploaded.name
+        if mode == "duplicate":
+            return redirect("detector:analysis_detail", pk=analysis.pk)
+        return redirect("detector:resultats")
+    except requests.RequestException as exc:
+        response = getattr(exc, "response", None)
+        detail = None
+        if response is not None:
+            try:
+                payload = response.json()
+                detail = payload.get("detail", payload)
+                if isinstance(detail, dict):
+                    detail = detail.get("message") or detail.get("error") or str(detail)
+            except (ValueError, AttributeError):
+                detail = None
+        if detail:
+            messages.error(request, f"Analyse non terminée : {detail}")
+        else:
+            messages.error(request, f"Le moteur FastAPI est indisponible : {exc}")
+    except Exception as exc:
+        messages.error(request, f"Erreur pendant l'analyse : {exc}")
+    return render(request, "analyser.html")
 
 
 @login_required
 def delete_analysis(request, pk):
-    if not _require_permission(request,"can_view_history","Votre profil ne dispose pas de l'accès à l'historique."): return redirect("detector:dashboard")
-    analysis=get_object_or_404(Analysis,pk=pk,user=request.user)
-    if request.method!="POST": return render(request,"analysis_delete_confirm.html",{"analysis":analysis})
-    uploaded_path=(analysis.result_json or {}).get("uploaded_path","")
+    """Supprime une analyse de l'historique de l'utilisateur et son fichier testé."""
+    if not _require_permission(request, "can_view_history", "Votre profil ne dispose pas de l'accès à l'historique."):
+        return redirect("detector:dashboard")
+
+    analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
+
+    if request.method != "POST":
+        return render(request, "analysis_delete_confirm.html", {"analysis": analysis})
+
+    uploaded_path = (analysis.result_json or {}).get("uploaded_path", "")
     if uploaded_path:
-        path=(Path(settings.MEDIA_ROOT)/str(uploaded_path).replace("/",os.sep)).resolve(); media_root=Path(settings.MEDIA_ROOT).resolve()
-        try: path.relative_to(media_root); path.unlink() if path.is_file() else None
-        except (ValueError,OSError): pass
-    analysis.delete(); messages.success(request,"L'analyse a été supprimée de votre historique."); return redirect("detector:resultats")
+        path = (Path(settings.MEDIA_ROOT) / str(uploaded_path).replace("/", os.sep)).resolve()
+        media_root = Path(settings.MEDIA_ROOT).resolve()
+        try:
+            path.relative_to(media_root)
+            if path.is_file():
+                path.unlink()
+        except (ValueError, OSError):
+            pass
+
+    analysis.delete()
+    messages.success(request, "L'analyse a été supprimée de votre historique.")
+    return redirect("detector:resultats")
 
 
 @login_required
 def resultats(request):
-    if not _require_permission(request,"can_view_history","Votre profil ne dispose pas de l'accès à l'historique."): return redirect("detector:dashboard")
-    analyses=Analysis.objects.filter(user=request.user).order_by("-created_at"); q=request.GET.get("q","").strip(); decision=request.GET.get("decision","all"); mode=request.GET.get("mode","all")
-    if q: analyses=analyses.filter(Q(document_name__icontains=q)|Q(result_json__best_source__icontains=q))
-    if decision in ("SIMILAIRE","DIFFERENT","À EXAMINER"): analyses=analyses.filter(decision=decision)
-    if mode in ("duplicate","plagiarism"): analyses=analyses.filter(mode=mode)
-    paginator=Paginator(analyses,10); page_obj=paginator.get_page(request.GET.get("page",1))
-    return render(request,"resultats.html",{"analyses":page_obj.object_list,"page_obj":page_obj,"total_filtered":paginator.count,"q":q,"selected_decision":decision,"selected_mode":mode})
+    if not _require_permission(request, "can_view_history", "Votre profil ne dispose pas de l'accès à l'historique."):
+        return redirect("detector:dashboard")
+    """Historique complet des analyses de l'utilisateur, avec filtres et pagination."""
+    analyses = Analysis.objects.filter(user=request.user).order_by("-created_at")
+    q = request.GET.get("q", "").strip()
+    decision = request.GET.get("decision", "all")
+    mode = request.GET.get("mode", "all")
+    if q:
+        analyses = analyses.filter(Q(document_name__icontains=q) | Q(result_json__best_source__icontains=q))
+    if decision in ("SIMILAIRE", "SIMILARITÉ PARTIELLE", "DIFFERENT", "À EXAMINER"):
+        analyses = analyses.filter(decision=decision)
+    if mode in ("duplicate", "plagiarism"):
+        analyses = analyses.filter(mode=mode)
+    paginator = Paginator(analyses, 10)
+    page_obj = paginator.get_page(request.GET.get("page", 1))
+    return render(request, "resultats.html", {
+        "analyses": page_obj.object_list,
+        "page_obj": page_obj,
+        "total_filtered": paginator.count,
+        "q": q,
+        "selected_decision": decision,
+        "selected_mode": mode,
+    })
 
 
 @login_required
 def export_excel(request):
-    if not _require_permission(request,"can_export_results","Votre profil ne dispose pas de l'accès aux exports."): return redirect("detector:dashboard")
-    analysis=Analysis.objects.filter(user=request.user).order_by("-created_at").first()
-    if not analysis: return HttpResponse("Aucune analyse à exporter.",status=404)
-    result=analysis.result_json or {}; wb=Workbook(); ws=wb.active; ws.title="Analyse"
-    for row in [["Détecteur documentaire","DOCSEC"],["Document",analysis.document_name],["Mode",analysis.get_mode_display()],["Décision",analysis.decision],["Score TF-IDF",analysis.tfidf_score],["Score sémantique",analysis.semantic_score],["Score hybride",analysis.hybrid_score],["Score de nouveauté",analysis.novelty_score],["Durée (ms)",analysis.duration_ms],["Document de comparaison",result.get("best_source","")]]: ws.append(row)
-    response=HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"); response["Content-Disposition"]='attachment; filename="rapport_analyse.xlsx"'; wb.save(response); return response
+    if not _require_permission(request, "can_export_results", "Votre profil ne dispose pas de l'accès aux exports."):
+        return redirect("detector:dashboard")
+    analysis = Analysis.objects.filter(user=request.user).order_by("-created_at").first()
+    if not analysis:
+        return HttpResponse("Aucune analyse à exporter.", status=404)
+    result = analysis.result_json or {}
+    wb = Workbook(); ws = wb.active; ws.title = "Analyse"
+    for row in [["Détecteur documentaire", "DOCSEC"], ["Document", analysis.document_name], ["Mode", analysis.get_mode_display()], ["Décision", analysis.decision], ["Score TF-IDF", analysis.tfidf_score], ["Score sémantique", analysis.semantic_score], ["Score hybride", analysis.hybrid_score], ["Score de nouveauté", analysis.novelty_score], ["Durée (ms)", analysis.duration_ms], ["Document de comparaison", result.get("best_source", "")]]: ws.append(row)
+    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"); response["Content-Disposition"] = 'attachment; filename="rapport_analyse.xlsx"'; wb.save(response); return response
 
 
 @login_required
 def export_pdf(request):
-    if not _require_permission(request,"can_export_results","Votre profil ne dispose pas de l'accès aux exports."): return redirect("detector:dashboard")
-    analysis=Analysis.objects.filter(user=request.user).order_by("-created_at").first()
-    if not analysis: return HttpResponse("Aucune analyse à exporter.",status=404)
-    result=analysis.result_json or {}; buffer=io.BytesIO(); doc=SimpleDocTemplate(buffer,pagesize=A4,rightMargin=36,leftMargin=36,topMargin=36,bottomMargin=36); styles=getSampleStyleSheet(); story=[Paragraph("Rapport d'analyse documentaire — DOCSEC",styles["Title"]),Spacer(1,12)]
-    data=[["Document",analysis.document_name],["Type",analysis.get_mode_display()],["Décision",analysis.decision],["Score TF-IDF",str(analysis.tfidf_score)],["Score sémantique",str(analysis.semantic_score)],["Score hybride",str(analysis.hybrid_score)],["Nouveauté",str(analysis.novelty_score)],["Document de comparaison",str(result.get("best_source",""))]]
-    table=Table(data,colWidths=[150,350]); table.setStyle(TableStyle([("BACKGROUND",(0,0),(0,-1),colors.HexColor("#eef2f7")),("GRID",(0,0),(-1,-1),.5,colors.grey),("VALIGN",(0,0),(-1,-1),"TOP"),("PADDING",(0,0),(-1,-1),7)])); story.append(table); story.append(Spacer(1,18)); story.append(Paragraph("Documents de comparaison",styles["Heading2"]))
-    for source in result.get("sources",[])[:10]: story.extend([Paragraph(f"{source.get('source','')} — indice de similarité {source.get('hybrid_score','')}",styles["BodyText"]),Spacer(1,5)])
-    doc.build(story); response=HttpResponse(buffer.getvalue(),content_type="application/pdf"); response["Content-Disposition"]='attachment; filename="rapport_analyse.pdf"'; return response
+    if not _require_permission(request, "can_export_results", "Votre profil ne dispose pas de l'accès aux exports."):
+        return redirect("detector:dashboard")
+    analysis = Analysis.objects.filter(user=request.user).order_by("-created_at").first()
+    if not analysis: return HttpResponse("Aucune analyse à exporter.", status=404)
+    result = analysis.result_json or {}; buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36); styles = getSampleStyleSheet()
+    story = [Paragraph("Rapport d'analyse documentaire — DOCSEC", styles["Title"]), Spacer(1, 12)]
+    data = [["Document", analysis.document_name], ["Type", analysis.get_mode_display()], ["Décision", analysis.decision], ["Score TF-IDF", str(analysis.tfidf_score)], ["Score sémantique", str(analysis.semantic_score)], ["Score hybride", str(analysis.hybrid_score)], ["Nouveauté", str(analysis.novelty_score)], ["Document de comparaison", str(result.get("best_source", ""))]]
+    table = Table(data, colWidths=[150, 350]); table.setStyle(TableStyle([("BACKGROUND", (0,0), (0,-1), colors.HexColor("#eef2f7")), ("GRID", (0,0), (-1,-1), .5, colors.grey), ("VALIGN", (0,0), (-1,-1), "TOP"), ("PADDING", (0,0), (-1,-1), 7)])); story.append(table); story.append(Spacer(1, 18)); story.append(Paragraph("Documents de comparaison", styles["Heading2"]))
+    for source in result.get("sources", [])[:10]: story.extend([Paragraph(f"{source.get('source','')} — indice de similarité {source.get('hybrid_score','')}", styles["BodyText"]), Spacer(1, 5)])
+    doc.build(story); response = HttpResponse(buffer.getvalue(), content_type="application/pdf"); response["Content-Disposition"] = 'attachment; filename="rapport_analyse.pdf"'; return response
+
+
+
 
 
 @login_required
 def administration_recovery(request):
-    User=get_user_model(); active_admin_exists=User.objects.filter(is_staff=True,is_active=True).exists()
-    if active_admin_exists: return redirect("detector:administration")
-    if not settings.DEBUG and not getattr(settings,"ALLOW_ADMIN_BOOTSTRAP",False):
-        messages.error(request,"Aucun administrateur actif n'est configuré. Le mode de récupération est désactivé sur cette installation."); return redirect("detector:dashboard")
-    if request.method=="POST":
-        user=User.objects.get(pk=request.user.pk); user.is_staff=True; user.is_active=True; user.save(update_fields=["is_staff","is_active"]); _ensure_administrator_role(user); messages.success(request,"Votre compte a retrouvé le rôle Administrateur. Vous pouvez maintenant accéder à la console."); return redirect("detector:administration")
-    return render(request,"administration_recovery.html",{"username":request.user.get_username()})
+    """Récupération contrôlée de l'accès administrateur lorsqu'il n'existe plus aucun administrateur actif."""
+    User = get_user_model()
+    active_admin_exists = User.objects.filter(is_staff=True, is_active=True).exists()
+    if active_admin_exists:
+        return redirect("detector:administration")
+
+    if not settings.DEBUG and not getattr(settings, "ALLOW_ADMIN_BOOTSTRAP", False):
+        messages.error(
+            request,
+            "Aucun administrateur actif n'est configuré. Le mode de récupération est désactivé sur cette installation.",
+        )
+        return redirect("detector:dashboard")
+
+    if request.method == "POST":
+        user = User.objects.get(pk=request.user.pk)
+        user.is_staff = True
+        user.is_active = True
+        user.save(update_fields=["is_staff", "is_active"])
+        messages.success(
+            request,
+            "Votre compte a retrouvé le rôle Administrateur. Vous pouvez maintenant accéder à la console.",
+        )
+        return redirect("detector:administration")
+
+    return render(request, "administration_recovery.html", {
+        "username": request.user.get_username(),
+    })
+
+@login_required
+def administration(request):
+    User = get_user_model()
+    if not request.user.is_staff:
+        if not User.objects.filter(is_staff=True, is_active=True).exists() and (settings.DEBUG or getattr(settings, "ALLOW_ADMIN_BOOTSTRAP", False)):
+            return redirect("detector:administration_recovery")
+        messages.error(request, "Accès réservé aux administrateurs.")
+        return redirect("detector:dashboard")
+
+    permissions = list(Permission.objects.filter(content_type__app_label="detector").order_by("codename"))
+    groups = list(Group.objects.prefetch_related("permissions", "user_set").order_by("name"))
+    q = request.GET.get("q", "").strip()
+    users = User.objects.order_by("-is_active", "username")
+    if q:
+        users = users.filter(Q(username__icontains=q) | Q(first_name__icontains=q) | Q(last_name__icontains=q) | Q(email__icontains=q))
+
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        if action == "create_user":
+            form = AdminUserCreateForm(request.POST)
+            if form.is_valid():
+                user = form.save()
+                group_id = request.POST.get("group_id")
+                if group_id:
+                    group = get_object_or_404(Group, pk=group_id)
+                    user.groups.add(group)
+                    user.is_staff = group.name == "Administrateur" or user.is_staff
+                    user.save(update_fields=["is_staff"])
+                messages.success(request, f"Le compte « {user.username} » a été créé.")
+                return redirect("detector:administration")
+            return render(request, "administration.html", {"create_user_form": form, "users": users, "groups": groups, "permissions": permissions, "stats": _admin_user_stats(User), "q": q})
+        if action == "toggle_user":
+            user = get_object_or_404(User, pk=request.POST.get("user_id"))
+            if user.pk == request.user.pk:
+                messages.error(request, "Vous ne pouvez pas désactiver votre propre compte.")
+            else:
+                user.is_active = not user.is_active
+                user.save(update_fields=["is_active"])
+                messages.success(request, f"Le compte « {user.username} » est maintenant {'actif' if user.is_active else 'inactif'}.")
+            return redirect("detector:administration")
+        if action == "create_role":
+            name = request.POST.get("role_name", "").strip()
+            if not name:
+                messages.error(request, "Le nom du rôle est obligatoire.")
+            elif Group.objects.filter(name__iexact=name).exists():
+                messages.error(request, "Ce rôle existe déjà.")
+            else:
+                Group.objects.create(name=name)
+                messages.success(request, f"Le rôle « {name} » a été créé.")
+            return redirect("detector:administration")
+        if action == "update_role":
+            group = get_object_or_404(Group, pk=request.POST.get("group_id"))
+            selected = set(request.POST.getlist("permissions"))
+            group.permissions.set([p for p in permissions if p.codename in selected])
+            messages.success(request, f"Les permissions du rôle « {group.name} » ont été mises à jour.")
+            return redirect("detector:administration")
+        if action == "assign_role":
+            user = get_object_or_404(User, pk=request.POST.get("user_id"))
+            group = get_object_or_404(Group, pk=request.POST.get("group_id"))
+            if user.pk == request.user.pk and group.name != "Administrateur":
+                messages.error(request, "Votre propre compte doit conserver un accès administrateur.")
+            else:
+                user.groups.clear()
+                user.groups.add(group)
+                user.is_staff = group.name == "Administrateur"
+                user.save(update_fields=["is_staff"])
+                messages.success(request, f"Le rôle « {group.name} » a été attribué à « {user.username} ».")
+            return redirect("detector:administration")
+        if action == "delete_role":
+            group = get_object_or_404(Group, pk=request.POST.get("group_id"))
+            if group.name in ("Utilisateur", "Administrateur"):
+                messages.error(request, "Les rôles système Utilisateur et Administrateur ne peuvent pas être supprimés.")
+            else:
+                group.delete()
+                messages.success(request, "Le rôle a été supprimé.")
+            return redirect("detector:administration")
+
+    return render(request, "administration.html", {
+        "create_user_form": AdminUserCreateForm(),
+        "users": users,
+        "groups": groups,
+        "permissions": permissions,
+        "q": q,
+        "stats": _admin_user_stats(User),
+    })
+
+def _admin_user_stats(User):
+    return {
+        "users": User.objects.count(),
+        "active": User.objects.filter(is_active=True).count(),
+        "inactive": User.objects.filter(is_active=False).count(),
+        "admins": User.objects.filter(is_staff=True).count(),
+        "regular": User.objects.filter(is_staff=False).count(),
+    }
 
 
 @login_required
 def administration_utilisateur(request, pk):
-    if not _admin_access(request, "can_manage_users"):
-        messages.error(request,"Votre profil ne dispose pas de l'accès à la gestion des utilisateurs.")
+    if not request.user.is_staff:
+        messages.error(request, "Accès réservé aux administrateurs.")
         return redirect("detector:dashboard")
-    User=get_user_model(); target=get_object_or_404(User,pk=pk)
-    if request.method=="POST" and request.POST.get("action")=="update_profile":
-        form=AdminUserUpdateForm(request.POST,instance=target)
-        if form.is_valid():
-            role=form.cleaned_data.get("role")
-            if target.pk==request.user.pk and (not role or role.name!="Administrateur"):
-                form.add_error("role","Votre propre compte doit rester Administrateur.")
-            else:
-                form.save()
-                messages.success(request,f"Le compte « {target.username} » a été mis à jour avec le rôle « {role.name if role else 'Aucun rôle'} ».")
-                return redirect("detector:administration_users")
+    User = get_user_model()
+    target = get_object_or_404(User, pk=pk)
+    groups = Group.objects.order_by("name")
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        if action == "update_profile":
+            form = AdminUserUpdateForm(request.POST, instance=target)
+            if form.is_valid():
+                role = get_object_or_404(Group, pk=request.POST.get("group_id"))
+                if target.pk == request.user.pk and role.name != "Administrateur":
+                    form.add_error(None, "Votre propre compte doit rester Administrateur.")
+                else:
+                    form.save()
+                    target.groups.clear()
+                    target.groups.add(role)
+                    target.is_staff = role.name == "Administrateur"
+                    target.save(update_fields=["is_staff"])
+                    messages.success(request, f"Le compte « {target.username} » a été mis à jour.")
+                    return redirect("detector:administration")
+        else:
+            form = AdminUserUpdateForm(instance=target)
     else:
-        form=AdminUserUpdateForm(instance=target)
-    return render(request,"administration_utilisateur.html",{"target_user":target,"profile_form":form,"groups":Group.objects.order_by("name"),"current_group":target.groups.first()})
+        form = AdminUserUpdateForm(instance=target)
+    current_group = target.groups.first()
+    return render(request, "administration_utilisateur.html", {"target_user": target, "profile_form": form, "groups": groups, "current_group": current_group})
+
+
+
+@login_required
+def tdr_rag_independent(request):
+    """Page indépendante dédiée à l'analyse RAG complète des TDR."""
+    if not _require_permission(
+        request, "can_verify_tdr",
+        "Votre profil ne dispose pas de l'accès à la vérification des TDR."
+    ):
+        return redirect("detector:dashboard")
+
+    if request.method != "POST":
+        return render(request, "tdr_rag_independent.html")
+
+    # Accepte le nom du champ du formulaire RAG et les champs de fichier
+    # courants utilisés ailleurs dans l'application, sans dépendre d'un seul nom.
+    uploaded = _get_uploaded_docx(request)
+    if not uploaded:
+        messages.error(request, "Aucun fichier reçu. Sélectionnez un fichier DOCX ou PDF puis réessayez.")
+        return render(request, "tdr_rag_independent.html")
+    if not _validate_document(uploaded):
+        messages.error(
+            request,
+            f"Format non pris en charge : « {uploaded.name} ». Sélectionnez un fichier Word (.docx) ou PDF (.pdf)."
+        )
+        return render(request, "tdr_rag_independent.html")
+    if getattr(uploaded, "size", 0) <= 0:
+        messages.error(request, "Le fichier sélectionné est vide. Choisissez un autre document.")
+        return render(request, "tdr_rag_independent.html")
+
+    uploaded_path = _save_uploaded_document(uploaded)
+    started_at = time.perf_counter()
+    try:
+        uploaded.seek(0)
+        response = requests.post(
+            f"{settings.FASTAPI_URL}/api/tdr-rag/analyze",
+            files={"file": (
+                uploaded.name, uploaded.file,
+                uploaded.content_type or _document_content_type(uploaded)
+            )},
+            timeout=1800,
+        )
+        response.raise_for_status()
+        result = response.json()
+        result["uploaded_path"] = uploaded_path
+        duration_ms = round((time.perf_counter() - started_at) * 1000)
+        result["duration_ms"] = duration_ms
+        analysis = Analysis.objects.create(
+            user=request.user,
+            document_name=uploaded.name,
+            mode="duplicate",
+            decision=result.get("decision", ""),
+            hybrid_score=None,
+            semantic_score=None,
+            tfidf_score=None,
+            novelty_score=None,
+            result_json=result,
+            duration_ms=duration_ms,
+            status="success",
+        )
+        messages.success(
+            request,
+            "Analyse RAG terminée. Consultez les documents de référence examinés et les justificatifs dans le détail du résultat."
+        )
+        return redirect("detector:analysis_detail", pk=analysis.pk)
+    except requests.RequestException as exc:
+        response = getattr(exc, "response", None)
+        detail = None
+        if response is not None:
+            try:
+                payload = response.json()
+                detail = payload.get("detail", payload)
+                if isinstance(detail, dict):
+                    detail = detail.get("message") or str(detail)
+            except (ValueError, AttributeError):
+                detail = None
+        messages.error(
+            request,
+            "Analyse RAG indépendante non terminée : " + (str(detail) if detail else str(exc))
+        )
+        return render(request, "tdr_rag_independent.html")
