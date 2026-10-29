@@ -1,58 +1,159 @@
 """Moteur RAG autonome dédié à la vérification des TDR.
 
 La recherche lexicale et sémantique classe toutes les références indexées.
-Qwen analyse ensuite les trois meilleures candidates et renvoie un verdict global unique.
+Le LLM analyse ensuite les trois meilleures candidates et renvoie un verdict global unique.
 """
 from __future__ import annotations
 
 import json
+import logging
 import os
-from pathlib import Path
 import re
+import sys
+from pathlib import Path
 
 import numpy as np
 import requests
 
+logger = logging.getLogger(__name__)
+
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = ROOT / "frontend"
-import sys
 if str(FRONTEND_DIR) not in sys.path:
     sys.path.insert(0, str(FRONTEND_DIR))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 
+# ---------------------------------------------------------------------------
+# Configuration LLM
+# ---------------------------------------------------------------------------
 # Le fournisseur distant compatible OpenAI est utilisé par défaut pour l'arbitrage TDR.
 # Ollama reste disponible si TDR_LLM_PROVIDER=ollama est explicitement configuré.
 TDR_LLM_PROVIDER = os.getenv("TDR_LLM_PROVIDER", "openai_compatible").strip().lower()
-TDR_LLM_BASE_URL = (os.getenv("TDR_LLM_BASE_URL") or "https://meyer-variable-halo-labeled.trycloudflare.com/api").strip().rstrip("/")
+TDR_LLM_BASE_URL = (
+    os.getenv("TDR_LLM_BASE_URL")
+    or "https://meyer-variable-halo-labeled.trycloudflare.com/api"
+).strip().rstrip("/")
 TDR_LLM_API_KEY = os.getenv("TDR_LLM_API_KEY", "").strip()
 TDR_LLM_REMOTE_MODEL = (os.getenv("TDR_LLM_MODEL") or "qwen3.6-35b").strip()
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
-ACTIVE_MODEL = TDR_LLM_REMOTE_MODEL if TDR_LLM_PROVIDER in {"openai_compatible", "openai-compatible", "remote"} and TDR_LLM_REMOTE_MODEL else OLLAMA_MODEL
+REMOTE_PROVIDERS = {"openai_compatible", "openai-compatible", "remote"}
+ACTIVE_MODEL = (
+    TDR_LLM_REMOTE_MODEL
+    if TDR_LLM_PROVIDER in REMOTE_PROVIDERS and TDR_LLM_REMOTE_MODEL
+    else OLLAMA_MODEL
+)
 OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
+
 # Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
 # uniquement sur les trois références les mieux classées.
 RAG_TOP_K = 3
 REFERENCE_CHARS = 2200
 CANDIDATE_CHARS = 6000
 # Les serveurs Qwen en mode raisonnement peuvent consommer tout le budget
-# avant de produire le JSON final. Les tentatives distantes augmentent donc
-# progressivement le budget et essaient de désactiver explicitement le thinking.
+# avant de produire le JSON final. Les tentatives augmentent donc le budget
+# et, sur les reprises, désactivent explicitement le thinking.
 OUTPUT_TOKENS = 2048
 
-CASES = {
-    "CAS_1_CORRESPONDANCE_FORTE",
-    "CAS_2_CORRESPONDANCE_PARTIELLE",
-    "CAS_4_AUCUNE_ETUDE_PERTINENTE",
+# ---------------------------------------------------------------------------
+# Identifiants de cas : UNE SEULE source de vérité (prompt + code)
+# ---------------------------------------------------------------------------
+CASE_1 = "CAS_1_correspondance forte à une étude existante"
+CASE_2 = "CAS_2_Correspondance partielle avec une étude existante"
+CASE_3 = "CAS_3_Aucune correspondance à une étude existante"
+
+CASES = {CASE_1, CASE_2, CASE_3}
+
+CASE_TITLES = {
+    CASE_1: "Forte correspondance",
+    CASE_2: "Correspondance partielle",
+    CASE_3: "Aucune correspondance",
 }
+
+SYSTEM_PROMPT = f"""Tu es l'analyste chargé de déterminer si un TDR candidat reprend, reformule ou recoupe un document déjà présent dans la base (TDR ou rapport d'étude).
+
+# MÉTHODE
+1. Lis le TDR candidat, puis les trois références fournies.
+2. Compare le SENS, pas les mots : objet, problème traité, objectif général et spécifiques, activités, zone, population cible, période, méthode, livrables. Une reformulation, des synonymes ou un titre différent ne suffisent pas à conclure à une étude nouvelle.
+3. Compare les trois références en interne, puis retiens UNE SEULE référence : celle dont l'objet et les objectifs sont les plus proches (en cas d'égalité, celle aux preuves les plus solides).
+4. Ne mentionne jamais les références écartées, ni « TDR 1 / TDR 2 », ni les scores de recherche (ce sont des indices de récupération, pas des preuves).
+
+# GRILLE DE DÉCISION (case_id : recopie la chaîne exacte)
+- "{CASE_1}" : même étude ou quasi identique (objet et objectifs essentiels coïncident, malgré une reformulation).
+- "{CASE_2}" : éléments métier significatifs en commun (objectifs, démarche, activités), même si la zone, la méthode ou les livrables diffèrent. Une zone différente reste un CAS_2 si objectifs et démarche se recoupent. Une correspondance faible mais réelle relève de ce cas.
+- "{CASE_3}" : aucune des trois références ne présente de correspondance métier significative.
+Ne choisis pas CAS_3 par défaut quand les preuves sont imparfaites. Ne déclare pas de correspondance sur de simples mots génériques (« évaluation », « développement », « diagnostic »).
+
+# RÈGLES DE FOND
+- Appuie-toi uniquement sur le contenu fourni. Distingue les faits observés des incertitudes.
+- Un TDR prouve seulement qu'un TDR est enregistré ; un rapport prouve seulement qu'un rapport est enregistré. N'affirme jamais qu'une étude a été réalisée si le document ne l'établit pas.
+- Ne cite que des références de la LISTE AUTORISÉE, avec leur nom de fichier exact. N'invente aucun identifiant.
+
+# COHÉRENCE (vérifie avant de répondre)
+case_id, decision, correspondence_level, explanation et recommendation doivent exprimer la même conclusion.
+- CAS_1 → correspondence_level "forte", matched_references[0].level "forte"
+- CAS_2 → correspondence_level "moyenne", matched_references[0].level "partielle"
+- CAS_3 → correspondence_level "nulle", matched_reference "", matched_references [], evidence_from_reference []
+Si ton texte décrit une forte correspondance, le case_id ne peut pas être CAS_3. Corrige le JSON si besoin.
+
+# SORTIE
+Réponds uniquement par un objet JSON valide (sans Markdown, sans texte autour) :
+{{
+  "case_id": "<une des 3 chaînes exactes>",
+  "decision": "<phrase courte résumant le verdict>",
+  "correspondence_level": "forte | moyenne | nulle",
+  "confidence": "élevée | moyenne | faible",
+  "matched_reference": "<nom de fichier exact, ou ''>",
+  "matched_references": [
+    {{
+      "filename": "<nom de fichier exact>",
+      "level": "forte | partielle",
+      "explanation": "<justification concrète, 3 à 5 phrases>",
+      "common_points": ["..."],
+      "differences": ["..."]
+    }}
+  ],
+  "explanation": "<justification globale fondée sur des éléments observés>",
+  "common_points": ["..."],
+  "differences": ["..."],
+  "evidence_from_reference": ["<passage ou fait précis de la référence retenue>"],
+  "recommendation": "<1 à 2 phrases, opérationnelles>"
+}}
+Sois concis : termine toujours le JSON."""
 
 
 class IndependentTDRError(RuntimeError):
     pass
 
 
+# ---------------------------------------------------------------------------
+# Appel LLM
+# ---------------------------------------------------------------------------
+def _validate_llm_config() -> None:
+    """Erreurs de configuration : inutile de les retenter."""
+    if TDR_LLM_PROVIDER in REMOTE_PROVIDERS:
+        if not TDR_LLM_BASE_URL:
+            raise IndependentTDRError(
+                "TDR_LLM_BASE_URL est requis pour le fournisseur openai_compatible."
+            )
+        if not TDR_LLM_API_KEY:
+            raise IndependentTDRError(
+                "TDR_LLM_API_KEY est requis pour le fournisseur openai_compatible."
+            )
+        if not TDR_LLM_REMOTE_MODEL:
+            raise IndependentTDRError(
+                "TDR_LLM_MODEL est requis pour le fournisseur openai_compatible."
+            )
+    elif TDR_LLM_PROVIDER != "ollama":
+        raise IndependentTDRError(
+            "TDR_LLM_PROVIDER invalide. Valeurs acceptées : ollama, openai_compatible."
+        )
+
+
 def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKENS) -> dict:
     """Appelle le fournisseur configuré avec reprises limitées en cas de JSON invalide."""
+    _validate_llm_config()
+
     last_error = None
     last_content = ""
     llm_audit = {
@@ -61,10 +162,8 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
         "reported_model": None,
         "request_id": None,
     }
-    # Le budget précédent (1200, 2400, 3600) peut être absorbé par le
-    # raisonnement interne de Qwen. On augmente davantage le budget et, sur les
-    # reprises, on demande au serveur compatible de désactiver le mode thinking.
     token_budgets = (max(tokens, 2048), max(tokens, 4096), max(tokens, 6144))
+
     for attempt in range(3):
         token_budget = token_budgets[attempt]
         retry_note = ""
@@ -80,19 +179,7 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt + retry_note},
             ]
-            if TDR_LLM_PROVIDER in {"openai_compatible", "openai-compatible", "remote"}:
-                if not TDR_LLM_BASE_URL:
-                    raise ValueError(
-                        "TDR_LLM_BASE_URL est requis pour le fournisseur openai_compatible."
-                    )
-                if not TDR_LLM_API_KEY:
-                    raise ValueError(
-                        "TDR_LLM_API_KEY est requis pour le fournisseur openai_compatible."
-                    )
-                if not TDR_LLM_REMOTE_MODEL:
-                    raise ValueError(
-                        "TDR_LLM_MODEL est requis pour le fournisseur openai_compatible."
-                    )
+            if TDR_LLM_PROVIDER in REMOTE_PROVIDERS:
                 from openai import OpenAI
 
                 client = OpenAI(
@@ -101,9 +188,6 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                     timeout=OLLAMA_TIMEOUT,
                     max_retries=0,
                 )
-                # Certains serveurs OpenAI-compatibles n'implémentent pas
-                # response_format correctement. Alterner le mode JSON strict et
-                # le mode prompt évite de répéter trois requêtes identiques.
                 request_kwargs = {
                     "model": TDR_LLM_REMOTE_MODEL,
                     "messages": messages,
@@ -111,18 +195,15 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                     "max_tokens": token_budget,
                 }
                 if attempt == 0:
-                    # Premier essai : conserver le mode JSON strict existant.
+                    # Premier essai : mode JSON strict.
                     request_kwargs["response_format"] = {"type": "json_object"}
                 else:
-                    # Reprises : certains serveurs n'acceptent pas response_format.
-                    # Qwen peut aussi remplir le budget en reasoning_content sans
-                    # produire de content final. Cette option est prise en charge
-                    # notamment par les serveurs vLLM utilisant le template Qwen.
+                    # Reprises : certains serveurs gèrent mal response_format ; on
+                    # désactive le thinking (vLLM + template Qwen).
                     request_kwargs["extra_body"] = {
                         "chat_template_kwargs": {"enable_thinking": False}
                     }
                 response = client.chat.completions.create(**request_kwargs)
-                # Preuve technique retournée par le serveur : modèle, identifiant de requête.
                 llm_audit["reported_model"] = getattr(response, "model", None)
                 llm_audit["request_id"] = getattr(response, "id", None)
                 if not response.choices:
@@ -130,7 +211,6 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                 choice = response.choices[0]
                 message = choice.message
                 last_content = (getattr(message, "content", None) or "").strip()
-                # Conserver les métadonnées utiles pour diagnostiquer les réponses vides.
                 finish_reason = getattr(choice, "finish_reason", None)
                 if not last_content:
                     refusal = (getattr(message, "refusal", None) or "").strip()
@@ -147,9 +227,9 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                     raise ValueError(
                         "Réponse vide du serveur OpenAI-compatible"
                         + (f" ({'; '.join(details)})" if details else "")
-                        + ". Une nouvelle tentative sera faite avec un budget accru et, si possible, le mode thinking désactivé."
+                        + ". Nouvelle tentative avec budget accru et thinking désactivé."
                     )
-            elif TDR_LLM_PROVIDER == "ollama":
+            else:  # ollama
                 response = requests.post(
                     f"{OLLAMA_URL}/api/chat",
                     json={
@@ -167,10 +247,7 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                 payload = response.json()
                 llm_audit["reported_model"] = payload.get("model") or OLLAMA_MODEL
                 last_content = (payload.get("message") or {}).get("content", "").strip()
-            else:
-                raise ValueError(
-                    "TDR_LLM_PROVIDER invalide. Valeurs acceptées : ollama, openai_compatible."
-                )
+
             if not last_content:
                 raise ValueError("Le fournisseur LLM a renvoyé une réponse vide.")
             parsed = json.loads(last_content)
@@ -180,9 +257,12 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
             return parsed
         except Exception as exc:
             last_error = exc
-            # Cloudflare 524 signifie que le proxy a expiré après 120 s.
-            # Ne pas relancer immédiatement une génération qui vient déjà de dépasser
-            # la limite : cela aggrave la charge et ne rend pas la réponse complète.
+            logger.warning(
+                "TDR LLM tentative %d/3 échouée (modèle=%s, budget=%d) : %s",
+                attempt + 1, ACTIVE_MODEL, token_budget, exc,
+            )
+            # Cloudflare 524 : le proxy a expiré après ~120 s. Ne pas relancer
+            # immédiatement une génération qui vient de dépasser la limite.
             if getattr(exc, "status_code", None) == 524 or "Error code: 524" in str(exc):
                 raise IndependentTDRError(
                     "Le serveur LLM distant a dépassé le délai Cloudflare (HTTP 524, "
@@ -191,28 +271,31 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                     "relancez l'analyse. Si l'erreur persiste, le serveur distant doit être "
                     "vérifié par son administrateur."
                 ) from exc
-    preview = re.sub(r"\\s+", " ", last_content)[:240]
+
+    preview = re.sub(r"\s+", " ", last_content)[:240]
     raise IndependentTDRError(
         f"Le fournisseur LLM ({ACTIVE_MODEL}) n'a pas produit de JSON valide après 3 tentatives. "
         f"Dernière erreur : {last_error}. Début de la réponse : {preview!r}"
     ) from last_error
 
 
+# ---------------------------------------------------------------------------
+# Extraction et préparation des textes
+# ---------------------------------------------------------------------------
 def extract_tdr_document(path: Path) -> str:
     """Extraction autonome du TDR candidat, sans passer par l'ancien moteur."""
     suffix = path.suffix.lower()
     if suffix == ".pdf":
         from pypdf import PdfReader
+
         reader = PdfReader(str(path))
-        return "\n\n".join(
-            (page.extract_text() or "").strip()
-            for page in reader.pages
-            if (page.extract_text() or "").strip()
-        )
+        pages = ((page.extract_text() or "").strip() for page in reader.pages)
+        return "\n\n".join(text for text in pages if text)
     if suffix == ".docx":
         from docx import Document
+
         document = Document(str(path))
-        parts = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
+        parts = [p.text.strip() for p in document.paragraphs if p.text.strip()]
         for table in document.tables:
             for row in table.rows:
                 cells = [cell.text.strip() for cell in row.cells]
@@ -244,19 +327,23 @@ def _excerpt(text: str, limit: int) -> str:
     return result or text[:limit]
 
 
+# ---------------------------------------------------------------------------
+# Récupération / classement
+# ---------------------------------------------------------------------------
 def _load_all_indexed_references():
     import django
+
     django.setup()
     from django.db.models import Q
     from detector.models import StudyDocument
-    rows = list(
+
+    return list(
         StudyDocument.objects.filter(
             is_reference=True, document_type__in=["TDR", "RAPPORT"]
         ).filter(Q(cleaned_text__gt="") | Q(extracted_text__gt=""))
         .exclude(embedding=[])
         .order_by("id")
     )
-    return rows
 
 
 def _rank_all_references(candidate: str, rows):
@@ -293,8 +380,39 @@ def _rank_all_references(candidate: str, rows):
     ranked.sort(key=lambda item: item[0], reverse=True)
     return ranked
 
+
+# ---------------------------------------------------------------------------
+# Utilitaires de post-traitement
+# ---------------------------------------------------------------------------
+def _as_list(value, limit: int, max_chars: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(x)[:max_chars] for x in value[:limit]]
+
+
+def _item_name(item) -> str:
+    if isinstance(item, dict):
+        return str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
+    return str(item).strip()
+
+
+STRONG_PHRASES = (
+    "correspond fortement", "correspondance forte", "identiques ou très proches",
+    "même étude", "meme etude", "reformulation très proche",
+    "reformulation tres proche", "ne pas enregistrer", "même tdr",
+    "meme tdr", "contenu et la structure", "alignés avec",
+)
+PARTIAL_PHRASES = (
+    "correspondance partielle", "proche mais", "objectifs comparables",
+    "similitude méthodologique", "similitude methodologique",
+)
+
+
+# ---------------------------------------------------------------------------
+# Analyse principale
+# ---------------------------------------------------------------------------
 def analyze_tdr_independently(candidate_text: str) -> dict:
-    """Classe le corpus, puis demande à Qwen un seul verdict fondé sur les 3 meilleurs TDR."""
+    """Classe le corpus, puis demande au LLM un seul verdict fondé sur les 3 meilleurs TDR."""
     candidate = (candidate_text or "").strip()
     if len(candidate) < 80:
         raise IndependentTDRError("Le TDR contient trop peu de texte exploitable.")
@@ -305,9 +423,8 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "Préparez l'index avant de lancer l'analyse."
         )
 
-    # Le classement sert uniquement à retrouver les références candidates.
-    # Qwen reste responsable du raisonnement et du verdict métier. On lui fournit
-    # trois références pour limiter les faux négatifs dus à une reformulation.
+    # Le classement sert uniquement à retrouver les références candidates ;
+    # le LLM reste responsable du verdict métier.
     ranked = _rank_all_references(candidate, rows)
     if not ranked:
         raise IndependentTDRError("Aucune référence TDR exploitable n'a été trouvée.")
@@ -315,72 +432,28 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     candidate_excerpt = _excerpt(candidate, CANDIDATE_CHARS)
 
     reference_blocks = []
-    for rank, (hybrid, lexical, semantic, row) in enumerate(selected, start=1):
+    for _, _, _, row in selected:
         reference_blocks.append(
             "DOCUMENT DE RÉFÉRENCE\n"
-            f"TITRE: {row.title}\nTYPE DE DOCUMENT: {row.get_document_type_display()}\nFICHIER: {Path(row.file_path).name}\n"
-            f"CONTENU DU DOCUMENT DE RÉFÉRENCE:\n"
-            f"{_excerpt(row.extracted_text or row.cleaned_text, REFERENCE_CHARS)}"
+            f"ID: {row.id}\n"
+            f"TITRE: {row.title}\n"
+            f"TYPE DE DOCUMENT: {row.get_document_type_display()}\n"
+            f"FICHIER: {Path(row.file_path).name}\n"
+            f"CONTENU:\n{_excerpt(row.extracted_text or row.cleaned_text, REFERENCE_CHARS)}"
         )
 
-    system_prompt = (
-        "Tu es l'analyste principal chargé d'évaluer si le TDR candidat reprend, "
-        "reformule ou recoupe une étude déjà présente dans la base. Le raisonnement "
-        "de Qwen est la base du verdict final : les scores de recherche servent à "
-        "retrouver les références, mais ne décident jamais à ta place. Tu disposes "
-        "de trois références candidates. Examine leur contenu et compare le sens, pas "
-        "seulement les mots exacts : objet, problème traité, objectif général et "
-        "objectifs spécifiques, activités, zone, population cible, période, méthode "
-        "et livrables. Une reformulation, des synonymes ou un titre différent ne "
-        "suffisent PAS à conclure qu'il s'agit d'une nouvelle étude.\n"
-        "GRILLE DE DÉCISION OBLIGATOIRE : "
-        "CAS_1_CORRESPONDANCE_FORTE = même étude ou quasi-identique, notamment si "
-        "l'objet et les objectifs essentiels coïncident malgré une reformulation ; "
-        "CAS_2_CORRESPONDANCE_PARTIELLE = une ou plusieurs références partagent des "
-        "éléments métier significatifs, même si la zone, la méthode ou les livrables "
-        "diffèrent ; CAS_4_AUCUNE_ETUDE_PERTINENTE = aucune référence ne présente "
-        "de correspondance métier significative. Une zone différente peut relever "
-        "de CAS_2 si les objectifs et la démarche se recoupent réellement.\n"
-        "IMPORTANT : une correspondance faible mais réelle doit être signalée en "
-        "CAS_2, et non masquée par CAS_4. CAS_4 n'est pas un choix par défaut lorsque "
-        "les documents sont reformulés ou lorsque les preuves sont imparfaites. "
-        "À l'inverse, ne déclare pas une correspondance sur la seule présence de mots "
-        "génériques. Explique précisément les indices qui soutiennent le niveau choisi "
-        "et distingue les faits observés des incertitudes. Les scores lexical, "
-        "sémantique et combiné sont des indices de récupération, pas des probabilités "
-        "ni des verdicts. Ne prétends jamais qu'une étude a été réalisée à partir d'un TDR seul. "
-        "Un TDR prouve qu'un TDR est enregistré ; un rapport d'étude indique qu'un rapport "
-        "correspondant est présent dans le registre. N'affirme rien au-delà du contenu réel "
-        "du document.\n"
-        "COHÉRENCE OBLIGATOIRE : le case_id, le decision, le correspondence_level, "
-        "l'explication et la recommandation doivent tous exprimer la même conclusion. "
-        "Si tu écris que le candidat correspond fortement à un document, que les objectifs, "
-        "la zone, la méthode et les livrables sont identiques ou très proches, le verdict "
-        "ne peut pas être CAS_4. Choisis CAS_1 si c'est la même étude ou quasi-identique, "
-        "CAS_2 si la correspondance est réelle mais partielle. CAS_4 exige une explication "
-        "qui constate l'absence de référence pertinente. Avant de répondre, vérifie cette "
-        "cohérence et corrige le JSON si nécessaire.\n"
-        "Les seules références que tu peux citer sont celles listées ci-dessous, avec leur "
-        "identifiant, leur titre et leur nom de fichier exacts. N'invente jamais un identifiant "
-        "comme TDR-TEST-101 s'il ne figure pas dans la liste. Pour matched_reference, recopie "
-        "exactement le titre ou le nom de fichier d'une référence fournie ; si aucune référence "
-        "ne convient, renvoie une chaîne vide.\n"
-        "Compare les trois références en interne, mais RETIENS ET PRÉSENTE UNE SEULE référence : celle qui correspond le mieux au TDR candidat. Si plusieurs références sont proches, choisis celle dont l'objet et les objectifs sont les plus similaires ; en cas d'égalité, choisis celle dont le contenu fournit les preuves les plus solides. Le champ matched_reference doit contenir exactement le nom de fichier de cette seule référence. matched_references doit contenir au maximum un élément, celui de la référence retenue, avec filename, level (forte ou partielle), explanation, common_points et differences. Ne mentionne jamais les autres références dans l'explication, les points communs, les différences ou la recommandation. Le verdict global est CAS_1 si cette référence correspond à la même étude ou à une étude quasi identique ; CAS_2 si elle partage des éléments métier significatifs sans être la même étude ; CAS_4 si aucune des trois références n'est pertinente, auquel cas matched_reference doit être vide et matched_references doit être un tableau vide. L'explication doit justifier le verdict par des éléments concrets observés dans le contenu fourni, sans supposer des informations absentes. Les points communs et différences doivent concerner uniquement la référence retenue. La recommandation doit être courte, claire et opérationnelle. Ne prétends pas qu'une étude a été réalisée à partir d'un TDR seul. Ne cite jamais « TDR 1 », « TDR 2 » ou les scores de recherche. Réponds uniquement avec un objet JSON valide ayant les clés case_id, decision, explanation, matched_reference, matched_references, confidence, common_points (tableau), differences (tableau), recommendation, correspondence_level (forte, moyenne ou nulle), evidence_from_reference (tableau).\n"
-        "Rappel : les références sont des TDR ou des rapports d'étude présents dans la base ; ne prétends pas "
-        "qu'une étude a été exécutée si le document ne l'établit pas."
-    )
-    final = _ollama_json(
-        system_prompt,
+    user_prompt = (
         "TDR CANDIDAT À ÉVALUER:\n" + candidate_excerpt
         + "\n\nLES TROIS RÉFÉRENCES LES MIEUX CLASSÉES À EXAMINER AVANT DE CONCLURE:\n"
         + "\n\n--- DOCUMENT SUIVANT ---\n\n".join(reference_blocks)
-        + "\n\nLISTE AUTORISÉE DES RÉFÉRENCES (reprends exactement un titre ou fichier de cette liste) :\n"
+        + "\n\nLISTE AUTORISÉE DES RÉFÉRENCES (reprends exactement un nom de fichier de cette liste) :\n"
         + "\n".join(
-            f"- ID={row.id} | TYPE={row.get_document_type_display()} | TITRE={row.title} | FICHIER={Path(row.file_path).name}"
+            f"- ID={row.id} | TYPE={row.get_document_type_display()} | "
+            f"TITRE={row.title} | FICHIER={Path(row.file_path).name}"
             for _, _, _, row in selected
-        ),
-        tokens=1200,
+        )
     )
+    final = _ollama_json(SYSTEM_PROMPT, user_prompt, tokens=OUTPUT_TOKENS)
 
     llm_audit = final.pop("_llm_audit", {
         "provider": TDR_LLM_PROVIDER,
@@ -388,119 +461,121 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "reported_model": None,
         "request_id": None,
     })
-    case_id = str(final.get("case_id", "CAS_4_AUCUNE_ETUDE_PERTINENTE"))
-    if case_id not in CASES:
-        case_id = "CAS_4_AUCUNE_ETUDE_PERTINENTE"
 
-    # Réconcilie les contradictions connues du modèle : si son texte affirme
-    # explicitement une forte correspondance mais que son case_id vaut CAS_4,
-    # ne laisse pas l'interface afficher deux conclusions opposées.
+    case_id = str(final.get("case_id", CASE_3))
+    if case_id not in CASES:
+        logger.warning("case_id inconnu renvoyé par le modèle : %r -> repli sur CAS_3", case_id)
+        case_id = CASE_3
+
+    # --- Garde-fou : contradiction texte/verdict (journalisée pour mesurer la fiabilité) ---
     explanation_text = str(final.get("explanation", ""))
     recommendation_text = str(final.get("recommendation", ""))
-    common_points = final.get("common_points", [])
-    differences = final.get("differences", [])
+    common_points_raw = final.get("common_points", [])
     reasoning_text = " ".join([
         explanation_text,
         recommendation_text,
-        " ".join(str(x) for x in common_points) if isinstance(common_points, list) else "",
+        " ".join(str(x) for x in common_points_raw) if isinstance(common_points_raw, list) else "",
     ]).casefold()
-    strong_phrases = (
-        "correspond fortement", "correspondance forte", "identiques ou très proches",
-        "même étude", "meme etude", "reformulation très proche",
-        "reformulation tres proche", "ne pas enregistrer", "même tdr",
-        "meme tdr", "contenu et la structure", "alignés avec",
-    )
-    partial_phrases = (
-        "correspondance partielle", "proche mais", "objectifs comparables",
-        "similitude méthodologique", "similitude methodologique",
-    )
-    if case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
-        if any(phrase in reasoning_text for phrase in strong_phrases):
-            case_id = "CAS_1_CORRESPONDANCE_FORTE"
-        elif any(phrase in reasoning_text for phrase in partial_phrases):
-            case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
+    if case_id == CASE_3:
+        if any(p in reasoning_text for p in STRONG_PHRASES):
+            logger.warning("Garde-fou : CAS_3 contredit par le texte -> CAS_1")
+            case_id = CASE_1
+        elif any(p in reasoning_text for p in PARTIAL_PHRASES):
+            logger.warning("Garde-fou : CAS_3 contredit par le texte -> CAS_2")
+            case_id = CASE_2
 
-    # Ne conserver que les références effectivement transmises au modèle.
+    # --- Références effectivement transmises au modèle ---
     allowed_rows = {Path(row.file_path).name: row for _, _, _, row in selected}
     allowed_rows.update({str(row.title or ""): row for _, _, _, row in selected})
+
     model_refs = final.get("matched_references", [])
     if not isinstance(model_refs, list):
         model_refs = []
-    requested = []
+
+    requested: list[str] = []
     for item in model_refs:
-        name = str(item.get("filename") or item.get("source") or item.get("title") or "").strip() if isinstance(item, dict) else str(item).strip()
+        name = _item_name(item)
         if name and name not in requested:
             requested.append(name)
     legacy = str(final.get("matched_reference", "")).strip()
     if legacy and legacy not in requested:
         requested.insert(0, legacy)
+
     matched_rows = []
     for name in requested:
         row = allowed_rows.get(name)
         if row is None:
-            row = next((candidate for _, _, _, candidate in selected
-                        if name.casefold() in Path(candidate.file_path).name.casefold()
-                        or name.casefold() in str(candidate.title or "").casefold()), None)
+            needle = name.casefold()
+            row = next(
+                (c for _, _, _, c in selected
+                 if needle in Path(c.file_path).name.casefold()
+                 or needle in str(c.title or "").casefold()),
+                None,
+            )
         if row is not None and row not in matched_rows:
             matched_rows.append(row)
-    strong_names = {
-        str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
-        for item in model_refs if isinstance(item, dict) and str(item.get("level", "")).casefold() == "forte"
-    }
-    if matched_rows and any(name in strong_names for name in requested):
-        case_id = "CAS_1_CORRESPONDANCE_FORTE"
-    elif matched_rows:
-        case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
-    # L'interface métier ne présente qu'une seule référence : privilégier une référence explicitement classée forte.
-    def _model_level_for(row):
-        filename = Path(row.file_path).name
-        item = next((item for item in model_refs if isinstance(item, dict)
-                     and str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
-                     in {filename, str(row.title or "")}), {})
-        return str(item.get("level", "")).casefold()
 
+    def _model_item_for(row) -> dict:
+        names = {Path(row.file_path).name, str(row.title or "")}
+        return next(
+            (i for i in model_refs if isinstance(i, dict) and _item_name(i) in names),
+            {},
+        )
+
+    def _model_level_for(row) -> str:
+        return str(_model_item_for(row).get("level", "")).casefold()
+
+    # Une seule référence présentée : privilégier celle classée « forte » par le modèle.
     if matched_rows:
-        matched_rows.sort(key=lambda row: 0 if _model_level_for(row) == "forte" else 1)
+        matched_rows.sort(key=lambda r: 0 if _model_level_for(r) == "forte" else 1)
         matched_rows = matched_rows[:1]
-    if case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
-        matched_rows = []
-    if not matched_rows and case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
+
+    # --- Cohérence verdict / référence retenue ---
+    if matched_rows:
+        if case_id == CASE_3:
+            # Le modèle cite une référence : on ne peut pas afficher « aucune correspondance ».
+            case_id = CASE_1 if _model_level_for(matched_rows[0]) == "forte" else CASE_2
+        elif _model_level_for(matched_rows[0]) == "forte" and case_id == CASE_2:
+            case_id = CASE_1
+    elif case_id != CASE_3:
+        # Verdict CAS_1/CAS_2 sans référence exploitable : on retient la mieux classée.
         matched_rows = [selected[0][3]]
+
     matched_row = matched_rows[0] if matched_rows else None
     reference_name = Path(matched_row.file_path).name if matched_row else ""
-    case_titles = {
-        "CAS_1_CORRESPONDANCE_FORTE": "Forte correspondance",
-        "CAS_2_CORRESPONDANCE_PARTIELLE": "Correspondance partielle",
-        "CAS_4_AUCUNE_ETUDE_PERTINENTE": "Aucune correspondance",
-    }
+
     per_reference = []
     for row in matched_rows:
-        item = next((item for item in model_refs if isinstance(item, dict)
-                     and str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
-                     in {Path(row.file_path).name, str(row.title or "")}), {})
+        item = _model_item_for(row)
         level = str(item.get("level", "")).casefold()
+        if level not in {"forte", "partielle"}:
+            level = "forte" if case_id == CASE_1 else "partielle"
         per_reference.append({
             "source_id": row.id,
             "source": Path(row.file_path).name,
             "title": str(row.title or ""),
             "document_type": row.get_document_type_display(),
-            "level": "forte" if level == "forte" or (not level and case_id == "CAS_1_CORRESPONDANCE_FORTE" and row is matched_rows[0]) else "partielle",
+            "level": level,
             "explanation": str(item.get("explanation") or final.get("explanation", ""))[:1200],
-            "common_points": [str(x)[:400] for x in item.get("common_points", final.get("common_points", []))[:8]],
-            "differences": [str(x)[:400] for x in item.get("differences", final.get("differences", []))[:8]],
+            "common_points": _as_list(
+                item.get("common_points") or final.get("common_points", []), 8, 400),
+            "differences": _as_list(
+                item.get("differences") or final.get("differences", []), 8, 400),
         })
+
     evidence = [{
         "source": item["source"],
         "point": item["explanation"][:900],
         "justification": "Référence retenue après examen du contenu par le RAG.",
     } for item in per_reference]
+
     return {
         "mode": "tdr_rag_independent",
         "decision_provider": "independent_rag",
         "decision": case_id,
         "rag_analysis": {
             "case_id": case_id,
-            "case_title": case_titles[case_id],
+            "case_title": CASE_TITLES[case_id],
             "model": llm_audit.get("reported_model") or ACTIVE_MODEL,
             "model_audit": llm_audit,
             "decision": str(final.get("decision", case_id)),
@@ -508,13 +583,12 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "matched_reference": reference_name,
             "matched_references": per_reference,
             "confidence": str(final.get("confidence", "À confirmer"))[:80],
-            "common_points": [str(x)[:500] for x in final.get("common_points", [])[:10]],
-            "differences": [str(x)[:500] for x in final.get("differences", [])[:10]],
+            "common_points": _as_list(final.get("common_points", []), 10, 500),
+            "differences": _as_list(final.get("differences", []), 10, 500),
             "recommendation": str(final.get("recommendation", ""))[:2000],
             "correspondence_level": str(final.get("correspondence_level", "À confirmer"))[:40],
-            "evidence_from_reference": [
-                str(x)[:500] for x in final.get("evidence_from_reference", [])[:8]
-            ] if isinstance(final.get("evidence_from_reference", []), list) else [],
+            "evidence_from_reference": _as_list(
+                final.get("evidence_from_reference", []), 8, 500),
             "references_examined": len(selected),
             "retrieval_candidates": [
                 {
@@ -532,16 +606,16 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "corpus_references_ranked": len(ranked),
             "batches_examined": 1,
             "evidence": evidence,
-            # Les références restent des éléments de comparaison, pas des verdicts séparés : un seul verdict global.
+            # Un seul verdict global : pas de verdicts par référence.
             "batch_findings": [],
         },
         "best_source_id": matched_row.id if matched_row else None,
         "best_source": reference_name or None,
         "sources": [
-            {"source_id": item["source_id"], "source": item["source"],
-             "title": item["title"], "document_type": item["document_type"],
-             "level": item["level"]}
-            for item in per_reference
+            {"source_id": i["source_id"], "source": i["source"],
+             "title": i["title"], "document_type": i["document_type"],
+             "level": i["level"]}
+            for i in per_reference
         ],
         "tfidf_score": None,
         "semantic_score": None,
