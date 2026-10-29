@@ -365,20 +365,8 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "comme TDR-TEST-101 s'il ne figure pas dans la liste. Pour matched_reference, recopie "
         "exactement le titre ou le nom de fichier d'une référence fournie ; si aucune référence "
         "ne convient, renvoie une chaîne vide.\n"
-        "Évalue séparément CHACUNE DES TROIS références fournies, sans en ignorer une avant comparaison. Pour chacune, précise les ressemblances et différences concrètes concernant l'objet, les objectifs, la zone, la population, la période, la méthode, les activités et les livrables. Retourne matched_references, un tableau "
-        "de toutes les références réellement fortes ou partielles, chacune avec filename, "
-        "level (forte ou partielle), explanation, common_points et differences. Le verdict "
-        "global est CAS_1 si au moins une référence est forte ; CAS_2 si aucune n'est forte "
-        "mais qu'au moins une est partielle ; CAS_4 si aucune n'est pertinente. "
-        "L'explication globale doit être développée, précise et justifiée, et non limitée à une phrase générique. Choisis aussi un seul verdict global et donne les points communs, les différences et "
-        "une recommandation. Ne cite que les noms exacts de la liste autorisée. Les libellés "
-        "internes de récupération ne sont pas destinés à l'utilisateur : ne dis jamais "
-        "« TDR 1 », « TDR 2 » ou « document numéro 1/2 ». N'invente aucun fait. Réponds "
-        "uniquement avec un objet JSON valide ayant les clés case_id, decision, explanation, "
-        "matched_reference, matched_references, confidence, common_points (tableau), differences "
-        "(tableau), recommendation, correspondence_level (forte, moyenne ou nulle), "
-        "evidence_from_reference (tableau).\n"
-        "Rappel : les références sont des TDR ou des rapports d'étude présents dans la base ; ne prétends pas "
+        "Compare les trois références en interne, mais RETIENS ET PRÉSENTE UNE SEULE référence : celle qui correspond le mieux au TDR candidat. Si plusieurs références sont proches, choisis celle dont l'objet et les objectifs sont les plus similaires ; en cas d'égalité, choisis celle dont le contenu fournit les preuves les plus solides. Le champ matched_reference doit contenir exactement le nom de fichier de cette seule référence. matched_references doit contenir au maximum un élément, celui de la référence retenue, avec filename, level (forte ou partielle), explanation, common_points et differences. Ne mentionne jamais les autres références dans l'explication, les points communs, les différences ou la recommandation. Le verdict global est CAS_1 si cette référence correspond à la même étude ou à une étude quasi identique ; CAS_2 si elle partage des éléments métier significatifs sans être la même étude ; CAS_4 si aucune des trois références n'est pertinente, auquel cas matched_reference doit être vide et matched_references doit être un tableau vide. L'explication doit justifier le verdict par des éléments concrets observés dans le contenu fourni, sans supposer des informations absentes. Les points communs et différences doivent concerner uniquement la référence retenue. La recommandation doit être courte, claire et opérationnelle. Ne prétends pas qu'une étude a été réalisée à partir d'un TDR seul. Ne cite jamais « TDR 1 », « TDR 2 » ou les scores de recherche. Réponds uniquement avec un objet JSON valide ayant les clés case_id, decision, explanation, matched_reference, matched_references, confidence, common_points (tableau), differences (tableau), recommendation, correspondence_level (forte, moyenne ou nulle), evidence_from_reference (tableau).
+        Rappel : les références sont des TDR ou des rapports d'étude présents dans la base ; ne prétends pas "
         "qu'une étude a été exécutée si le document ne l'établit pas."
     )
     final = _ollama_json(
@@ -463,6 +451,17 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         case_id = "CAS_1_CORRESPONDANCE_FORTE"
     elif matched_rows:
         case_id = "CAS_2_CORRESPONDANCE_PARTIELLE"
+    # L'interface métier ne présente qu'une seule référence : privilégier une référence explicitement classée forte.
+    def _model_level_for(row):
+        filename = Path(row.file_path).name
+        item = next((item for item in model_refs if isinstance(item, dict)
+                     and str(item.get("filename") or item.get("source") or item.get("title") or "").strip()
+                     in {filename, str(row.title or "")}), {})
+        return str(item.get("level", "")).casefold()
+
+    if matched_rows:
+        matched_rows.sort(key=lambda row: 0 if _model_level_for(row) == "forte" else 1)
+        matched_rows = matched_rows[:1]
     if case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE":
         matched_rows = []
     if not matched_rows and case_id != "CAS_4_AUCUNE_ETUDE_PERTINENTE":
