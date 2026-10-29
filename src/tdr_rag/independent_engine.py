@@ -35,7 +35,10 @@ OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
 RAG_TOP_K = 3
 REFERENCE_CHARS = 2200
 CANDIDATE_CHARS = 6000
-OUTPUT_TOKENS = 1200
+# Les serveurs Qwen en mode raisonnement peuvent consommer tout le budget
+# avant de produire le JSON final. Les tentatives distantes augmentent donc
+# progressivement le budget et essaient de désactiver explicitement le thinking.
+OUTPUT_TOKENS = 2048
 
 CASES = {
     "CAS_1_CORRESPONDANCE_FORTE",
@@ -58,10 +61,12 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
         "reported_model": None,
         "request_id": None,
     }
-    # Une première tentative normale, puis deux reprises avec davantage de tokens
-    # et une consigne explicite de produire un objet JSON complet.
+    # Le budget précédent (1200, 2400, 3600) peut être absorbé par le
+    # raisonnement interne de Qwen. On augmente davantage le budget et, sur les
+    # reprises, on demande au serveur compatible de désactiver le mode thinking.
+    token_budgets = (max(tokens, 2048), max(tokens, 4096), max(tokens, 6144))
     for attempt in range(3):
-        token_budget = min(max(tokens, 1024) * (attempt + 1), 4096)
+        token_budget = token_budgets[attempt]
         retry_note = ""
         if attempt:
             retry_note = (
@@ -105,8 +110,17 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                     "temperature": 0,
                     "max_tokens": token_budget,
                 }
-                if attempt != 2:
+                if attempt == 0:
+                    # Premier essai : conserver le mode JSON strict existant.
                     request_kwargs["response_format"] = {"type": "json_object"}
+                else:
+                    # Reprises : certains serveurs n'acceptent pas response_format.
+                    # Qwen peut aussi remplir le budget en reasoning_content sans
+                    # produire de content final. Cette option est prise en charge
+                    # notamment par les serveurs vLLM utilisant le template Qwen.
+                    request_kwargs["extra_body"] = {
+                        "chat_template_kwargs": {"enable_thinking": False}
+                    }
                 response = client.chat.completions.create(**request_kwargs)
                 # Preuve technique retournée par le serveur : modèle, identifiant de requête.
                 llm_audit["reported_model"] = getattr(response, "model", None)
@@ -128,10 +142,12 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                         details.append(f"refusal={refusal[:160]}")
                     if reasoning:
                         details.append("reasoning_content présent mais content vide")
+                    if finish_reason == "length":
+                        details.append("budget de génération épuisé avant la réponse finale")
                     raise ValueError(
                         "Réponse vide du serveur OpenAI-compatible"
                         + (f" ({'; '.join(details)})" if details else "")
-                        + ". Vérifier le format JSON pris en charge et les limites de génération."
+                        + ". Une nouvelle tentative sera faite avec un budget accru et, si possible, le mode thinking désactivé."
                     )
             elif TDR_LLM_PROVIDER == "ollama":
                 response = requests.post(
