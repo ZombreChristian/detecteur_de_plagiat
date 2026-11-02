@@ -26,6 +26,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 # Configuration LLM
 # ---------------------------------------------------------------------------
 # L'arbitrage TDR utilise exclusivement le serveur distant compatible OpenAI.
+TDR_LLM_PROVIDER = "openai_compatible"
 TDR_LLM_BASE_URL = (
     os.getenv("TDR_LLM_BASE_URL")
     or "https://meyer-variable-halo-labeled.trycloudflare.com/api"
