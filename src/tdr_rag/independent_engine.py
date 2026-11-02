@@ -13,7 +13,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import requests
 
 logger = logging.getLogger(__name__)
 
@@ -26,24 +25,15 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "frontend.settings")
 # ---------------------------------------------------------------------------
 # Configuration LLM
 # ---------------------------------------------------------------------------
-# Le fournisseur distant compatible OpenAI est utilisé par défaut pour l'arbitrage TDR.
-# Ollama reste disponible si TDR_LLM_PROVIDER=ollama est explicitement configuré.
-TDR_LLM_PROVIDER = os.getenv("TDR_LLM_PROVIDER", "openai_compatible").strip().lower()
+# L'arbitrage TDR utilise exclusivement le serveur distant compatible OpenAI.
 TDR_LLM_BASE_URL = (
     os.getenv("TDR_LLM_BASE_URL")
     or "https://meyer-variable-halo-labeled.trycloudflare.com/api"
 ).strip().rstrip("/")
 TDR_LLM_API_KEY = os.getenv("TDR_LLM_API_KEY", "").strip()
 TDR_LLM_REMOTE_MODEL = (os.getenv("TDR_LLM_MODEL") or "qwen3.6-35b").strip()
-OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-OLLAMA_MODEL = os.getenv("TDR_RAG_MODEL", os.getenv("OLLAMA_MODEL", "qwen3:8b"))
-REMOTE_PROVIDERS = {"openai_compatible", "openai-compatible", "remote"}
-ACTIVE_MODEL = (
-    TDR_LLM_REMOTE_MODEL
-    if TDR_LLM_PROVIDER in REMOTE_PROVIDERS and TDR_LLM_REMOTE_MODEL
-    else OLLAMA_MODEL
-)
-OLLAMA_TIMEOUT = max(60, int(os.getenv("TDR_RAG_TIMEOUT_SECONDS", "300")))
+TDR_LLM_TIMEOUT = max(60, int(os.getenv("TDR_LLM_TIMEOUT_SECONDS", "300")))
+ACTIVE_MODEL = TDR_LLM_REMOTE_MODEL
 
 # Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
 # uniquement sur les trois références les mieux classées.
@@ -130,27 +120,14 @@ class IndependentTDRError(RuntimeError):
 # Appel LLM
 # ---------------------------------------------------------------------------
 def _validate_llm_config() -> None:
-    """Erreurs de configuration : inutile de les retenter."""
-    if TDR_LLM_PROVIDER in REMOTE_PROVIDERS:
-        if not TDR_LLM_BASE_URL:
-            raise IndependentTDRError(
-                "TDR_LLM_BASE_URL est requis pour le fournisseur openai_compatible."
-            )
-        if not TDR_LLM_API_KEY:
-            raise IndependentTDRError(
-                "TDR_LLM_API_KEY est requis pour le fournisseur openai_compatible."
-            )
-        if not TDR_LLM_REMOTE_MODEL:
-            raise IndependentTDRError(
-                "TDR_LLM_MODEL est requis pour le fournisseur openai_compatible."
-            )
-    elif TDR_LLM_PROVIDER != "ollama":
-        raise IndependentTDRError(
-            "TDR_LLM_PROVIDER invalide. Valeurs acceptées : ollama, openai_compatible."
-        )
+    """Vérifie la configuration du fournisseur distant unique."""
+    if not TDR_LLM_BASE_URL:
+        raise IndependentTDRError("TDR_LLM_BASE_URL est requis.")
+    if not TDR_LLM_REMOTE_MODEL:
+        raise IndependentTDRError("TDR_LLM_MODEL est requis.")
 
 
-def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKENS) -> dict:
+def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKENS) -> dict:
     """Appelle le fournisseur configuré avec reprises limitées en cas de JSON invalide."""
     _validate_llm_config()
 
@@ -179,74 +156,52 @@ def _ollama_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKE
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt + retry_note},
             ]
-            if TDR_LLM_PROVIDER in REMOTE_PROVIDERS:
-                from openai import OpenAI
+            from openai import OpenAI
 
-                client = OpenAI(
-                    base_url=TDR_LLM_BASE_URL,
-                    api_key=TDR_LLM_API_KEY,
-                    timeout=OLLAMA_TIMEOUT,
-                    max_retries=0,
-                )
-                request_kwargs = {
-                    "model": TDR_LLM_REMOTE_MODEL,
-                    "messages": messages,
-                    "temperature": 0,
-                    "max_tokens": token_budget,
+            client = OpenAI(
+                base_url=TDR_LLM_BASE_URL,
+                api_key=TDR_LLM_API_KEY or "not-needed",
+                timeout=TDR_LLM_TIMEOUT,
+                max_retries=0,
+            )
+            request_kwargs = {
+                "model": TDR_LLM_REMOTE_MODEL,
+                "messages": messages,
+                "temperature": 0,
+                "max_tokens": token_budget,
+            }
+            if attempt == 0:
+                request_kwargs["response_format"] = {"type": "json_object"}
+            else:
+                request_kwargs["extra_body"] = {
+                    "chat_template_kwargs": {"enable_thinking": False}
                 }
-                if attempt == 0:
-                    # Premier essai : mode JSON strict.
-                    request_kwargs["response_format"] = {"type": "json_object"}
-                else:
-                    # Reprises : certains serveurs gèrent mal response_format ; on
-                    # désactive le thinking (vLLM + template Qwen).
-                    request_kwargs["extra_body"] = {
-                        "chat_template_kwargs": {"enable_thinking": False}
-                    }
-                response = client.chat.completions.create(**request_kwargs)
-                llm_audit["reported_model"] = getattr(response, "model", None)
-                llm_audit["request_id"] = getattr(response, "id", None)
-                if not response.choices:
-                    raise ValueError("Le serveur LLM n'a renvoyé aucun choix (choices vide).")
-                choice = response.choices[0]
-                message = choice.message
-                last_content = (getattr(message, "content", None) or "").strip()
-                finish_reason = getattr(choice, "finish_reason", None)
-                if not last_content:
-                    refusal = (getattr(message, "refusal", None) or "").strip()
-                    reasoning = (getattr(message, "reasoning_content", None) or "").strip()
-                    details = []
-                    if finish_reason:
-                        details.append(f"finish_reason={finish_reason}")
-                    if refusal:
-                        details.append(f"refusal={refusal[:160]}")
-                    if reasoning:
-                        details.append("reasoning_content présent mais content vide")
-                    if finish_reason == "length":
-                        details.append("budget de génération épuisé avant la réponse finale")
-                    raise ValueError(
-                        "Réponse vide du serveur OpenAI-compatible"
-                        + (f" ({'; '.join(details)})" if details else "")
-                        + ". Nouvelle tentative avec budget accru et thinking désactivé."
-                    )
-            else:  # ollama
-                response = requests.post(
-                    f"{OLLAMA_URL}/api/chat",
-                    json={
-                        "model": ACTIVE_MODEL,
-                        "stream": False,
-                        "format": "json",
-                        "think": False,
-                        "keep_alive": "5m",
-                        "options": {"temperature": 0, "num_predict": token_budget},
-                        "messages": messages,
-                    },
-                    timeout=OLLAMA_TIMEOUT,
+            response = client.chat.completions.create(**request_kwargs)
+            llm_audit["reported_model"] = getattr(response, "model", None)
+            llm_audit["request_id"] = getattr(response, "id", None)
+            if not response.choices:
+                raise ValueError("Le serveur LLM n'a renvoyé aucun choix (choices vide).")
+            choice = response.choices[0]
+            message = choice.message
+            last_content = (getattr(message, "content", None) or "").strip()
+            finish_reason = getattr(choice, "finish_reason", None)
+            if not last_content:
+                refusal = (getattr(message, "refusal", None) or "").strip()
+                reasoning = (getattr(message, "reasoning_content", None) or "").strip()
+                details = []
+                if finish_reason:
+                    details.append(f"finish_reason={finish_reason}")
+                if refusal:
+                    details.append(f"refusal={refusal[:160]}")
+                if reasoning:
+                    details.append("reasoning_content présent mais content vide")
+                if finish_reason == "length":
+                    details.append("budget de génération épuisé avant la réponse finale")
+                raise ValueError(
+                    "Réponse vide du serveur OpenAI-compatible"
+                    + (f" ({'; '.join(details)})" if details else "")
+                    + ". Nouvelle tentative avec budget accru et thinking désactivé."
                 )
-                response.raise_for_status()
-                payload = response.json()
-                llm_audit["reported_model"] = payload.get("model") or OLLAMA_MODEL
-                last_content = (payload.get("message") or {}).get("content", "").strip()
 
             if not last_content:
                 raise ValueError("Le fournisseur LLM a renvoyé une réponse vide.")
@@ -453,7 +408,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             for _, _, _, row in selected
         )
     )
-    final = _ollama_json(SYSTEM_PROMPT, user_prompt, tokens=OUTPUT_TOKENS)
+    final = _request_llm_json(SYSTEM_PROMPT, user_prompt, tokens=OUTPUT_TOKENS)
 
     llm_audit = final.pop("_llm_audit", {
         "provider": TDR_LLM_PROVIDER,
