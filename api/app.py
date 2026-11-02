@@ -26,7 +26,6 @@ from src.indexing.reference_index import (
 )
 from src.passages.passage_engine import analyze_document_pair, adjusted_hybrid_score
 from src.similarity.contextual_engine import analyze_context
-from src.llm.ollama_rag import analyze_tdr_with_rag, OllamaRAGError
 from src.preprocessing.clean_text import clean_text
 from src.similarity.model_manager import get_model, get_model_info
 
@@ -258,78 +257,24 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
 
     best = ranked[0]
 
-    # Parcours TDR : les scores servent uniquement à récupérer des documents.
-    # Qwen est le seul arbitre métier. Aucun seuil et aucun moteur de passages
-    # ne sont exécutés dans ce parcours.
+    # Parcours TDR : récupération lexicale/sémantique puis arbitrage distant indépendant.
     if kind == "duplicate":
+        from src.tdr_rag.independent_engine import (
+            analyze_tdr_independently,
+            IndependentTDRError,
+        )
         try:
-            rag_analysis = analyze_tdr_with_rag(candidate, ranked)
-        except OllamaRAGError as exc:
+            result = analyze_tdr_independently(candidate)
+        except IndependentTDRError as exc:
             raise HTTPException(
                 status_code=503,
                 detail={
                     "error": "TDR_RAG_UNAVAILABLE",
                     "message": str(exc),
-                    "hint": (
-                        "Démarrez Ollama et vérifiez que qwen3:8b est installé "
-                        "(ollama list)."
-                    ),
+                    "hint": "Vérifiez la configuration du fournisseur Qwen distant dans frontend/.env.",
                 },
             ) from exc
-
-        ranked_by_name = {item["source"]: item for item in ranked}
-        used_names = rag_analysis.get("references_used", [])
-        sources = []
-        for source_name in used_names:
-            item = ranked_by_name.get(source_name)
-            if not item:
-                continue
-            sources.append({
-                "source_id": item["id"],
-                "source": item["source"],
-                "title": item.get("title") or item["source"],
-                # Ce score sert à ordonner la récupération uniquement.
-                "retrieval_score": item["hybrid_score"],
-                "tfidf_score": item["tfidf_score"],
-                "semantic_score": item["semantic_score"],
-                "hybrid_score": item["hybrid_score"],
-                "matches": [],
-            })
-
-        matched_reference = rag_analysis.get("matched_reference", "")
-        matched_item = ranked_by_name.get(matched_reference)
-        # N'afficher comme source de comparaison que la référence explicitement
-        # retenue par Qwen. Les autres documents ont servi à la récupération RAG,
-        # mais ne doivent pas être présentés comme pertinents par défaut.
-        if matched_item:
-            sources = [source for source in sources if source["source"] == matched_reference]
-        else:
-            sources = []
-        final_decision = rag_analysis["decision"]
-
-        return {
-            "mode": "duplicate",
-            "decision": final_decision,
-            "threshold": None,
-            "threshold_percent": None,
-            "decision_provider": "ollama",
-            "rag_analysis": rag_analysis,
-            "lexical_weight": LEXICAL_WEIGHT,
-            "semantic_weight": SEMANTIC_WEIGHT,
-            "best_source": matched_reference if matched_item else "",
-            "best_source_id": matched_item["id"] if matched_item else None,
-            "candidate_document_html": html.escape(candidate),
-            # Pour les TDR, ne pas afficher les scores de récupération comme
-            # s'il s'agissait d'un score de verdict.
-            "tfidf_score": None,
-            "semantic_score": None,
-            "hybrid_score": None,
-            "novelty_score": None,
-            "contextual_analysis": None,
-            "contextual_explanation": rag_analysis.get("explanation", ""),
-            "sources": sources,
-            "matches": [],
-        }
+        return result
 
     # Parcours rapports : seuil et moteur contextuel historiques conservés.
     if threshold is None:
