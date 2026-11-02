@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
-env/
+
 
 # Models / generated data
 modeles/*
@@ -15,7 +15,7 @@ resultats/*
 
 # Notebooks
 .ipynb_checkpoints/
-
+frontend/media/documents/*
 # OS
 .DS_Store
 Thumbs.db
