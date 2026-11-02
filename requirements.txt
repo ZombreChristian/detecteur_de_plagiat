@@ -20,3 +20,4 @@ matplotlib
 seaborn
 pytest
 pypdf
+openai>=1.0,<3.0
