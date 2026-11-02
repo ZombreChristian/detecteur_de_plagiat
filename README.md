@@ -101,7 +101,7 @@ TDR_LLM_MODEL=qwen3.6-35b
 TDR_LLM_API_KEY=
 ```
 
-Le moteur RAG indépendant utilise ce fournisseur distant compatible OpenAI. Aucun serveur Ollama local n'est requis pour cette configuration. Le serveur distant doit être accessible depuis la machine qui exécute l'application et accepter le modèle indiqué. La clé API peut rester vide uniquement si le serveur n'exige aucune authentification.
+Le moteur RAG indépendant utilise exclusivement ce fournisseur distant compatible OpenAI. Le serveur doit être accessible depuis la machine qui exécute l'application et accepter le modèle indiqué. La clé API peut rester vide uniquement si le serveur n'exige aucune authentification.
 
 Les paramètres de recherche documentaire peuvent être définis séparément :
 
