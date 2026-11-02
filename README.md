@@ -1,6 +1,6 @@
 # TDRDOC-SCAN — Détecteur de plagiat et de doublon d'études
 
-TDRDOC-SCAN est une application de contrôle documentaire destinée à comparer les termes de référence (TDR) et à détecter les ressemblances entre rapports d'études. Elle s'appuie sur une interface Django, une API FastAPI, PostgreSQL, une recherche lexicale et sémantique et un arbitrage par modèle de langage pour l'analyse des TDR.
+TDRDOC-SCAN est une application de contrôle documentaire destinée à comparer les termes de référence (TDR) et à détecter les ressemblances entre rapports d'études. Elle s'appuie sur une interface Django, une API FastAPI, PostgreSQL, une recherche lexicale et sémantique et un arbitrage par Qwen3.6-35B via un serveur distant compatible avec l'API OpenAI pour l'analyse des TDR.
 
 > **Branche de développement suivie :** `feature/ollama-optimization-admin-testv1`.
 > Les modifications décrites dans cette branche ne doivent pas être fusionnées dans `main` sans autorisation explicite.
@@ -43,15 +43,15 @@ Les documents de référence sont préparés et indexés séparément. Un docume
 - **Recherche documentaire :** TF-IDF, embeddings multilingues et similarité cosinus.
 - **Base de données :** PostgreSQL.
 - **Modèle d'embeddings par défaut :** `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`.
-- **LLM TDR :** fournisseur compatible OpenAI ou Ollama, selon `TDR_LLM_PROVIDER` et la configuration de l'environnement.
+- **LLM TDR :** fournisseur distant compatible OpenAI, configuré par `TDR_LLM_PROVIDER`, `TDR_LLM_BASE_URL`, `TDR_LLM_MODEL` et `TDR_LLM_API_KEY`.
 
 ## Prérequis
 
 - Python 3.10 ou version compatible avec les dépendances du projet ;
 - PostgreSQL ;
 - Git ;
-- Ollama si le fournisseur local est utilisé ;
-- un modèle Qwen disponible auprès du fournisseur configuré.
+- un accès réseau au serveur LLM distant compatible avec l'API OpenAI ;
+- le modèle Qwen3.6-35B disponible sur ce serveur.
 
 ## Installation sous Windows
 
@@ -92,35 +92,27 @@ Copy-Item frontend/.env.example frontend/.env
 
 Adapter ensuite les paramètres PostgreSQL, Django et les paramètres des services. **Ne jamais committer ni publier le vrai fichier `.env`**, car il peut contenir des mots de passe, clés ou autres secrets. Le fichier `.env.example` ne doit contenir que des valeurs fictives ou non sensibles.
 
-Paramètres principaux présents dans `frontend/.env.example` :
+Configuration LLM utilisée pour cette branche :
 
 ```dotenv
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen3:8b
-OLLAMA_TIMEOUT_SECONDS=300
+TDR_LLM_PROVIDER=openai_compatible
+TDR_LLM_BASE_URL=https://meyer-variable-halo-labeled.trycloudflare.com/api
+TDR_LLM_MODEL=qwen3.6-35b
+TDR_LLM_API_KEY=
+```
 
+Le moteur RAG indépendant utilise ce fournisseur distant compatible OpenAI. Aucun serveur Ollama local n'est requis pour cette configuration. Le serveur distant doit être accessible depuis la machine qui exécute l'application et accepter le modèle indiqué. La clé API peut rester vide uniquement si le serveur n'exige aucune authentification.
+
+Les paramètres de recherche documentaire peuvent être définis séparément :
+
+```dotenv
 SIMILARITY_LEXICAL_WEIGHT=0.30
 SIMILARITY_SEMANTIC_WEIGHT=0.70
 SIMILARITY_REFERENCE_TOP_K=10
 SIMILARITY_PASSAGE_TOP_K=3
 ```
 
-Pour le moteur RAG indépendant, le fournisseur peut être sélectionné avec `TDR_LLM_PROVIDER` :
-- `ollama` : utilise le service Ollama local et le modèle défini par `TDR_RAG_MODEL` (ou `OLLAMA_MODEL`) ;
-- `openai_compatible` : utilise un serveur compatible avec l'API OpenAI, configuré avec `TDR_LLM_BASE_URL`, `TDR_LLM_API_KEY` et `TDR_LLM_MODEL`.
-
-Ne placez jamais de vraie clé API dans `.env.example`, dans le code source ou dans le README. Le fournisseur et le modèle effectivement utilisés doivent être configurés explicitement dans le fichier local `.env`.
-
-### 4. Préparer Ollama (uniquement si le fournisseur local est utilisé)
-
-Installer Ollama depuis https://ollama.com/, puis :
-
-```powershell
-ollama pull qwen3:8b
-ollama list
-```
-
-Vérifier que le service Ollama est démarré et que le nom du modèle correspond à la configuration locale.
+Ne publiez jamais le fichier local `.env`. Le README et `.env.example` ne doivent contenir aucune clé, aucun mot de passe ni autre secret réel.
 
 ## Préparer l'index documentaire
 
@@ -177,10 +169,11 @@ Cette configuration aide l'analyse statique de VS Code ; elle ne remplace pas l'
 
 ## Dépannage
 
-**Le fournisseur LLM ne répond pas**
-- Pour Ollama, vérifier que le service est démarré avec `ollama list`.
-- Vérifier `TDR_LLM_PROVIDER`, l'URL du fournisseur et le nom du modèle dans le fichier local `.env`.
-- Pour un serveur compatible OpenAI, vérifier l'URL, la clé et le nom du modèle.
+**Le fournisseur LLM distant ne répond pas**
+- Vérifier que la machine dispose d'un accès réseau au serveur configuré dans `TDR_LLM_BASE_URL`.
+- Vérifier que l'URL se termine par le chemin API attendu par le serveur.
+- Vérifier que `TDR_LLM_MODEL` correspond au modèle disponible sur le serveur.
+- Si le serveur exige une authentification, renseigner `TDR_LLM_API_KEY` dans le fichier local `.env`.
 - Consulter le message d'erreur renvoyé par l'API.
 
 **Aucune référence n'est disponible**
