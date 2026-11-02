@@ -1,62 +1,61 @@
 # TDRDOC-SCAN — Détecteur de plagiat et de doublon d'études
 
-TDRDOC-SCAN compare les termes de référence (TDR) soumis par les utilisateurs à un corpus de références indexé et détecte les ressemblances entre rapports d'études. L'application comprend une interface Django, une API FastAPI, PostgreSQL, un moteur lexical/sémantique et un arbitrage RAG local par Qwen3 via Ollama pour les TDR.
+TDRDOC-SCAN est une application de contrôle documentaire destinée à comparer les termes de référence (TDR) et à détecter les ressemblances entre rapports d'études. Elle s'appuie sur une interface Django, une API FastAPI, PostgreSQL, une recherche lexicale et sémantique et un arbitrage par modèle de langage pour l'analyse des TDR.
 
-> **Branche de développement :** `feature/testsimilarity`. Les changements décrits ici ne doivent pas être fusionnés dans `main` sans autorisation explicite.
+> **Branche de développement suivie :** `feature/ollama-optimization-admin-testv1`.
+> Les modifications décrites dans cette branche ne doivent pas être fusionnées dans `main) sans autorisation explicite.
 
-## Fonctionnement
+## Fonctionnalités
 
-### Analyse des TDR : recherche de références + arbitrage RAG
+### Vérification des TDR (mode « Doublon »)
 
-1. Le texte du TDR déposé est extrait et nettoyé.
-2. Le moteur lexical et sémantique recherche les références les plus pertinentes dans l'index PostgreSQL.
-3. Les références récupérées et le TDR candidat sont transmis à **Qwen3 via Ollama local**.
-4. Qwen3 compare notamment l'objet, les activités, la zone géographique, les objectifs, les résultats attendus et, lorsque l'information est disponible, la population cible, la période et la méthodologie.
-5. L'application présente le cas métier retenu, son explication, les points communs, les différences, les éléments probants et les informations manquantes.
+1. Le texte du document DOCX ou PDF est extrait et préparé.
+2. Le moteur lexical et sémantique classe les documents de référence indexés dans PostgreSQL.
+3. Les références candidates sont transmises au moteur RAG et au modèle configuré.
+4. L'analyse compare le contenu métier : objet, problématique, objectifs, activités, zone géographique, population cible, période, méthodologie et livrables, lorsque ces informations sont disponibles.
+5. L'application retourne un verdict expliqué, les références retenues, les points communs, les différences et une recommandation.
 
-Les scores lexicaux, sémantiques et hybrides servent à **retrouver les références**. Ils ne déterminent pas à eux seuls le verdict final d'un TDR.
+Les scores TF-IDF, sémantiques et hybrides servent à **retrouver et classer les références candidates**. Ils ne doivent pas, à eux seuls, déterminer le verdict métier du TDR.
 
-Les quatre cas métier sont :
-- **Cas 1 — Correspondance forte** : une référence couvre essentiellement la même étude.
-- **Cas 2 — Correspondance partielle** : plusieurs dimensions convergent, mais des différences ou incertitudes importantes subsistent.
-- **Cas 3 — Même objectif, zone différente** : l'objet ou les objectifs sont comparables, mais la zone géographique est explicitement différente.
-- **Cas 4 — Aucune étude pertinente** : aucune des références récupérées n'est suffisamment pertinente.
+Les niveaux de conclusion utilisés par le moteur RAG indépendant sont :
+- **Correspondance forte** : le TDR reprend la même étude ou une étude quasi identique.
+- **Correspondance partielle** : des dimensions métier importantes se recoupent, mais des différences significatives subsistent.
+- **Aucune étude pertinente** : aucune référence examinée ne présente de correspondance métier suffisante.
 
-Le modèle doit justifier sa décision à partir du TDR et des références fournies. Si Ollama est inaccessible, si le modèle manque ou si sa réponse est inexploitable, l'API renvoie une erreur explicite : elle ne remplace pas silencieusement l'arbitrage RAG par une décision basée uniquement sur les scores.
+Une zone géographique différente n'exclut pas automatiquement une correspondance partielle si les objectifs et la démarche se recoupent réellement.
 
-### Analyse des rapports d'études
+Si le fournisseur LLM est indisponible ou renvoie une réponse inexploitable, l'analyse doit signaler l'indisponibilité au lieu de fabriquer un verdict à partir des seuls scores de recherche.
 
-Le mode rapports conserve le calcul de similarité lexicale et sémantique, l'analyse des passages et le seuil de décision du mode plagiat. Les poids par défaut du score hybride sont de 30 % pour le lexical et de 70 % pour le sémantique.
+### Analyse des rapports (mode « Plagiat »)
 
-### Index de référence
+Le parcours des rapports conserve la recherche lexicale et sémantique, l'analyse des passages et le mécanisme de décision par seuil du mode plagiat. Les poids par défaut de la recherche hybride sont de 30 % pour le lexical et de 70 % pour le sémantique.
 
-Les documents de référence sont préparés et indexés séparément. Un document candidat envoyé pour analyse **n'est pas ajouté automatiquement** au corpus de référence.
+### Registre et index de référence
 
-## Architecture
+Les documents de référence sont préparés et indexés séparément. Un document candidat soumis à l'analyse ne doit pas être ajouté automatiquement au registre des références.
 
-- **Interface utilisateur :** Django dans `frontend/`
-- **API de détection :** FastAPI dans `api/app.py`
-- **Base de données :** PostgreSQL
-- **Extraction :** documents DOCX et PDF pris en charge par l'API
-- **Recherche de références :** TF-IDF, embeddings multilingues et similarité cosinus
-- **Arbitrage des TDR :** Qwen3 local via Ollama et contexte de références récupérées (RAG)
-- **Modèle d'embeddings par défaut :** `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`
+## Architecture technique
+
+- **Interface web :** Django, dans `frontend/`.
+- **API :** FastAPI, dans `api/app.py`.
+- **Application Django :** `frontend/detector/`.
+- **Moteur RAG TDR indépendant :** `src/tdr_rag/independent_engine.py`.
+- **Recherche documentaire :** TF-IDF, embeddings multilingues et similarité cosinus.
+- **Base de données :** PostgreSQL.
+- **Modèle d'embeddings par défaut :** `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`.
+- **LLM TDR :** fournisseur compatible OpenAI ou Ollama, selon `TDR_LLM_PROVIDER` et la configuration de l'environnement.
 
 ## Prérequis
 
-Installer les outils suivants :
-
-- Python 3.11 recommandé ;
+- Python 3.10 ou version compatible avec les dépendances du projet ;
 - PostgreSQL ;
 - Git ;
-- Ollama pour l'analyse RAG des TDR ;
-- le modèle local Qwen3 choisi pour le projet, par défaut `qwen3:8b).
-
-Vérifier que la machine dispose des ressources suffisantes pour exécuter le modèle local. La première utilisation du modèle d'embeddings peut nécessiter un téléchargement depuis Hugging Face.
+- Ollama si le fournisseur local est utilisé ;
+- un modèle Qwen disponible auprès du fournisseur configuré.
 
 ## Installation sous Windows
 
-Ouvrir PowerShell et se placer dans le dossier du dépôt :
+Depuis PowerShell, se placer à la racine du dépôt :
 
 ```powershell
 cd C:\Users\Leslie\Desktop\Plagiat\detecteur_de_plagiat
@@ -64,64 +63,66 @@ cd C:\Users\Leslie\Desktop\Plagiat\detecteur_de_plagiat
 
 ### 1. Créer ou activer l'environnement virtuel
 
-Si l'environnement virtuel n'existe pas encore :
+Pour créer l'environnement :
 
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 ```
 
-S'il existe déjà :
+Pour réactiver un environnement existant :
 
 ```powershell
 .\venv\Scripts\Activate.ps1
 ```
 
-### 2. Installer les dépendances Python
-
-Depuis la racine du dépôt :
+### 2. Installer les dépendances
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-### 3. Configurer les variables d'environnement
+### 3. Configurer l'environnement
 
-Créer `frontend/.env` en copiant le modèle :
+Créer le fichier local `frontend/.env` à partir du modèle :
 
 ```powershell
 Copy-Item frontend/.env.example frontend/.env
 ```
 
-Ouvrir ensuite `frontend/.env` et adapter les paramètres PostgreSQL, Django et, si nécessaire, FastAPI et les e-mails. **Ne jamais publier le vrai fichier `.env` ni ses mots de passe.** Le fichier `.env.example` contient des valeurs d'exemple à remplacer.
+Adapter ensuite les paramètres PostgreSQL, Django et les paramètres des services. **Ne jamais committer ni publier le vrai fichier `.env`**, car il peut contenir des mots de passe, clés ou autres secrets. Le fichier `.env.example` ne doit contenir que des valeurs fictives ou non sensibles.
 
-Les paramètres RAG sont documentés dans `frontend/.env.example` :
+Paramètres principaux présents dans `frontend/.env.example` :
 
 ```dotenv
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen3:8b
-OLLAMA_TIMEOUT_SECONDS=180
-TDR_RAG_REFERENCE_TOP_K=5
-TDR_RAG_CANDIDATE_MAX_CHARS=18000
-TDR_RAG_REFERENCE_MAX_CHARS=7000
+OLLAMA_TIMEOUT_SECONDS=300
+
+SIMILARITY_LEXICAL_WEIGHT=0.30
+SIMILARITY_SEMANTIC_WEIGHT=0.70
+SIMILARITY_REFERENCE_TOP_K=10
+SIMILARITY_PASSAGE_TOP_K=3
 ```
 
-Ces variables contrôlent l'adresse d'Ollama, le modèle, le délai maximal et la quantité de texte transmise au modèle. Il n'est pas nécessaire de copier le contenu d'un fichier `.env` privé dans le dépôt.
+Pour le moteur RAG indépendant, le fournisseur peut être sélectionné avec `TDR_LLM_PROVIDER` :
+- `ollama` : utilise le service Ollama local et le modèle défini par `TDR_RAG_MODEL` (ou `OLLAMA_MODEL`) ;
+- `openai_compatible` : utilise un serveur compatible avec l'API OpenAI, configuré avec `TDR_LLM_BASE_URL`, `TDR_LLM_API_KEY` et `TDR_LLM_MODEL`.
 
-### 4. Installer et vérifier Ollama pour l'analyse des TDR
+Ne placez jamais de vraie clé API dans `.env.example`, dans le code source ou dans le README. Le fournisseur et le modèle effectivement utilisés doivent être configurés explicitement dans le fichier local `.env`.
 
-Installer Ollama depuis le site officiel : https://ollama.com/
+### 4. Préparer Ollama (uniquement si le fournisseur local est utilisé)
 
-Puis, dans un terminal :
+Installer Ollama depuis https://ollama.com/, puis :
 
 ```powershell
 ollama pull qwen3:8b
 ollama list
 ```
 
-Vérifier qu'Ollama est démarré et que le modèle configuré dans `OLLAMA_MODEL` apparaît dans la liste. Le service doit être accessible depuis la machine où FastAPI s'exécute. Si le modèle est absent ou si Ollama ne répond pas, l'arbitrage RAG des TDR échouera explicitement.
+Vérifier que le service Ollama est démarré et que le nom du modèle correspond à la configuration locale.
 
-## Préparer la base de référence
+## Préparer l'index documentaire
 
 Depuis la racine du dépôt :
 
@@ -131,23 +132,21 @@ python manage.py migrate
 python manage.py prepare_reference_index
 ```
 
-La commande d'indexation prépare les documents de référence présents dans les emplacements configurés par le projet. Elle extrait et nettoie leur texte, calcule les embeddings et enregistre les informations d'indexation dans la base.
+Cette commande prépare les documents de référence attendus par le projet, extrait leur contenu et calcule les données nécessaires à la recherche. Ne relancez pas une réindexation forcée à chaque analyse.
 
-Si le contenu d'une référence n'a pas changé et qu'il est déjà indexé, son embedding peut être réutilisé. Pour forcer une réindexation complète, uniquement si nécessaire :
+Pour forcer une réindexation complète, uniquement si nécessaire :
 
 ```powershell
 python manage.py prepare_reference_index --force
 ```
 
-Ne pas lancer cette commande avant chaque analyse. Vérifier que les documents de référence sont placés dans les dossiers attendus par la configuration du projet et que les deux corpus (TDR et rapports) sont correctement alimentés.
+## Démarrer les services
 
-## Démarrer l'application
-
-Lancer les services dans des terminaux séparés.
+Lancer les services dans des terminaux PowerShell distincts, avec l'environnement virtuel activé.
 
 ### Terminal 1 — API FastAPI
 
-Depuis la racine du dépôt, avec l'environnement virtuel activé :
+Depuis la racine du dépôt :
 
 ```powershell
 uvicorn api.app:app --reload --port 8000
@@ -155,61 +154,53 @@ uvicorn api.app:app --reload --port 8000
 
 ### Terminal 2 — Interface Django
 
-Dans un deuxième terminal :
-
 ```powershell
-cd C:\Users\Leslie\Desktop\Plagiat\detecteur_de_plagiat
-.\venv\Scripts\Activate.ps1
 cd frontend
 python manage.py runserver 127.0.0.1:8001
 ```
 
-Si l'environnement virtuel est déjà activé, ne l'activez pas une deuxième fois.
-
-Accès locaux :
+Adresses locales :
 - Interface Django : http://127.0.0.1:8001/
-- État de l'API : http://127.0.0.1:8000/api/health
-- Documentation interactive FastAPI : http://127.0.0.1:8000/docs
+- Santé de l'API : http://127.0.0.1:8000/api/health
+- Documentation FastAPI : http://127.0.0.1:8000/docs
 
-## Paramètres de similarité
+## Configuration VS Code
 
-Les paramètres suivants sont définis dans `frontend/.env.example` et peuvent être adaptés dans `frontend/.env` :
+Le dépôt contient `.vscode/settings.json` pour aider Pylance à résoudre les imports Django du dossier `frontend/`, notamment `detector.models`.
 
-- `SIMILARITY_LEXICAL_WEIGHT=0.30` : poids du score lexical ;
-- `SIMILARITY_SEMANTIC_WEIGHT=0.70` : poids du score sémantique ;
-- `SIMILARITY_REFERENCE_TOP_K=10` : nombre de références considérées par la recherche générale ;
-- `SIMILARITY_PASSAGE_TOP_K=3` : nombre de sources utilisées pour l'analyse détaillée des passages ;
-- `TDR_RAG_REFERENCE_TOP_K=5` : nombre maximal de références envoyées à Qwen3 pour l'arbitrage RAG.
+Après récupération des changements Git, si Pylance affiche encore une erreur d'import :
+1. vérifier que VS Code a ouvert la racine du dépôt ;
+2. sélectionner l'interpréteur Python de l'environnement virtuel `venv` ;
+3. exécuter **Python: Restart Language Server** depuis la palette de commandes.
 
-La somme des poids lexical et sémantique doit être égale à 1. Les seuils de similarité restent utilisés pour le mode rapports. Pour les TDR, le verdict métier provient de l'arbitrage Qwen3 à partir des références récupérées, pas d'un seuil numérique fixe.
+Cette configuration aide l'analyse statique de VS Code ; elle ne remplace pas l'installation des dépendances ni la configuration Django.
 
 ## Dépannage
 
-**Ollama est inaccessible ou le modèle est introuvable**
-- Vérifier que l'application Ollama est démarrée.
-- Exécuter `ollama list` et confirmer le nom exact du modèle.
-- Vérifier `OLLAMA_BASE_URL` et `OLLAMA_MODEL` dans `frontend/.env`.
-- Consulter le message d'erreur retourné par l'API. Une indisponibilité de Qwen3 empêche de conclure l'analyse RAG du TDR.
+**Le fournisseur LLM ne répond pas**
+- Pour Ollama, vérifier que le service est démarré avec `ollama list`.
+- Vérifier `TDR_LLM_PROVIDER`, l'URL du fournisseur et le nom du modèle dans le fichier local `.env`.
+- Pour un serveur compatible OpenAI, vérifier l'URL, la clé et le nom du modèle.
+- Consulter le message d'erreur renvoyé par l'API.
 
-**Aucune référence n'est trouvée**
+**Aucune référence n'est disponible**
 - Vérifier que PostgreSQL est démarré et que les paramètres de connexion sont corrects.
-- Vérifier que les documents de référence attendus sont présents.
-- Exécuter les migrations Django, puis `python manage.py prepare_reference_index` depuis `frontend/`.
+- Vérifier la présence des documents de référence dans les emplacements prévus.
+- Exécuter les migrations puis `python manage.py prepare_reference_index` depuis `frontend/`.
 
-**Le modèle d'embeddings se télécharge au premier lancement**
-- Cela peut être normal si le modèle n'est pas encore présent dans le répertoire local configuré.
-- Vérifier la connexion Internet et l'espace disque. Les lancements suivants peuvent réutiliser la copie locale.
-
-**L'API ne démarre pas**
-- Vérifier que l'environnement virtuel est activé et que les dépendances sont installées.
-- Vérifier que le terminal se trouve à la racine du dépôt avant de lancer `uvicorn api.app:app --reload --port 8000`.
+**Pylance ne trouve pas `detector.models`**
+- Ouvrir la racine du dépôt dans VS Code.
+- Vérifier l'interpréteur Python sélectionné.
+- Vérifier les chemins `python.analysis.extraPaths` dans `.vscode/settings.json`.
+- Redémarrer le serveur de langage Python.
 
 ## Sécurité
 
-- Ne pas committer `frontend/.env`, mots de passe, clés secrètes ou jetons d'accès.
-- Utiliser des valeurs sécurisées pour `DJANGO_SECRET_KEY` en dehors du développement local.
-- Les valeurs de `.env.example` sont des exemples et doivent être adaptées à l'environnement utilisé.
+- Ne jamais committer `frontend/.env`, les mots de passe, clés API ou jetons d'accès.
+- Si un secret a déjà été publié dans Git, le révoquer ou le renouveler. Le retirer dans un nouveau commit ne l'efface pas de l'historique Git.
+- Utiliser une valeur sécurisée pour `DJANGO_SECRET_KEY` hors environnement de développement.
+- Conserver uniquement des valeurs fictives dans `.env.example`.
 
 ## Branche de développement
 
-Le travail de cette évolution se fait sur `feature/testsimilarity`. Ne pas modifier `main`, `suite_developpement` ou `feature/fusion` dans le cadre de cette évolution sans autorisation explicite.
+La branche de travail suivie pour cette évolution est `feature/ollama-optimization-admin-testv1`. Ne pas pousser les changements sur `main` ni fusionner vers une autre branche sans validation explicite.
