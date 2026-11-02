@@ -3,7 +3,7 @@
 TDRDOC-SCAN est une application de contrôle documentaire destinée à comparer les termes de référence (TDR) et à détecter les ressemblances entre rapports d'études. Elle s'appuie sur une interface Django, une API FastAPI, PostgreSQL, une recherche lexicale et sémantique et un arbitrage par modèle de langage pour l'analyse des TDR.
 
 > **Branche de développement suivie :** `feature/ollama-optimization-admin-testv1`.
-> Les modifications décrites dans cette branche ne doivent pas être fusionnées dans `main) sans autorisation explicite.
+> Les modifications décrites dans cette branche ne doivent pas être fusionnées dans `main` sans autorisation explicite.
 
 ## Fonctionnalités
 
