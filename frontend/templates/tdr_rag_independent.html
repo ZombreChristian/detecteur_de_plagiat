@@ -49,7 +49,7 @@
 <div class="panel-body">
 <p class="muted">Déposez un TDR au format Word ou PDF. Qwen compare son contenu aux TDR et rapports d'étude de référence indexés dans PostgreSQL et explique si un document correspondant, proche ou non pertinent est présent dans le registre.</p>
 <div class="notice"><strong>Comment fonctionne l'analyse ?</strong><p class="muted" style="margin:6px 0 0">La recherche lexicale et sémantique sélectionne les cinq références les plus prometteuses. Ces scores servent uniquement à retrouver des documents ; Qwen examine ensuite leur contenu et formule le verdict. Un TDR présent dans le registre ne prouve pas, à lui seul, que l'étude a été exécutée ; un rapport d'étude constitue un document distinct à consulter.</p></div>
-{% if active_analysis %}
+{% if active_analysis and active_analysis.status == "running" %}
 <section class="progress-panel active" id="return-progress-panel" data-created="{{ active_analysis.created_at|date:'c' }}">
 <div class="progress-heading"><span>Analyse en cours — {{ active_analysis.document_name }}</span><span id="return-elapsed">00:00</span></div>
 <div class="progress-track" role="progressbar" aria-label="Progression indicative de l'analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow="3"><div id="return-progress-fill" class="progress-fill waiting" style="width:3%"></div></div>
@@ -95,6 +95,18 @@
  poll();
 })();
 </script>
+{% elif active_analysis and active_analysis.status == "success" %}
+<section class="notice" style="margin-bottom:18px">
+<strong>Dernière analyse terminée : {{ active_analysis.document_name }}</strong>
+<p class="muted" style="margin:6px 0">Le résultat est disponible dans l'historique.</p>
+<a class="btn btn-primary" href="{% url 'detector:analysis_detail' active_analysis.pk %}">Afficher le résultat</a>
+</section>
+{% elif active_analysis and active_analysis.status == "error" %}
+<section class="notice" style="margin-bottom:18px">
+<strong>Dernière analyse non terminée : {{ active_analysis.document_name }}</strong>
+<p class="muted" style="margin:6px 0">{{ active_analysis.error_message }}</p>
+<a class="btn" href="{% url 'detector:analysis_detail' active_analysis.pk %}">Consulter le détail</a>
+</section>
 {% endif %}
 <form id="tdr-analysis-form" method="post" enctype="multipart/form-data">
 {% csrf_token %}
