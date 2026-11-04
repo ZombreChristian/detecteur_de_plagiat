@@ -54,27 +54,25 @@
       <div class="panel-body">
         {% if tdr_analysis %}
         <div class="task-state" data-status-url="{{ tdr_status_url }}" data-task-status="{{ tdr_analysis.status }}">
-          <strong>Vérification TDR — {{ tdr_analysis.document_name }}</strong>
-          {% if tdr_analysis.status == "running" %}<p class="muted">Analyse en cours…</p>
+          {% if tdr_analysis.status == "running" %}
+            <strong>Vérification TDR — {{ tdr_analysis.document_name }}</strong>
+            <p class="muted">Analyse en cours…</p>
           {% elif tdr_analysis.status == "success" %}
             {% with rag=tdr_result.rag_analysis %}
-            <div class="contextual-verdict" style="margin:12px 0;padding:14px;border:1px solid var(--hairline);border-radius:8px">
               {% if rag.case_id == "CAS_1_correspondance forte à une étude existante" %}
-                <h3>CAS 1 — Correspondance forte à une étude existante</h3>
+                <strong>CAS 1 — Correspondance forte à une étude existante</strong>
               {% elif rag.case_id == "CAS_2_Correspondance partielle avec une étude existante" %}
-                <h3>CAS 2 — Correspondance partielle avec une étude existante</h3>
+                <strong>CAS 2 — Correspondance partielle avec une étude existante</strong>
               {% elif rag.case_id == "CAS_3_Aucune correspondance à une étude existante" %}
-                <h3>CAS 3 — Aucune correspondance à une étude existante</h3>
-              
+                <strong>CAS 3 — Aucune correspondance à une étude existante</strong>
               {% else %}
-                <h3>{{ rag.case_title|default:"Résultat de l'analyse" }}</h3>
+                <strong>{{ rag.case_title|default:"Résultat de l'analyse" }}</strong>
               {% endif %}
-              {% if rag.explanation %}<p>{{ rag.explanation }}</p>{% endif %}
-              {% if rag.matched_reference %}<p><strong>Étude existante :</strong> {{ rag.matched_reference }}</p>{% endif %}
-            </div>
+              <a class="btn btn-primary" href="{{ tdr_detail_url }}" style="margin-left:12px">Voir les détails de l'analyse</a>
             {% endwith %}
-            <p><a class="btn btn-primary" href="{{ tdr_detail_url }}">Voir les détails de l'analyse</a></p>
-          {% elif tdr_analysis.status == "error" %}<p class="alert">Échec : {{ tdr_analysis.error_message }}</p>{% endif %}
+          {% elif tdr_analysis.status == "error" %}
+            <p class="alert">Échec : {{ tdr_analysis.error_message }}</p>
+          {% endif %}
         </div>
         {% endif %}
         {% if report_analysis %}
