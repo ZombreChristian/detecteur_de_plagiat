@@ -1197,29 +1197,62 @@ def administration_utilisateur(request, pk):
 
 @login_required
 def tdr_rag_independent(request):
-    """Lance une analyse TDR en arrière-plan et ouvre immédiatement son suivi."""
+    """Lance et conserve le suivi de l'analyse sur sa propre page."""
     if not _require_permission(request, "can_verify_tdr", "Votre profil ne dispose pas de l'accès à la vérification des TDR."):
         return redirect("detector:dashboard")
-    if request.method != "POST":
+
+    if request.method == "POST":
+        uploaded = _get_uploaded_docx(request)
+        if not uploaded or not _validate_document(uploaded) or getattr(uploaded, "size", 0) <= 0:
+            message = "Sélectionnez un document DOCX ou PDF non vide."
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse({"error": message}, status=400)
+            messages.error(request, message)
+        else:
+            uploaded_path = _save_uploaded_document(uploaded)
+            analysis = Analysis.objects.create(
+                user=request.user,
+                document_name=uploaded.name,
+                mode="duplicate",
+                status="running",
+                result_json={"uploaded_path": uploaded_path},
+            )
+            request.session["tdr_rag_active_analysis_id"] = analysis.pk
+            _start_tdr_analysis(
+                analysis,
+                uploaded_path,
+                uploaded.name,
+                uploaded.content_type or _document_content_type(uploaded),
+            )
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse({
+                    "id": analysis.pk,
+                    "status": analysis.status,
+                    "status_url": reverse("detector:analysis_status", kwargs={"pk": analysis.pk}),
+                }, status=202)
+            return redirect("detector:tdr_rag_independent")
+
+    active_id = request.session.get("tdr_rag_active_analysis_id")
+    active_analysis = None
+    if active_id:
+        active_analysis = Analysis.objects.filter(
+            pk=active_id, user=request.user, mode="duplicate"
+        ).first()
+    if active_analysis is None:
         active_analysis = Analysis.objects.filter(
             user=request.user, mode="duplicate"
         ).order_by("-created_at").first()
-        return render(request, "tdr_rag_independent.html", {
-            "active_analysis": active_analysis,
-            "analysis_status_url": reverse("detector:analysis_status", kwargs={"pk": active_analysis.pk}) if active_analysis else "",
-            "active_analysis_url": reverse("detector:analysis_detail", kwargs={"pk": active_analysis.pk}) if active_analysis else "",
-        })
-    uploaded = _get_uploaded_docx(request)
-    if not uploaded or not _validate_document(uploaded) or getattr(uploaded, "size", 0) <= 0:
-        messages.error(request, "Sélectionnez un document DOCX ou PDF non vide.")
-        return render(request, "tdr_rag_independent.html", {"active_analysis": Analysis.objects.filter(user=request.user, mode="duplicate", status="running").order_by("-created_at").first()})
-    uploaded_path = _save_uploaded_document(uploaded)
-    analysis = Analysis.objects.create(
-        user=request.user, document_name=uploaded.name, mode="duplicate",
-        status="running", result_json={"uploaded_path": uploaded_path},
-    )
-    _start_tdr_analysis(
-        analysis, uploaded_path, uploaded.name,
-        uploaded.content_type or _document_content_type(uploaded),
-    )
-    return redirect("detector:analysis_detail", pk=analysis.pk)
+        if active_analysis:
+            request.session["tdr_rag_active_analysis_id"] = active_analysis.pk
+
+    active_result = active_analysis.result_json or {} if active_analysis else {}
+    return render(request, "tdr_rag_independent.html", {
+        "active_analysis": active_analysis,
+        "active_result": active_result,
+        "analysis_status_url": reverse("detector:analysis_status", kwargs={"pk": active_analysis.pk}) if active_analysis else "",
+        "active_analysis_url": reverse("detector:analysis_detail", kwargs={"pk": active_analysis.pk}) if active_analysis else "",
+        "duration_seconds": (
+            f"{active_analysis.duration_ms / 1000:.1f}".replace(".", ",")
+            if active_analysis and active_analysis.duration_ms is not None else None
+        ),
+    })
