@@ -7,6 +7,12 @@
 <link rel="stylesheet" href="{% static 'css/app.css' %}" /><link rel="stylesheet" href="{% static 'css/institutional.css' %}">
 <script src="{% static 'js/theme.js' %}"></script><style>
 #threshold-field[hidden] { display: none !important; }
+#loading { display:none; }
+#loading.visible { display:block; }
+#loading .proc-head { justify-content:flex-end; margin-bottom:7px; }
+#progress-track { position:relative; overflow:visible; }
+#progress-bar { position:relative; display:block; height:100%; border-radius:inherit; transition:width .35s ease; }
+#progress-bar::after { content:""; position:absolute; right:-6px; top:-5px; width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:8px solid var(--gold); }
 </style>
 </head>
 <body>
@@ -39,19 +45,18 @@
       </div>
     </section>
     <section id="loading" class="proc national-bar-green" aria-live="polite" style="max-width:640px">
-      <div class="proc-head"><strong id="loading-title">Analyse en cours</strong><span class="pct" id="loading-percent">0 %</span></div>
-      <div class="proc-track"><span id="progress-bar"></span></div>
-      <div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span id="loading-text">Lecture du document et préparation du contrôle.</span></div></div>
+      <div class="proc-head"><span class="pct" id="loading-percent">0 %</span></div>
+      <div class="proc-track" id="progress-track"><span id="progress-bar"></span></div>
     </section>
     {% if tdr_analysis or report_analysis %}
     <section class="panel" id="saved-analysis-state" style="max-width:640px;margin-top:18px">
-      <div class="panel-head"><h2>État de vos analyses précédentes</h2></div>
+      <div class="panel-head"><h2>Suivi des analyses</h2></div>
       <div class="panel-body">
         {% if tdr_analysis %}
         <div class="task-state" data-status-url="{{ tdr_status_url }}" data-task-status="{{ tdr_analysis.status }}">
           <strong>Vérification TDR — {{ tdr_analysis.document_name }}</strong>
-          {% if tdr_analysis.status == "running" %}<p class="muted">Vérification en cours…</p>
-          {% elif tdr_analysis.status == "success" %}<p>Analyse terminée : {{ tdr_analysis.decision|default:"Résultat enregistré" }}.</p>
+          {% if tdr_analysis.status == "running" %}<p class="muted">Analyse en cours…</p>
+          {% elif tdr_analysis.status == "success" %}<p><a class="btn btn-primary" href="{{ tdr_detail_url }}">Voir les détails de l'analyse</a></p>
           {% elif tdr_analysis.status == "error" %}<p class="alert">Échec : {{ tdr_analysis.error_message }}</p>{% endif %}
         </div>
         {% endif %}
@@ -59,7 +64,7 @@
         <div class="task-state" data-status-url="{{ report_status_url }}" data-task-status="{{ report_analysis.status }}" style="margin-top:12px">
           <strong>Analyse rapport — {{ report_analysis.document_name }}</strong>
           {% if report_analysis.status == "running" %}<p class="muted">Analyse en cours…</p>
-          {% elif report_analysis.status == "success" %}<p>Analyse terminée : {{ report_analysis.decision|default:"Résultat enregistré" }}.</p>
+          {% elif report_analysis.status == "success" %}<p><a class="btn btn-primary" href="{{ report_detail_url }}">Voir les détails de l'analyse</a></p>
           {% elif report_analysis.status == "error" %}<p class="alert">Échec : {{ report_analysis.error_message }}</p>{% endif %}
         </div>
         {% endif %}
@@ -90,33 +95,18 @@ updateThreshold();
 threshold.addEventListener('input',()=>thresholdValue.textContent=threshold.value+' %');
 const bar=document.getElementById('progress-bar');
 const percent=document.getElementById('loading-percent');
-const text=document.getElementById('loading-text');
-const title=document.getElementById('loading-title');
 form.addEventListener('submit',async function(event){
   if(!input.files.length)return;
   event.preventDefault();
-  const isDuplicate=mode.value==='duplicate';
-  title.textContent=isDuplicate?'Vérification du TDR en cours':'Contrôle du rapport en cours';
-  const stages=isDuplicate?[
-    'Réception et extraction du TDR.',
-    'Chargement des TDR et rapports de référence.',
-    'Recherche lexicale et sémantique des documents proches.',
-    'Sélection des références les plus pertinentes.',
-    'Analyse contextuelle du TDR.',
-    'Évaluation des objectifs, méthodes, zones et livrables.',
-    'Préparation du verdict et des justifications.',
-    'Enregistrement du résultat et des références consultables.'
-  ]:[
-    'Lecture du rapport et extraction du contenu.',
-    'Recherche de recouvrements textuels.',
-    'Analyse sémantique et recherche de paraphrases.',
-    'Calcul du score et identification des passages proches.'
-  ];
   loading.classList.add('visible');
   button.disabled=true;
   button.textContent='Traitement en cours…';
-  let p=0,stage=0;
-  const timer=setInterval(()=>{p=Math.min(p+(stage<2?4:2),94);bar.style.width=p+'%';percent.textContent=p+' %';const next=Math.min(Math.floor(p/12.5),7);if(next!==stage){stage=next;text.textContent=stages[Math.min(stage,stages.length-1)];}},450);
+  let p=0;
+  const timer=setInterval(()=>{
+    p=Math.min(p+1,94);
+    bar.style.width=p+'%';
+    percent.textContent=p+' %';
+  },500);
   try{
     const response=await fetch(window.location.href,{method:'POST',body:new FormData(form),headers:{'X-Requested-With':'XMLHttpRequest'}});
     const payload=await response.json();
