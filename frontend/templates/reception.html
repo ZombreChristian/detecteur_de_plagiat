@@ -26,82 +26,125 @@
       <section class="panel national-bar-red">
         <div class="panel-head"><h2>Étape 1 — Vérifier le TDR</h2><span class="muted mono" style="font-size:12px">doublon</span></div>
         <div class="panel-body">
-          <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Déposez le TDR à vérifier. Le système le compare aux études déjà enregistrées et présente les correspondances pertinentes.</p>
+          <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Déposez le TDR à vérifier. L'analyse continue même si vous quittez cette page.</p>
           <form id="tdr-form" method="post" enctype="multipart/form-data">
             {% csrf_token %}<input type="hidden" name="mode" value="tdr">
             <div class="field"><label>Document TDR (.docx ou .pdf)</label><input id="tdr-file" type="file" name="document" accept=".docx,.pdf" required></div>
             <button id="tdr-button" class="btn btn-primary" type="submit">Vérifier le TDR</button>
           </form>
+          {% if tdr_analysis %}
+            <div class="task-state" data-status-url="{{ tdr_status_url }}" data-task-status="{{ tdr_analysis.status }}" style="margin-top:18px">
+              <strong>{{ tdr_analysis.document_name }}</strong>
+              {% if tdr_analysis.status == "running" %}
+                <div class="proc show" style="margin-top:12px"><div class="proc-head"><strong>Vérification du TDR en cours</strong><span class="pct task-percent">En cours</span></div><div class="proc-track"><span class="task-fill" style="width:8%"></span></div><div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span>Recherche des études de référence et analyse contextuelle.</span></div></div></div>
+              {% elif tdr_analysis.status == "success" %}
+                <p style="margin:8px 0"><strong>État :</strong> Analyse terminée — {{ tdr_analysis.decision|default:"Résultat enregistré" }}</p>
+                <p><strong>Durée :</strong> {% if tdr_analysis.duration_ms %}{{ tdr_analysis.duration_ms|floatformat:0 }} ms{% else %}—{% endif %}</p>
+                {% if tdr_result.rag_analysis %}
+                  <h3>{% if tdr_result.rag_analysis.case_id == "CAS_1_CORRESPONDANCE_FORTE" %}Correspondance forte{% elif tdr_result.rag_analysis.case_id == "CAS_2_CORRESPONDANCE_PARTIELLE" %}Correspondance partielle{% elif tdr_result.rag_analysis.case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE" %}Aucune correspondance{% else %}Conclusion de l'analyse{% endif %}</h3>
+                  <p>{{ tdr_result.rag_analysis.explanation }}</p>
+                  {% if tdr_result.rag_analysis.matched_references %}<h4>Étude(s) de référence</h4><ul>{% for ref in tdr_result.rag_analysis.matched_references %}<li><strong>{{ ref.source }}</strong>{% if ref.common_points %}<ul>{% for point in ref.common_points %}<li>{{ point }}</li>{% endfor %}</ul>{% endif %}</li>{% endfor %}</ul>{% endif %}
+                  {% if tdr_result.rag_analysis.recommendation %}<p><strong>Recommandation :</strong> {{ tdr_result.rag_analysis.recommendation }}</p>{% endif %}
+                {% else %}<p>Le résultat détaillé est enregistré. Décision : {{ tdr_analysis.decision|default:"non renseignée" }}.</p>{% endif %}
+              {% elif tdr_analysis.status == "error" %}
+                <p class="alert" style="margin-top:10px">L'analyse n'a pas abouti : {{ tdr_analysis.error_message }}</p>
+              {% endif %}
+            </div>
+          {% endif %}
         </div>
       </section>
-      <section class="panel national-bar-green" style="{% if not request.session.validated_tdr_name %}opacity:.6{% endif %}">
-        <div class="panel-head"><h2>Étape 2 — Réceptionner le rapport</h2><span class="muted mono" style="font-size:12px">plagiat</span></div>
+      <section class="panel national-bar-green" style="{% if not validated_tdr_analysis %}opacity:.6{% endif %}">
+        <div class="panel-head"><h2>Étape 2 — Analyser le rapport</h2><span class="muted mono" style="font-size:12px">plagiat</span></div>
         <div class="panel-body">
-          {% if request.session.validated_tdr_name %}
-            <p style="margin:0 0 4px;font-size:13.5px">TDR validé : <strong>{{ request.session.validated_tdr_name }}</strong></p>
-            <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Le rapport associé peut maintenant être soumis au contrôle de plagiat.</p>
+          {% if validated_tdr_analysis %}
+            <p style="margin:0 0 4px;font-size:13.5px">TDR validé : <strong>{{ validated_tdr_analysis.document_name }}</strong></p>
+            <p class="muted" style="margin:0 0 18px;font-size:13.5px;line-height:1.55">Le rapport associé peut être soumis au contrôle de plagiat.</p>
             <form id="report-form" method="post" enctype="multipart/form-data">
               {% csrf_token %}<input type="hidden" name="mode" value="report">
-              <div class="field"><label>Rapport d'étude (.docx ou .pdf)</label><input id="report-file" type="file" name="document" accept=".docx,.pdf" required></div><div class="field"><label for="report-threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="report-threshold" type="range" name="threshold" min="1" max="100" value="55"><output id="report-threshold-value">55 %</output></div><small class="muted">Ajustez le seuil selon le niveau de proximité retenu.</small></div>
+              <div class="field"><label>Rapport d'étude (.docx ou .pdf)</label><input id="report-file" type="file" name="document" accept=".docx,.pdf" required></div>
+              <div class="field"><label for="report-threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="report-threshold" type="range" name="threshold" min="1" max="100" value="55"><output id="report-threshold-value">55 %</output></div><small class="muted">Ajustez le seuil selon le niveau de proximité retenu.</small></div>
               <button id="report-button" class="btn btn-primary" type="submit">Contrôler le rapport</button>
             </form>
+            {% if report_analysis %}
+              <div class="task-state" data-status-url="{{ report_status_url }}" data-task-status="{{ report_analysis.status }}" style="margin-top:18px">
+                <strong>{{ report_analysis.document_name }}</strong>
+                {% if report_analysis.status == "running" %}
+                  <div class="proc show" style="margin-top:12px"><div class="proc-head"><strong>Contrôle du rapport en cours</strong><span class="pct task-percent">En cours</span></div><div class="proc-track"><span class="task-fill" style="width:8%"></span></div><div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span>Extraction, recherche des recouvrements et analyse des passages.</span></div></div></div>
+                {% elif report_analysis.status == "success" %}
+                  <p style="margin:8px 0"><strong>État :</strong> Analyse terminée — {{ report_analysis.decision|default:"Résultat enregistré" }}</p>
+                  <p><strong>Durée :</strong> {% if report_analysis.duration_ms %}{{ report_analysis.duration_ms|floatformat:0 }} ms{% else %}—{% endif %}</p>
+                  <p><strong>Score TF-IDF :</strong> {{ report_analysis.tfidf_score|default:"—" }} · <strong>Score sémantique :</strong> {{ report_analysis.semantic_score|default:"—" }} · <strong>Score hybride :</strong> {{ report_analysis.hybrid_score|default:"—" }}</p>
+                {% elif report_analysis.status == "error" %}
+                  <p class="alert" style="margin-top:10px">Le contrôle du rapport n'a pas abouti : {{ report_analysis.error_message }}</p>
+                {% endif %}
+              </div>
+            {% endif %}
           {% else %}
             <p class="muted" style="font-size:13.5px;line-height:1.6">Verrouillé — cette étape s'active après validation d'un TDR jugé différent de ceux déjà présents dans le registre.</p>
           {% endif %}
         </div>
       </section>
     </div>
-    <section id="processing" class="proc national-bar-red" aria-live="polite">
-      <div class="proc-head"><strong id="processing-title">Analyse en cours</strong><span class="pct" id="progress-percent">0 %</span></div>
-      <div class="proc-track"><span id="progress-fill"></span></div>
-      <div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span id="process-text">Lecture du document et préparation du contrôle.</span></div></div>
-    </section>
   </div>
 </main>
 </div>
 <script>
-const processing=document.getElementById('processing');
-const fill=document.getElementById('progress-fill');
-const pct=document.getElementById('progress-percent');
-const txt=document.getElementById('process-text');
-const title=document.getElementById('processing-title');
 const reportThreshold=document.getElementById('report-threshold');
 const reportThresholdValue=document.getElementById('report-threshold-value');
 if(reportThreshold)reportThreshold.addEventListener('input',()=>reportThresholdValue.textContent=reportThreshold.value+' %');
-function attachProgress(form,file,button,isReport){
-  if(!form)return;
-  form.addEventListener('submit',function(){
-    if(!file.files.length)return;
-    title.textContent=isReport?'Contrôle du rapport en cours':'Analyse du TDR en cours';
-    const stages=isReport?[
-      'Lecture du rapport et extraction du contenu.',
-      'Recherche de recouvrements textuels.',
-      'Analyse sémantique et recherche de paraphrases.',
-      'Calcul du score et identification des passages proches.'
-    ]:[
-      'Réception et extraction du TDR.',
-      'Chargement des TDR et rapports de référence.',
-      'Recherche lexicale et sémantique des documents proches.',
-      'Sélection des références les plus pertinentes.',
-      'Comparaison du contenu par Qwen3 via Ollama.',
-      'Évaluation des objectifs, méthodes, zones et livrables.',
-      'Préparation du verdict et des justifications.',
-      'Enregistrement du résultat et des références consultables.'
-    ];
-    processing.classList.add('show');
+
+function attachPersistentForm(formId, fileId, buttonId) {
+  const form=document.getElementById(formId);
+  const file=document.getElementById(fileId);
+  const button=document.getElementById(buttonId);
+  if(!form || !file || !button) return;
+  form.addEventListener('submit', async event => {
+    if(!file.files.length) return;
+    event.preventDefault();
     button.disabled=true;
-    button.textContent='Analyse en cours…';
-    let p=0;let stage=0;
-    const timer=setInterval(function(){
-      p=Math.min(p+3+Math.floor(Math.random()*5),96);
-      fill.style.width=p+'%';pct.textContent=p+' %';
-      const next=Math.min(Math.floor(p/12.5),7);
-      if(next!==stage){stage=next;txt.textContent=stages[stage];}
-    },450);
-    window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
+    const original=button.textContent;
+    button.textContent='Lancement…';
+    try {
+      const response=await fetch(window.location.href,{
+        method:'POST',
+        body:new FormData(form),
+        headers:{'X-Requested-With':'XMLHttpRequest'}
+      });
+      const payload=await response.json();
+      if(!response.ok) throw new Error(payload.error || 'Impossible de lancer la tâche.');
+      window.location.reload();
+    } catch(error) {
+      alert(error.message || 'Une erreur est survenue.');
+      button.disabled=false;
+      button.textContent=original;
+    }
   });
 }
-attachProgress(document.getElementById('tdr-form'),document.getElementById('tdr-file'),document.getElementById('tdr-button'),false);
-attachProgress(document.getElementById('report-form'),document.getElementById('report-file'),document.getElementById('report-button'),true);
+attachPersistentForm('tdr-form','tdr-file','tdr-button');
+attachPersistentForm('report-form','report-file','report-button');
+
+document.querySelectorAll('.task-state[data-task-status="running"]').forEach(task=>{
+  const url=task.dataset.statusUrl;
+  const fill=task.querySelector('.task-fill');
+  const percent=task.querySelector('.task-percent');
+  let progress=8;
+  const animation=setInterval(()=>{
+    progress=Math.min(progress+2,92);
+    if(fill)fill.style.width=progress+'%';
+    if(percent)percent.textContent=progress+' %';
+  },900);
+  const poll=setInterval(async()=>{
+    try{
+      const response=await fetch(url,{headers:{'X-Requested-With':'XMLHttpRequest'}});
+      if(!response.ok)return;
+      const data=await response.json();
+      if(data.status==='success' || data.status==='error'){
+        clearInterval(animation);
+        clearInterval(poll);
+        window.location.reload();
+      }
+    }catch(error){/* Le prochain cycle réessaie sans interrompre la tâche. */}
+  },3000);
+});
 </script>
 </body></html>
