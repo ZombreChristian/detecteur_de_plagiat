@@ -532,7 +532,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         Path(row.file_path).name for _, _, _, row in selected
         if matched_row is not None and row.id != matched_row.id
     ]
-    explanation_sentences = re.split(r"(?<=[.!?])\\s+", raw_explanation)
+    explanation_sentences = re.split(r"(?<=[.!?])\s+", raw_explanation)
     visible_sentences = []
     for sentence in explanation_sentences:
         folded = sentence.casefold()
@@ -546,8 +546,6 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         if sentence.strip():
             visible_sentences.append(sentence.strip())
     display_explanation = " ".join(visible_sentences)
-    if not display_explanation and per_reference:
-        display_explanation = per_reference[0]["explanation"]
 
     return {
         "mode": "tdr_rag_independent",
