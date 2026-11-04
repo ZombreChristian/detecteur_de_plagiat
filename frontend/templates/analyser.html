@@ -65,8 +65,7 @@
                 <h3>CAS 2 — Correspondance partielle avec une étude existante</h3>
               {% elif rag.case_id == "CAS_3_Aucune correspondance à une étude existante" %}
                 <h3>CAS 3 — Aucune correspondance à une étude existante</h3>
-              {% elif rag.case_id == "CAS_3_Aucune correspondance à une étude existante" %}
-                <h3>CAS 4 — Aucune étude pertinente trouvée</h3>
+              
               {% else %}
                 <h3>{{ rag.case_title|default:"Résultat de l'analyse" }}</h3>
               {% endif %}
