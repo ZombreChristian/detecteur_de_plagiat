@@ -525,6 +525,30 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         "justification": "Référence retenue après examen du contenu par le RAG.",
     } for item in per_reference]
 
+    # L'interface ne présente qu'une référence : retirer de l'explication
+    # toute phrase qui évoque les candidates écartées ou une comparaison de liste.
+    raw_explanation = str(final.get("explanation", "")).strip()
+    excluded_names = [
+        Path(row.file_path).name for _, _, _, row in selected
+        if matched_row is not None and row.id != matched_row.id
+    ]
+    explanation_sentences = re.split(r"(?<=[.!?])\\s+", raw_explanation)
+    visible_sentences = []
+    for sentence in explanation_sentences:
+        folded = sentence.casefold()
+        if any(name.casefold() in folded for name in excluded_names):
+            continue
+        if any(term in folded for term in (
+            "les autres références", "les autres documents",
+            "références écartées", "moins pertinentes",
+        )):
+            continue
+        if sentence.strip():
+            visible_sentences.append(sentence.strip())
+    display_explanation = " ".join(visible_sentences)
+    if not display_explanation and per_reference:
+        display_explanation = per_reference[0]["explanation"]
+
     return {
         "mode": "tdr_rag_independent",
         "decision_provider": "independent_rag",
@@ -535,7 +559,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "model": llm_audit.get("reported_model") or ACTIVE_MODEL,
             "model_audit": llm_audit,
             "decision": str(final.get("decision", case_id)),
-            "explanation": str(final.get("explanation", ""))[:2500],
+            "explanation": display_explanation[:2500],
             "matched_reference": reference_name,
             "matched_references": per_reference,
             "confidence": str(final.get("confidence", "À confirmer"))[:80],
