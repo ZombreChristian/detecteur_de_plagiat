@@ -32,14 +32,14 @@
             <div class="field"><label>Document TDR (.docx ou .pdf)</label><input id="tdr-file" type="file" name="document" accept=".docx,.pdf" required></div>
             <button id="tdr-button" class="btn btn-primary" type="submit">Vérifier le TDR</button>
           </form>
-          {% if tdr_analysis %}
+          {% if tdr_analysis and show_tdr_analysis %}
             <div class="task-state" data-status-url="{{ tdr_status_url }}" data-task-status="{{ tdr_analysis.status }}" style="margin-top:18px">
               <strong>{{ tdr_analysis.document_name }}</strong>
               {% if tdr_analysis.status == "running" %}
                 <div class="proc show" style="margin-top:12px"><div class="proc-head"><strong>Vérification du TDR en cours</strong><span class="pct task-percent">En cours</span></div><div class="proc-track"><span class="task-fill" style="width:8%"></span></div><div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span>Recherche des études de référence et analyse contextuelle.</span></div></div></div>
               {% elif tdr_analysis.status == "success" %}
                 <p style="margin:8px 0"><strong>État :</strong> Analyse terminée — {{ tdr_analysis.decision|default:"Résultat enregistré" }}</p>
-                <p><strong>Durée :</strong> {% if tdr_analysis.duration_ms %}{{ tdr_analysis.duration_ms|floatformat:0 }} ms{% else %}—{% endif %}</p>
+                <p><strong>Durée :</strong> {{ tdr_duration_display }}</p>
                 {% if tdr_result.rag_analysis %}
                   <h3>{% if tdr_result.rag_analysis.case_id == "CAS_1_CORRESPONDANCE_FORTE" %}Correspondance forte{% elif tdr_result.rag_analysis.case_id == "CAS_2_CORRESPONDANCE_PARTIELLE" %}Correspondance partielle{% elif tdr_result.rag_analysis.case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE" %}Aucune correspondance{% else %}Conclusion de l'analyse{% endif %}</h3>
                   <p>{{ tdr_result.rag_analysis.explanation }}</p>
@@ -65,14 +65,14 @@
               <div class="field"><label for="report-threshold">Seuil de similarité avant analyse</label><div style="display:flex;gap:12px;align-items:center"><input id="report-threshold" type="range" name="threshold" min="1" max="100" value="55"><output id="report-threshold-value">55 %</output></div><small class="muted">Ajustez le seuil selon le niveau de proximité retenu.</small></div>
               <button id="report-button" class="btn btn-primary" type="submit">Contrôler le rapport</button>
             </form>
-            {% if report_analysis %}
+            {% if report_analysis and show_report_analysis %}
               <div class="task-state" data-status-url="{{ report_status_url }}" data-task-status="{{ report_analysis.status }}" style="margin-top:18px">
                 <strong>{{ report_analysis.document_name }}</strong>
                 {% if report_analysis.status == "running" %}
                   <div class="proc show" style="margin-top:12px"><div class="proc-head"><strong>Contrôle du rapport en cours</strong><span class="pct task-percent">En cours</span></div><div class="proc-track"><span class="task-fill" style="width:8%"></span></div><div class="proc-steps"><div class="proc-step current"><span class="mark">›</span><span>Extraction, recherche des recouvrements et analyse des passages.</span></div></div></div>
                 {% elif report_analysis.status == "success" %}
                   <p style="margin:8px 0"><strong>État :</strong> Analyse terminée — {{ report_analysis.decision|default:"Résultat enregistré" }}</p>
-                  <p><strong>Durée :</strong> {% if report_analysis.duration_ms %}{{ report_analysis.duration_ms|floatformat:0 }} ms{% else %}—{% endif %}</p>
+                  <p><strong>Durée :</strong> {{ report_duration_display }}</p>
                   <p><strong>Score TF-IDF :</strong> {{ report_analysis.tfidf_score|default:"—" }} · <strong>Score sémantique :</strong> {{ report_analysis.semantic_score|default:"—" }} · <strong>Score hybride :</strong> {{ report_analysis.hybrid_score|default:"—" }}</p>
                   {% if report_result.sources %}
                     <details style="margin-top:12px"><summary><strong>Consulter les sources et passages détectés ({{ report_result.sources|length }})</strong></summary>
