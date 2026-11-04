@@ -128,111 +128,140 @@ def _validate_llm_config() -> None:
         raise IndependentTDRError("TDR_LLM_MODEL est requis.")
 
 
-def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT_TOKENS) -> dict:
-    """Appelle le fournisseur configuré avec reprises limitées en cas de JSON invalide."""
+
+def _request_llm_json(
+    system_prompt: str,
+    user_prompt: str,
+    tokens: int = OUTPUT_TOKENS,
+) -> dict:
+    """Appelle Qwen sans raisonnement prolongé et exige un JSON exploitable."""
     _validate_llm_config()
 
-    last_error = None
-    last_content = ""
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url=TDR_LLM_BASE_URL,
+        api_key=TDR_LLM_API_KEY or "not-needed",
+        timeout=TDR_LLM_TIMEOUT,
+        max_retries=0,
+    )
+
     llm_audit = {
         "provider": TDR_LLM_PROVIDER,
         "requested_model": ACTIVE_MODEL,
         "reported_model": None,
         "request_id": None,
     }
-    token_budgets = (max(tokens, 2048), max(tokens, 4096), max(tokens, 6144))
 
-    for attempt in range(3):
-        token_budget = token_budgets[attempt]
-        retry_note = ""
-        if attempt:
-            retry_note = (
-                "\n\nIMPORTANT — la réponse précédente était invalide ou incomplète. "
-                "Recommence et renvoie un unique objet JSON valide, complet, sans Markdown, "
-                "sans texte avant/après, avec toutes les chaînes correctement échappées. "
-                "Reste concis et termine toutes les accolades et tous les guillemets."
-            )
+    # Commencer directement avec le thinking désactivé.
+    token_budgets = (
+        max(tokens, 4096),
+        max(tokens, 6144),
+        max(tokens, 8192),
+    )
+
+    last_error = None
+    last_content = ""
+
+    for attempt, token_budget in enumerate(token_budgets, start=1):
         try:
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt + retry_note},
+                {
+                    "role": "user",
+                    "content": user_prompt
+                    + (
+                        "\n\nLa réponse précédente était invalide. "
+                        "Produis uniquement un JSON valide et concis."
+                        if attempt > 1 else ""
+                    ),
+                },
             ]
-            from openai import OpenAI
 
-            client = OpenAI(
-                base_url=TDR_LLM_BASE_URL,
-                api_key=TDR_LLM_API_KEY or "not-needed",
-                timeout=TDR_LLM_TIMEOUT,
-                max_retries=0,
-            )
             request_kwargs = {
                 "model": TDR_LLM_REMOTE_MODEL,
                 "messages": messages,
                 "temperature": 0,
                 "max_tokens": token_budget,
+                "response_format": {"type": "json_object"},
+                "extra_body": {
+                    "chat_template_kwargs": {
+                        "enable_thinking": False
+                    }
+                },
             }
-            if attempt == 0:
-                request_kwargs["response_format"] = {"type": "json_object"}
-            else:
-                request_kwargs["extra_body"] = {
-                    "chat_template_kwargs": {"enable_thinking": False}
-                }
+
             response = client.chat.completions.create(**request_kwargs)
-            llm_audit["reported_model"] = getattr(response, "model", None)
-            llm_audit["request_id"] = getattr(response, "id", None)
+
+            llm_audit["reported_model"] = getattr(
+                response, "model", None
+            )
+            llm_audit["request_id"] = getattr(
+                response, "id", None
+            )
+
             if not response.choices:
-                raise ValueError("Le serveur LLM n'a renvoyé aucun choix (choices vide).")
+                raise ValueError("Aucun choix retourné par le serveur.")
+
             choice = response.choices[0]
             message = choice.message
-            last_content = (getattr(message, "content", None) or "").strip()
-            finish_reason = getattr(choice, "finish_reason", None)
-            if not last_content:
-                refusal = (getattr(message, "refusal", None) or "").strip()
-                reasoning = (getattr(message, "reasoning_content", None) or "").strip()
-                details = []
-                if finish_reason:
-                    details.append(f"finish_reason={finish_reason}")
-                if refusal:
-                    details.append(f"refusal={refusal[:160]}")
-                if reasoning:
-                    details.append("reasoning_content présent mais content vide")
-                if finish_reason == "length":
-                    details.append("budget de génération épuisé avant la réponse finale")
-                raise ValueError(
-                    "Réponse vide du serveur OpenAI-compatible"
-                    + (f" ({'; '.join(details)})" if details else "")
-                    + ". Nouvelle tentative avec budget accru et thinking désactivé."
-                )
+
+            last_content = (
+                getattr(message, "content", None) or ""
+            ).strip()
+
+            finish_reason = getattr(
+                choice, "finish_reason", None
+            )
 
             if not last_content:
-                raise ValueError("Le fournisseur LLM a renvoyé une réponse vide.")
+                raise ValueError(
+                    f"Réponse vide : finish_reason={finish_reason}"
+                )
+
             parsed = json.loads(last_content)
+
             if not isinstance(parsed, dict):
-                raise ValueError("La réponse JSON n'est pas un objet.")
+                raise ValueError("La réponse JSON doit être un objet.")
+
+            llm_audit["finish_reason"] = finish_reason
+            llm_audit["attempt"] = attempt
+            llm_audit["token_budget"] = token_budget
+
             parsed["_llm_audit"] = dict(llm_audit)
             return parsed
+
         except Exception as exc:
             last_error = exc
+
             logger.warning(
-                "TDR LLM tentative %d/3 échouée (modèle=%s, budget=%d) : %s",
-                attempt + 1, ACTIVE_MODEL, token_budget, exc,
+                "TDR LLM tentative %d/%d échouée "
+                "(modèle=%s, budget=%d) : %s",
+                attempt,
+                len(token_budgets),
+                ACTIVE_MODEL,
+                token_budget,
+                exc,
             )
-            # Cloudflare 524 : le proxy a expiré après ~120 s. Ne pas relancer
-            # immédiatement une génération qui vient de dépasser la limite.
-            if getattr(exc, "status_code", None) == 524 or "Error code: 524" in str(exc):
+
+            if (
+                getattr(exc, "status_code", None) == 524
+                or "Error code: 524" in str(exc)
+            ):
                 raise IndependentTDRError(
-                    "Le serveur LLM distant a dépassé le délai Cloudflare (HTTP 524, "
-                    "environ 120 secondes). La génération a été interrompue ; aucun verdict "
-                    "incomplet n'a été enregistré. Attendez au moins 120 secondes puis "
-                    "relancez l'analyse. Si l'erreur persiste, le serveur distant doit être "
-                    "vérifié par son administrateur."
+                    "Le serveur LLM distant a dépassé le délai "
+                    "Cloudflare. Aucun verdict incomplet n'a été enregistré."
                 ) from exc
 
     preview = re.sub(r"\s+", " ", last_content)[:240]
+
     raise IndependentTDRError(
-        f"Le fournisseur LLM ({ACTIVE_MODEL}) n'a pas produit de JSON valide après 3 tentatives. "
-        f"Dernière erreur : {last_error}. Début de la réponse : {preview!r}"
+        f"Qwen ({ACTIVE_MODEL}) n'a pas produit de JSON valide "
+        f"après {len(token_budgets)} tentatives. "
+        f"Dernière erreur : {last_error}. "
+        f"Début de la réponse : {preview!r}"
     ) from last_error
+
 
 
 # ---------------------------------------------------------------------------
