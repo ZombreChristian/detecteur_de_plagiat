@@ -1013,22 +1013,28 @@ def analyser(request):
             }, status=202)
         return redirect("detector:analyser")
 
-    def get_workflow_analysis(session_key, workflow):
+    def get_workflow_analysis(session_key, workflow, clear_when_finished=False):
         analysis_id = request.session.get(session_key)
         analysis = None
         if analysis_id:
             analysis = Analysis.objects.filter(
                 pk=analysis_id, user=request.user, result_json__workflow=workflow
             ).first()
-        if analysis is None:
+        if analysis is None and not clear_when_finished:
             analysis = Analysis.objects.filter(
                 user=request.user, result_json__workflow=workflow
             ).order_by("-created_at").first()
             if analysis:
                 request.session[session_key] = analysis.pk
+        if clear_when_finished and analysis and analysis.status != "running":
+            request.session.pop(session_key, None)
         return analysis
 
-    tdr_analysis = get_workflow_analysis("nouvelle_analyse_tdr_id", "nouvelle_analyse_tdr")
+    # Le résultat TDR est affiché une seule fois : au prochain rafraîchissement,
+    # la session ne le recharge plus depuis l'historique.
+    tdr_analysis = get_workflow_analysis(
+        "nouvelle_analyse_tdr_id", "nouvelle_analyse_tdr", clear_when_finished=True
+    )
     report_analysis = get_workflow_analysis("nouvelle_analyse_report_id", "nouvelle_analyse_report")
     return render(request, "analyser.html", {
         "tdr_analysis": tdr_analysis,
