@@ -1037,6 +1037,8 @@ def analyser(request):
         "report_result": (report_analysis.result_json or {}) if report_analysis else {},
         "tdr_status_url": reverse("detector:analysis_status", kwargs={"pk": tdr_analysis.pk}) if tdr_analysis else "",
         "report_status_url": reverse("detector:analysis_status", kwargs={"pk": report_analysis.pk}) if report_analysis else "",
+        "tdr_detail_url": reverse("detector:analysis_detail", kwargs={"pk": tdr_analysis.pk}) if tdr_analysis else "",
+        "report_detail_url": reverse("detector:analysis_detail", kwargs={"pk": report_analysis.pk}) if report_analysis else "",
         "can_verify_tdr": _has_permission(request.user, "can_verify_tdr"),
         "can_analyze_report": _has_permission(request.user, "can_analyze_report"),
     })
