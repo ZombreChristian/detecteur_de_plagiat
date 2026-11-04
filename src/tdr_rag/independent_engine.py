@@ -41,10 +41,9 @@ ACTIVE_MODEL = TDR_LLM_REMOTE_MODEL
 RAG_TOP_K = 3
 REFERENCE_CHARS = 2200
 CANDIDATE_CHARS = 6000
-# Les serveurs Qwen en mode raisonnement peuvent consommer tout le budget
-# avant de produire le JSON final. Les tentatives augmentent donc le budget
-# et, sur les reprises, désactivent explicitement le thinking.
-OUTPUT_TOKENS = 2048
+# Le budget de base est configurable. Chaque tentative impose au minimum
+# 4 096 tokens et augmente progressivement jusqu'à 8 192 tokens.
+OUTPUT_TOKENS = max(1024, int(os.getenv("TDR_RAG_MAX_OUTPUT_TOKENS", "4096")))
 
 # ---------------------------------------------------------------------------
 # Identifiants de cas : UNE SEULE source de vérité (prompt + code)
