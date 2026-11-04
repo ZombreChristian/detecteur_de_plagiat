@@ -143,26 +143,54 @@
         credentials: "same-origin",
         headers: {"X-Requested-With":"XMLHttpRequest"}
       });
-      const html = await response.text();
-      if (!response.ok) throw new Error("Le serveur a répondu avec le statut " + response.status + ".");
-      if (response.redirected && response.url && new URL(response.url).pathname !== window.location.pathname) {
-        if (timer) clearInterval(timer);
-        elapsed.textContent = elapsed.textContent + " · terminé";
-        fill.classList.remove("waiting");
-        fill.style.width = "100%";
-        bar.setAttribute("aria-valuenow", "100");
-        status.textContent = "Analyse terminée — ouverture des résultats…";
-        detail.textContent = "Le verdict a été produit et enregistré.";
-        steps.forEach(node => { node.classList.remove("current"); node.classList.add("done"); });
-        window.setTimeout(() => { window.location.assign(response.url); }, 450);
-        return;
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || payload.detail || "Le serveur a répondu avec le statut " + response.status + ".");
       }
-      // Si Django renvoie la page avec un message d'erreur ou de validation,
-      // on affiche sa réponse au lieu de laisser le formulaire bloqué.
+      if (response.status !== 202 || !payload.status_url) {
+        throw new Error(payload.error || "Le serveur n'a pas confirmé le lancement de l'analyse.");
+      }
+
+      // Django lance le traitement en arrière-plan et répond immédiatement
+      // avec HTTP 202. On interroge ensuite le statut jusqu'au résultat final.
+      let finalState = null;
+      for (let attempt = 0; attempt < 900; attempt += 1) {
+        await new Promise(resolve => window.setTimeout(resolve, 2000));
+        const statusResponse = await fetch(payload.status_url, {
+          method: "GET",
+          credentials: "same-origin",
+          headers: {"Accept":"application/json"}
+        });
+        const statusPayload = await statusResponse.json().catch(() => ({}));
+        if (!statusResponse.ok) {
+          throw new Error(statusPayload.error || "Impossible de récupérer l'état de l'analyse.");
+        }
+        if (statusPayload.status === "success") {
+          finalState = statusPayload;
+          break;
+        }
+        if (statusPayload.status === "error") {
+          throw new Error(statusPayload.error || "Le moteur n'a pas pu terminer l'analyse.");
+        }
+        if (statusPayload.status !== "running") {
+          throw new Error("État d'analyse inattendu : " + (statusPayload.status || "inconnu"));
+        }
+      }
+      if (!finalState) {
+        throw new Error("Le délai d'attente de l'interface est dépassé. Consultez l'historique avant de relancer l'analyse.");
+      }
+
       if (timer) clearInterval(timer);
-      document.open();
-      document.write(html);
-      document.close();
+      elapsed.textContent = elapsed.textContent + " · terminé";
+      fill.classList.remove("waiting");
+      fill.style.width = "100%";
+      bar.setAttribute("aria-valuenow", "100");
+      status.textContent = "Analyse terminée — ouverture des résultats…";
+      detail.textContent = "Le verdict a été produit et enregistré.";
+      steps.forEach(node => { node.classList.remove("current"); node.classList.add("done"); });
+      window.setTimeout(() => {
+        window.location.assign(finalState.result_url || window.location.href);
+      }, 450);
     } catch (error) {
       if (timer) clearInterval(timer);
       fill.classList.remove("waiting");
