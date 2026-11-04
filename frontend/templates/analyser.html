@@ -81,24 +81,6 @@
       {% elif report_analysis.status == "error" %}<p class="alert">Échec : {{ report_analysis.error_message }}</p>{% endif %}
     </div>
     {% endif %}
-              <a class="btn btn-primary" href="{{ tdr_detail_url }}" style="margin-left:12px">Voir les détails de l'analyse</a>
-            {% endwith %}
-          {% elif tdr_analysis.status == "error" %}
-            <p class="alert">Échec : {{ tdr_analysis.error_message }}</p>
-          {% endif %}
-        </div>
-        {% endif %}
-        {% if report_analysis %}
-        <div class="task-state" data-status-url="{{ report_status_url }}" data-task-status="{{ report_analysis.status }}" style="margin-top:12px">
-          <strong>Analyse rapport — {{ report_analysis.document_name }}</strong>
-          {% if report_analysis.status == "running" %}<p class="muted">Analyse en cours…</p>
-          {% elif report_analysis.status == "success" %}<p><a class="btn btn-primary" href="{{ report_detail_url }}">Voir les détails de l'analyse</a></p>
-          {% elif report_analysis.status == "error" %}<p class="alert">Échec : {{ report_analysis.error_message }}</p>{% endif %}
-        </div>
-        {% endif %}
-      </div>
-    </section>
-    {% endif %}
   </div>
 </main>
 </div>
