@@ -851,10 +851,11 @@ def reception(request):
 
     tdr_analysis = get_workflow_analysis("reception_tdr_analysis_id", "reception_tdr")
     report_analysis = get_workflow_analysis("reception_report_analysis_id", "reception_report")
-    validated_tdr = Analysis.objects.filter(
-        user=request.user, mode="duplicate", status="success", decision="DIFFERENT",
-        result_json__workflow="reception_tdr",
-    ).order_by("-created_at").first()
+    validated_tdr = (
+        tdr_analysis
+        if tdr_analysis and tdr_analysis.status == "success" and tdr_analysis.decision == "DIFFERENT"
+        else None
+    )
 
     return render(request, "reception.html", {
         "tdr_analysis": tdr_analysis,
