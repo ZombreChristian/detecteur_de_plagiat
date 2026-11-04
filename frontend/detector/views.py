@@ -787,6 +787,8 @@ def reception(request):
 
     if request.method == "POST":
         mode = request.POST.get("mode", "tdr")
+        if mode == "report" and not _require_permission(request, "can_analyze_report", "Votre profil ne dispose pas de l'accès à l'analyse des rapports."):
+            return JsonResponse({"error": "Accès refusé à l'analyse des rapports."}, status=403) if request.headers.get("x-requested-with") == "XMLHttpRequest" else redirect("detector:dashboard")
         uploaded = _get_uploaded_docx(request)
         if mode not in ("tdr", "report"):
             message = "Type de contrôle invalide."
