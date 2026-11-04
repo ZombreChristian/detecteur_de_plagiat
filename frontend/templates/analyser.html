@@ -17,6 +17,68 @@
 .tdr-running strong { display:block; margin-bottom:12px; }
 .tdr-progress-track { height:8px; overflow:hidden; border-radius:999px; background:var(--line, #e5e7eb); }
 .tdr-progress-bar { display:block; width:8%; height:100%; border-radius:inherit; background:var(--green, #16834a); transition:width .5s ease; }
+
+.tdr-result-card {
+  width: 100%;
+  max-width: 960px;
+  margin-top: 22px;
+  overflow: hidden;
+  border: 1px solid var(--line, #dce3e8);
+  border-left: 4px solid var(--green, #16834a);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  box-shadow: 0 8px 24px rgba(20, 35, 50, .07);
+}
+.tdr-result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--line, #e5e7eb);
+  color: var(--muted, #64748b);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.tdr-result-complete {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--green, #16834a);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.tdr-result-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.tdr-result-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 22px 20px;
+}
+.tdr-result-verdict { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.tdr-result-verdict strong { color: var(--ink, #142235); font-size: 17px; line-height: 1.45; }
+.tdr-case-label {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .03em;
+}
+.case-strong .tdr-case-label { color: #9a3412; background: #fff1e8; }
+.case-partial .tdr-case-label { color: #1d4ed8; background: #eff6ff; }
+.case-none .tdr-case-label { color: #166534; background: #ecfdf3; }
+.tdr-result-action { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 10px; }
+@media (max-width: 700px) {
+  .tdr-result-heading, .tdr-result-body { align-items: flex-start; flex-direction: column; }
+  .tdr-result-body { gap: 18px; }
+  .tdr-result-verdict { align-items: flex-start; }
+  .tdr-result-verdict strong { font-size: 15px; }
+}
 </style>
 </head>
 <body>
@@ -59,16 +121,36 @@
     </section>
     {% elif tdr_analysis and tdr_analysis.status == "success" %}
       {% with rag=tdr_result.rag_analysis %}
-        {% if rag.case_id == "CAS_1_correspondance forte à une étude existante" %}
-          <strong>CAS 1 — Correspondance forte à une étude existante</strong>
-        {% elif rag.case_id == "CAS_2_Correspondance partielle avec une étude existante" %}
-          <strong>CAS 2 — Correspondance partielle avec une étude existante</strong>
-        {% elif rag.case_id == "CAS_3_Aucune correspondance à une étude existante" %}
-          <strong>CAS 3 — Aucune correspondance à une étude existante</strong>
-        {% else %}
-          <strong>{{ rag.case_title|default:"Résultat de l'analyse" }}</strong>
-        {% endif %}
-        <a class="btn btn-primary" href="{{ tdr_detail_url }}" style="margin-left:12px">Voir les détails de l'analyse</a>
+        <section class="tdr-result-card" aria-live="polite">
+          <div class="tdr-result-heading">
+            <span>Résultat de la vérification</span>
+            <span class="tdr-result-complete"><span class="tdr-result-dot"></span> Analyse terminée</span>
+          </div>
+          <div class="tdr-result-body">
+            {% if rag.case_id == "CAS_1_correspondance forte à une étude existante" %}
+              <div class="tdr-result-verdict case-strong">
+                <span class="tdr-case-label">CAS 1</span>
+                <strong>Correspondance forte à une étude existante</strong>
+              </div>
+            {% elif rag.case_id == "CAS_2_Correspondance partielle avec une étude existante" %}
+              <div class="tdr-result-verdict case-partial">
+                <span class="tdr-case-label">CAS 2</span>
+                <strong>Correspondance partielle avec une étude existante</strong>
+              </div>
+            {% elif rag.case_id == "CAS_3_Aucune correspondance à une étude existante" %}
+              <div class="tdr-result-verdict case-none">
+                <span class="tdr-case-label">CAS 3</span>
+                <strong>Aucune correspondance à une étude existante</strong>
+              </div>
+            {% else %}
+              <div class="tdr-result-verdict case-partial">
+                <span class="tdr-case-label">Résultat</span>
+                <strong>{{ rag.case_title|default:"Résultat de l'analyse" }}</strong>
+              </div>
+            {% endif %}
+            <a class="btn btn-primary tdr-result-action" href="{{ tdr_detail_url }}">Voir les détails de l'analyse <span aria-hidden="true">→</span></a>
+          </div>
+        </section>
       {% endwith %}
     {% elif tdr_analysis and tdr_analysis.status == "error" %}
       <p class="alert">Échec : {{ tdr_analysis.error_message }}</p>
