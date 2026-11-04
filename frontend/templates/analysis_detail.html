@@ -23,6 +23,37 @@
 <main class="main">
 <div class="ctxbar"><div><h1>Détail de l'analyse</h1><div class="lede">Résultat enregistré dans l'historique TDRDOC-SCAN</div></div><div class="actions"><a class="btn" href="{% url 'detector:dashboard' %}">← Tableau de bord</a></div></div>
 <div class="page-pad">
+{% if analysis.status == "running" %}
+<section class="panel national-bar-red"><div class="panel-body">
+<h2>Analyse en cours</h2>
+<p>Le TDR <strong>{{ analysis.document_name }}</strong> est en cours de traitement par le moteur distant.</p>
+<p class="muted">L'analyse continue sur le serveur même si vous quittez cette page. Vous pouvez naviguer dans l'application, puis revenir ici ou consulter l'historique.</p>
+<div class="progress-track" style="height:10px;background:var(--panel-raised);border-radius:99px;overflow:hidden"><div style="height:100%;width:35%;background:var(--gold);animation:tdr-wait 1.5s ease-in-out infinite alternate"></div></div>
+<p id="analysis-live-status" role="status" aria-live="polite">Vérification de l'état en cours…</p>
+<a class="btn" href="{% url 'detector:resultats' %}">Consulter l'historique</a>
+</div></section>
+<style>@keyframes tdr-wait{from{width:18%}to{width:82%}}</style>
+<script>
+(async function(){
+ const statusUrl="{{ analysis_status_url|escapejs }}";
+ const statusNode=document.getElementById("analysis-live-status");
+ async function check(){
+  try{
+   const response=await fetch(statusUrl,{credentials:"same-origin",headers:{"X-Requested-With":"XMLHttpRequest"}});
+   if(!response.ok) throw new Error("État indisponible");
+   const data=await response.json();
+   if(data.status==="success"){statusNode.textContent="Analyse terminée. Affichage du verdict…";window.location.reload();return;}
+   if(data.status==="error"){statusNode.textContent="Échec de l'analyse : "+(data.error||"Erreur inconnue");return;}
+   statusNode.textContent="Analyse toujours en cours… Cette page se mettra à jour automatiquement.";
+   window.setTimeout(check,3000);
+  }catch(e){statusNode.textContent="Connexion momentanément interrompue. Nouvelle vérification dans quelques secondes.";window.setTimeout(check,5000);}
+ }
+ window.setTimeout(check,1500);
+})();
+</script>
+{% elif analysis.status == "error" %}
+<section class="panel national-bar-red"><div class="panel-body"><h2>Analyse non terminée</h2><p>{{ analysis.error_message }}</p><a class="btn btn-primary" href="{% url 'detector:tdr_rag_independent' %}">Relancer une analyse</a><a class="btn" href="{% url 'detector:resultats' %}">Historique</a></div></section>
+{% else %}
 <section class="panel national-bar-red"><div class="panel-head"><div><h2>{{ analysis.document_name }}</h2><div class="muted" style="font-size:12px;margin-top:5px">{{ analysis.created_at|date:'d/m/Y H:i:s' }}</div></div><div>{% if analysis.decision == 'SIMILAIRE' %}<span class="status status-alert">SIMILAIRE</span>{% elif analysis.decision == 'DIFFERENT' %}<span class="status status-ok">DIFFERENT</span>{% else %}<span class="status status-neutral">{{ analysis.decision|default:'—' }}</span>{% endif %}</div></div>
 <div class="panel-body"><div class="engines" style="margin:0"><div class="engine"><div class="engine-kicker muted">Type de contrôle</div><h3>{{ analysis.get_mode_display }}</h3><p>{% if analysis.mode == 'duplicate' %}Comparaison du TDR avec les études déjà enregistrées dans le registre.{% else %}Analyse de similarité d'un rapport avec les documents déjà enregistrés dans le corpus.{% endif %}</p></div>{% if analysis.mode == 'duplicate' %}<div class="engine"><div class="engine-kicker muted">Résultat</div><h3>Contrôle du TDR</h3><p>Les références pertinentes sont présentées ci-dessous.</p></div>{% else %}<div class="engine"><div class="engine-kicker muted">Seuil de décision</div><h3>{{ result.threshold_percent|floatformat:0|default:'—' }} %</h3><p>Seuil utilisé pour le contrôle de plagiat du rapport.</p></div>{% endif %}</div></div></section>
 <div class="pulse">{% if analysis.mode == 'duplicate' %}<div class="pulse-cell"><b class="mono">{% if duration_seconds %}{{ duration_seconds }} s{% else %}—{% endif %}</b><span>Durée de l'analyse RAG</span></div>{% else %}<div class="pulse-cell"><b class="mono">{{ analysis.tfidf_score|floatformat:3|default:'—' }}</b><span>Analyse lexicale (TF-IDF)</span></div><div class="pulse-cell"><b class="mono">{{ analysis.semantic_score|floatformat:3|default:'—' }}</b><span>Analyse sémantique</span></div><div class="pulse-cell"><b class="mono">{{ analysis.hybrid_score|floatformat:3|default:'—' }}</b><span>Score hybride</span></div><div class="pulse-cell"><b class="mono">{{ analysis.novelty_score|floatformat:3|default:'—' }}</b><span>Nouveauté</span></div><div class="pulse-cell"><b class="mono">{% if duration_seconds %}{{ duration_seconds }} s{% else %}—{% endif %}</b><span>Durée</span></div>{% endif %}</div>
@@ -57,4 +88,5 @@
 </div></section>{% endif %}
 {% if analysis.mode == "duplicate" and analysis.decision == "DIFFERENT" %}<section class="panel national-bar-green"><div class="panel-head"><h2>Étape suivante</h2></div><div class="panel-body"><p class="muted">Ce TDR a été jugé différent. Vous pouvez maintenant déposer le rapport d’étude correspondant afin de lancer son contrôle de plagiat.</p><a class="btn btn-primary" href="{% url 'detector:upload_report_for_tdr' analysis.id %}">Déposer le rapport lié à ce TDR</a></div></section>{% endif %}
 </section>
+{% endif %}
 </div></main></div></body></html>
