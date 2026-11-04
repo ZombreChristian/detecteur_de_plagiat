@@ -56,7 +56,26 @@
         <div class="task-state" data-status-url="{{ tdr_status_url }}" data-task-status="{{ tdr_analysis.status }}">
           <strong>Vérification TDR — {{ tdr_analysis.document_name }}</strong>
           {% if tdr_analysis.status == "running" %}<p class="muted">Analyse en cours…</p>
-          {% elif tdr_analysis.status == "success" %}<p><a class="btn btn-primary" href="{{ tdr_detail_url }}">Voir les détails de l'analyse</a></p>
+          {% elif tdr_analysis.status == "success" %}
+            {% with rag=tdr_result.rag_analysis %}
+            <div class="contextual-verdict" style="margin:12px 0;padding:14px;border:1px solid var(--hairline);border-radius:8px">
+              {% if rag.case_id == "CAS_1_CORRESPONDANCE_FORTE" %}
+                <h3>CAS 1 — Correspondance forte à une étude existante</h3>
+              {% elif rag.case_id == "CAS_2_CORRESPONDANCE_PARTIELLE" %}
+                <h3>CAS 2 — Correspondance partielle</h3>
+              {% elif rag.case_id == "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE" %}
+                <h3>CAS 3 — Même objectif, zone géographique différente</h3>
+              {% elif rag.case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE" %}
+                <h3>CAS 4 — Aucune étude pertinente trouvée</h3>
+              {% else %}
+                <h3>{{ rag.case_title|default:"Résultat de l'analyse" }}</h3>
+              {% endif %}
+              {% if rag.explanation %}<p>{{ rag.explanation }}</p>{% endif %}
+              {% if rag.matched_reference %}<p><strong>Étude existante :</strong> {{ rag.matched_reference }}</p>
+              {% elif rag.matched_references %}<p><strong>Étude(s) correspondante(s) :</strong></p><ul>{% for reference in rag.matched_references %}<li>{{ reference.source }}</li>{% endfor %}</ul>{% endif %}
+            </div>
+            {% endwith %}
+            <p><a class="btn btn-primary" href="{{ tdr_detail_url }}">Voir les détails de l'analyse</a></p>
           {% elif tdr_analysis.status == "error" %}<p class="alert">Échec : {{ tdr_analysis.error_message }}</p>{% endif %}
         </div>
         {% endif %}
