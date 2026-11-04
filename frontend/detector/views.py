@@ -1202,7 +1202,7 @@ def tdr_rag_independent(request):
         return redirect("detector:dashboard")
     if request.method != "POST":
         active_analysis = Analysis.objects.filter(
-            user=request.user, mode="duplicate", status="running"
+            user=request.user, mode="duplicate"
         ).order_by("-created_at").first()
         return render(request, "tdr_rag_independent.html", {
             "active_analysis": active_analysis,
