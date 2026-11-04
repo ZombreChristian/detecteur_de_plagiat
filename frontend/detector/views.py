@@ -875,6 +875,16 @@ def analyser(request):
         messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
         return redirect("detector:analyser")
     uploaded_path = _save_uploaded_document(uploaded)
+    if mode == "duplicate":
+        analysis = Analysis.objects.create(
+            user=request.user, document_name=uploaded.name, mode="duplicate",
+            status="running", result_json={"uploaded_path": uploaded_path},
+        )
+        _start_tdr_analysis(
+            analysis, uploaded_path, uploaded.name,
+            uploaded.content_type or _document_content_type(uploaded),
+        )
+        return redirect("detector:analysis_detail", pk=analysis.pk)
     # Le verdict TDR est arbitré par le moteur RAG/LLM, pas par un seuil utilisateur.
     # Le seuil reste configurable uniquement pour le contrôle de plagiat des rapports.
     data = {}
