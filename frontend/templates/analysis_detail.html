@@ -27,28 +27,46 @@
 <section class="panel national-bar-red"><div class="panel-body">
 <h2>Analyse en cours</h2>
 <p>Le TDR <strong>{{ analysis.document_name }}</strong> est en cours de traitement par le moteur distant.</p>
-<p class="muted">L'analyse continue sur le serveur même si vous quittez cette page. Vous pouvez naviguer dans l'application, puis revenir ici ou consulter l'historique.</p>
-<div class="progress-track" style="height:10px;background:var(--panel-raised);border-radius:99px;overflow:hidden"><div style="height:100%;width:35%;background:var(--gold);animation:tdr-wait 1.5s ease-in-out infinite alternate"></div></div>
-<p id="analysis-live-status" role="status" aria-live="polite">Vérification de l'état en cours…</p>
+
+<div class="progress-heading"><span>Progression de l'analyse</span><span id="analysis-elapsed">00:00</span></div>
+<div class="progress-track" role="progressbar" aria-label="Progression indicative de l'analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow="3"><div id="analysis-progress-fill" class="progress-fill waiting" style="height:100%;width:3%"></div></div>
+<p id="analysis-live-status" class="progress-status" role="status" aria-live="polite">Analyse en cours…</p>
+<div class="progress-steps" id="analysis-progress-steps">
+<div class="progress-step current">1. Réception du document</div><div class="progress-step">2. Extraction du texte</div><div class="progress-step">3. Chargement des références</div><div class="progress-step">4. Recherche des similarités</div><div class="progress-step">5. Sélection des références</div><div class="progress-step">6. Analyse par Qwen</div><div class="progress-step">7. Préparation du verdict</div><div class="progress-step">8. Enregistrement du résultat</div>
+</div>
 <a class="btn" href="{% url 'detector:resultats' %}">Consulter l'historique</a>
 </div></section>
-<style>@keyframes tdr-wait{from{width:18%}to{width:82%}}</style>
+
 <script>
 (async function(){
  const statusUrl="{{ analysis_status_url|escapejs }}";
  const statusNode=document.getElementById("analysis-live-status");
+ const fill=document.getElementById("analysis-progress-fill");
+ const bar=document.querySelector('[role="progressbar"]');
+ const elapsed=document.getElementById("analysis-elapsed");
+ const steps=Array.from(document.querySelectorAll("#analysis-progress-steps .progress-step"));
+ const created=new Date("{{ analysis.created_at|date:'c' }}").getTime();
+ const stages=[{at:0,pct:5,title:"1/8 — Réception du document"},{at:2,pct:15,title:"2/8 — Extraction du texte"},{at:5,pct:25,title:"3/8 — Chargement des références"},{at:10,pct:40,title:"4/8 — Recherche des similarités"},{at:16,pct:52,title:"5/8 — Sélection des références"},{at:22,pct:72,title:"6/8 — Analyse par Qwen"},{at:45,pct:88,title:"7/8 — Préparation du verdict"},{at:60,pct:95,title:"8/8 — Finalisation du résultat"}];
+ function draw(){
+  const sec=Math.max(0,Math.floor((Date.now()-created)/1000));
+  elapsed.textContent=String(Math.floor(sec/60)).padStart(2,"0")+":"+String(sec%60).padStart(2,"0");
+  let index=0;stages.forEach((s,i)=>{if(sec>=s.at)index=i;});
+  fill.style.width=stages[index].pct+"%";bar.setAttribute("aria-valuenow",stages[index].pct);
+  statusNode.textContent=stages[index].title+"…";
+  steps.forEach((n,i)=>{n.classList.toggle("current",i===index);n.classList.toggle("done",i<index);});
+ }
  async function check(){
+  draw();
   try{
    const response=await fetch(statusUrl,{credentials:"same-origin",headers:{"X-Requested-With":"XMLHttpRequest"}});
    if(!response.ok) throw new Error("État indisponible");
    const data=await response.json();
-   if(data.status==="success"){statusNode.textContent="Analyse terminée. Affichage du verdict…";window.location.reload();return;}
-   if(data.status==="error"){statusNode.textContent="Échec de l'analyse : "+(data.error||"Erreur inconnue");return;}
-   statusNode.textContent="Analyse toujours en cours… Cette page se mettra à jour automatiquement.";
-   window.setTimeout(check,3000);
-  }catch(e){statusNode.textContent="Connexion momentanément interrompue. Nouvelle vérification dans quelques secondes.";window.setTimeout(check,5000);}
+   if(data.status==="success"){window.location.reload();return;}
+   if(data.status==="error"){statusNode.textContent="Échec de l'analyse : "+(data.error||"Erreur inconnue");fill.classList.remove("waiting");return;}
+  }catch(e){}
+  window.setTimeout(check,3000);
  }
- window.setTimeout(check,1500);
+ check();
 })();
 </script>
 {% elif analysis.status == "error" %}
