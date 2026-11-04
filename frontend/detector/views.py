@@ -45,6 +45,17 @@ from .models import Analysis, StudyDocument
 
 
 
+
+def _format_duration_ms(duration_ms):
+    """Formate une durée en minutes et secondes pour l'affichage utilisateur."""
+    if duration_ms is None:
+        return "—"
+    total_seconds = max(0, round(duration_ms / 1000))
+    minutes, seconds = divmod(total_seconds, 60)
+    if minutes:
+        return f"{minutes} min {seconds:02d} s"
+    return f"{seconds} s"
+
 def _run_tdr_analysis_in_background(analysis_id, relative_path, document_name, content_type):
     """Exécute une analyse TDR hors requête HTTP et persiste son état."""
     close_old_connections()
@@ -774,7 +785,7 @@ def analysis_detail(request, pk):
         "analysis": analysis,
         "result": result,
         "analysis_status_url": reverse("detector:analysis_status", kwargs={"pk": analysis.pk}),
-        "duration_seconds": (f"{analysis.duration_ms / 1000:.1f}".replace(".", ",") if analysis.duration_ms is not None else None),
+        "duration_seconds": _format_duration_ms(analysis.duration_ms),
         "document_url": _document_url(uploaded_path),
         "document_path": uploaded_path,
     })
@@ -857,10 +868,29 @@ def reception(request):
         else None
     )
 
+    # Un résultat terminé est affiché une seule fois sur la page de réception.
+    # Il reste consultable dans l'historique, mais disparaît de cette page après actualisation.
+    show_tdr_analysis = bool(tdr_analysis and (
+        tdr_analysis.status != "success"
+        or request.session.get("reception_tdr_result_seen_id") != tdr_analysis.pk
+    ))
+    show_report_analysis = bool(report_analysis and (
+        report_analysis.status != "success"
+        or request.session.get("reception_report_result_seen_id") != report_analysis.pk
+    ))
+    if tdr_analysis and tdr_analysis.status == "success" and show_tdr_analysis:
+        request.session["reception_tdr_result_seen_id"] = tdr_analysis.pk
+    if report_analysis and report_analysis.status == "success" and show_report_analysis:
+        request.session["reception_report_result_seen_id"] = report_analysis.pk
+
     return render(request, "reception.html", {
         "tdr_analysis": tdr_analysis,
         "report_analysis": report_analysis,
+        "show_tdr_analysis": show_tdr_analysis,
+        "show_report_analysis": show_report_analysis,
         "validated_tdr_analysis": validated_tdr,
+        "tdr_duration_display": _format_duration_ms(tdr_analysis.duration_ms) if tdr_analysis else "—",
+        "report_duration_display": _format_duration_ms(report_analysis.duration_ms) if report_analysis else "—",
         "tdr_status_url": reverse("detector:analysis_status", kwargs={"pk": tdr_analysis.pk}) if tdr_analysis else "",
         "report_status_url": reverse("detector:analysis_status", kwargs={"pk": report_analysis.pk}) if report_analysis else "",
         "tdr_result": (tdr_analysis.result_json or {}) if tdr_analysis else {},
