@@ -70,8 +70,7 @@
                 <h3>{{ rag.case_title|default:"Résultat de l'analyse" }}</h3>
               {% endif %}
               {% if rag.explanation %}<p>{{ rag.explanation }}</p>{% endif %}
-              {% if rag.matched_reference %}<p><strong>Étude existante :</strong> {{ rag.matched_reference }}</p>
-              {% elif rag.matched_references %}<p><strong>Étude(s) correspondante(s) :</strong></p><ul>{% for reference in rag.matched_references %}<li>{{ reference.source }}</li>{% endfor %}</ul>{% endif %}
+              {% if rag.matched_reference %}<p><strong>Étude existante :</strong> {{ rag.matched_reference }}</p>{% endif %}
             </div>
             {% endwith %}
             <p><a class="btn btn-primary" href="{{ tdr_detail_url }}">Voir les détails de l'analyse</a></p>
