@@ -21,6 +21,7 @@ urlpatterns = [
     path("administration/utilisateur/<int:pk>/supprimer/", views.administration_utilisateur_supprimer, name="administration_utilisateur_supprimer"),
     path("inscription/", views.signup_view, name="signup"),
     path("analyse/<int:pk>/", views.analysis_detail, name="analysis_detail"),
+    path("analyse/<int:pk>/etat/", views.analysis_status, name="analysis_status"),
     path("analyse/<int:pk>/supprimer/", views.delete_analysis, name="delete_analysis"),
     path("analyse/<int:pk>/telecharger/", views.download_annotated_document, name="download_annotated_document"),
     path("reference/<int:pk>/ouvrir/", views.open_reference_document, name="open_reference_document"),
