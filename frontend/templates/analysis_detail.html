@@ -8,6 +8,17 @@
 <script src="{% static 'js/theme.js' %}"></script><style>
 .document-reader-title h3{margin:0}
 .source-open{font-size:12px}
+.progress-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:12px 0 10px;font-weight:650}
+.progress-track{height:10px;overflow:hidden;background:var(--panel-raised);border-radius:999px}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--gold) 0%,#d7c48d 50%,var(--gold) 100%);background-size:200% 100%;animation:progress-shimmer 1.6s linear infinite;border-radius:999px;transition:width .5s ease}
+@keyframes progress-shimmer{from{background-position:100% 0}to{background-position:-100% 0}}
+.progress-status{margin:12px 0;color:var(--text);font-weight:650}
+.progress-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:18px 0}
+.progress-step{padding:10px 8px;border:1px solid var(--hairline);border-radius:var(--radius-s);color:var(--text-dim);font-size:.82rem;text-align:center}
+.progress-step.current{border-color:var(--gold);background:var(--gold-wash);color:var(--text);font-weight:700}
+.progress-step.done{border-color:var(--hairline);color:var(--text-dim)}
+@media(max-width:700px){.progress-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.progress-fill{animation:none;transition:none}}
 </style></head>
 <body>
 <div class="console">
