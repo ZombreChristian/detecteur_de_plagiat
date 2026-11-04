@@ -74,6 +74,22 @@
                   <p style="margin:8px 0"><strong>État :</strong> Analyse terminée — {{ report_analysis.decision|default:"Résultat enregistré" }}</p>
                   <p><strong>Durée :</strong> {% if report_analysis.duration_ms %}{{ report_analysis.duration_ms|floatformat:0 }} ms{% else %}—{% endif %}</p>
                   <p><strong>Score TF-IDF :</strong> {{ report_analysis.tfidf_score|default:"—" }} · <strong>Score sémantique :</strong> {{ report_analysis.semantic_score|default:"—" }} · <strong>Score hybride :</strong> {{ report_analysis.hybrid_score|default:"—" }}</p>
+                  {% if report_result.sources %}
+                    <details style="margin-top:12px"><summary><strong>Consulter les sources et passages détectés ({{ report_result.sources|length }})</strong></summary>
+                      {% for source in report_result.sources|slice:":5" %}
+                        <div style="padding:10px 0;border-bottom:1px solid var(--line,#ddd)">
+                          <strong>{{ source.source }}</strong>
+                          <p class="muted" style="margin:4px 0">Similarité : {{ source.hybrid_score|default:"—" }} · Verdict : {{ source.contextual_verdict|default:"À examiner" }}</p>
+                          {% for group in source.evidence_groups %}
+                            {% for match in group.matches|slice:":3" %}
+                              <p style="margin:6px 0"><strong>Passage du rapport :</strong> {{ match.candidate_passage }}</p>
+                              <p class="muted" style="margin:6px 0"><strong>Passage source :</strong> {{ match.source_passage }}</p>
+                            {% endfor %}
+                          {% endfor %}
+                        </div>
+                      {% endfor %}
+                    </details>
+                  {% endif %}
                 {% elif report_analysis.status == "error" %}
                   <p class="alert" style="margin-top:10px">Le contrôle du rapport n'a pas abouti : {{ report_analysis.error_message }}</p>
                 {% endif %}
