@@ -125,7 +125,9 @@
                 </td>
                 <td class="muted">{{ item.get_mode_display }}</td>
                 <td>
-                  {% if item.decision == 'SIMILAIRE' %}
+                  {% if item.status == 'running' %}<span class="status status-neutral">EN COURS</span>
+                  {% elif item.status == 'error' %}<span class="status status-alert">ÉCHEC</span>
+                  {% elif item.decision == 'SIMILAIRE' %}
                     <span class="status status-alert">SIMILAIRE</span>
                   {% elif item.decision == 'DIFFERENT' %}
                     <span class="status status-ok">DIFFERENT</span>
