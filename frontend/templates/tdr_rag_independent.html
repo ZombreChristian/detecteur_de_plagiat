@@ -87,7 +87,7 @@
   try{
    const r=await fetch("{{ analysis_status_url|escapejs }}",{credentials:"same-origin"});
    const d=await r.json();
-   if(d.status==="success"){window.location.assign(d.result_url);return;}
+   if(d.status==="success"){window.location.reload();return;}
    if(d.status==="error"){status.textContent="L'analyse n'a pas pu être terminée.";detail.textContent=d.error||"Une erreur est survenue.";fill.classList.remove("waiting");return;}
   }catch(e){}
   window.setTimeout(poll,3000);
@@ -96,17 +96,23 @@
 })();
 </script>
 {% elif active_analysis and active_analysis.status == "success" %}
-<section class="notice" style="margin-bottom:18px">
-<strong>Dernière analyse terminée : {{ active_analysis.document_name }}</strong>
-<p class="muted" style="margin:6px 0">Le résultat est disponible dans l'historique.</p>
-<a class="btn btn-primary" href="{% url 'detector:analysis_detail' active_analysis.pk %}">Afficher le résultat</a>
-</section>
+<section class="panel national-bar-green" style="margin-bottom:18px">
+<div class="panel-head"><div><h2>Résultat de l'analyse</h2><div class="muted">{{ active_analysis.document_name }} · {{ active_analysis.created_at|date:'d/m/Y H:i' }}</div></div><strong>{{ active_analysis.decision|default:"Analyse terminée" }}</strong></div>
+<div class="panel-body">
+<p><strong>Durée :</strong> {{ duration_seconds|default:"—" }} s</p>
+{% if active_result.rag_analysis %}
+<div class="contextual-verdict">
+<h3>{% if active_result.rag_analysis.case_id == "CAS_1_CORRESPONDANCE_FORTE" %}Correspondance forte{% elif active_result.rag_analysis.case_id == "CAS_2_CORRESPONDANCE_PARTIELLE" %}Correspondance partielle{% elif active_result.rag_analysis.case_id == "CAS_4_AUCUNE_ETUDE_PERTINENTE" %}Aucune correspondance{% else %}{{ active_result.rag_analysis.case_title|default:"Conclusion de l'analyse" }}{% endif %}</h3>
+<p>{{ active_result.rag_analysis.explanation }}</p>
+{% if active_result.rag_analysis.matched_references %}
+<h4>Étude existante</h4><ul>{% for reference in active_result.rag_analysis.matched_references %}<li><strong>{{ reference.source }}</strong>{% if reference.source_id %} — <a href="{% url 'detector:open_reference_document' reference.source_id %}" target="_blank" rel="noopener">Ouvrir le document</a>{% endif %}{% if reference.common_points %}<ul>{% for point in reference.common_points %}<li>{{ point }}</li>{% endfor %}</ul>{% endif %}</li>{% endfor %}</ul>
+{% elif active_result.rag_analysis.matched_reference %}<p><strong>Étude existante :</strong> {{ active_result.rag_analysis.matched_reference }}{% if active_result.best_source_id %} — <a href="{% url 'detector:open_reference_document' active_result.best_source_id %}" target="_blank" rel="noopener">Ouvrir le document</a>{% endif %}</p>{% endif %}
+{% if active_result.rag_analysis.recommendation %}<p><strong>Recommandation :</strong> {{ active_result.rag_analysis.recommendation }}</p>{% endif %}
+</div>
+{% else %}<p>Le moteur a terminé l'analyse. Consultez le détail enregistré pour afficher l'ensemble des informations.</p><a class="btn" href="{{ active_analysis_url }}">Détail complet</a>{% endif %}
+</div></section>
 {% elif active_analysis and active_analysis.status == "error" %}
-<section class="notice" style="margin-bottom:18px">
-<strong>Dernière analyse non terminée : {{ active_analysis.document_name }}</strong>
-<p class="muted" style="margin:6px 0">{{ active_analysis.error_message }}</p>
-<a class="btn" href="{% url 'detector:analysis_detail' active_analysis.pk %}">Consulter le détail</a>
-</section>
+<section class="notice" style="margin-bottom:18px"><strong>Analyse non terminée : {{ active_analysis.document_name }}</strong><p class="muted" style="margin:6px 0">{{ active_analysis.error_message }}</p></section>
 {% endif %}
 <form id="tdr-analysis-form" method="post" enctype="multipart/form-data">
 {% csrf_token %}
@@ -202,26 +208,12 @@
         credentials: "same-origin",
         headers: {"X-Requested-With":"XMLHttpRequest"}
       });
-      const html = await response.text();
-      if (!response.ok) throw new Error("Le serveur a répondu avec le statut " + response.status + ".");
-      if (response.redirected && response.url && new URL(response.url).pathname !== window.location.pathname) {
-        if (timer) clearInterval(timer);
-        elapsed.textContent = elapsed.textContent + " · terminé";
-        fill.classList.remove("waiting");
-        fill.style.width = "100%";
-        bar.setAttribute("aria-valuenow", "100");
-        status.textContent = "Analyse terminée — ouverture des résultats…";
-        detail.textContent = "Le verdict a été produit et enregistré.";
-        steps.forEach(node => { node.classList.remove("current"); node.classList.add("done"); });
-        window.setTimeout(() => { window.location.assign(response.url); }, 450);
-        return;
-      }
-      // Si Django renvoie la page avec un message d'erreur ou de validation,
-      // on affiche sa réponse au lieu de laisser le formulaire bloqué.
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Le serveur a répondu avec le statut " + response.status + ".");
       if (timer) clearInterval(timer);
-      document.open();
-      document.write(html);
-      document.close();
+      status.textContent = "Analyse lancée — conservation de cette page…";
+      detail.textContent = "La tâche continue en arrière-plan. Vous retrouverez son état en revenant ici.";
+      window.location.reload();
     } catch (error) {
       if (timer) clearInterval(timer);
       fill.classList.remove("waiting");
