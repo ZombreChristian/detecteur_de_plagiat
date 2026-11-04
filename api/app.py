@@ -385,33 +385,16 @@ def run_detection(
             detail="Le document ne contient aucun texte exploitable.",
         )
 
-    ranked = score_documents(candidate, kind)
-
-    if not ranked:
-        if kind == "duplicate":
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Aucune référence TDR n'est indexée dans la base. "
-                    "Impossible de comparer ce document."
-                ),
-            )
-
-        raise HTTPException(
-            status_code=500,
-            detail=f"Aucun document de référence indexé pour le mode « {kind} ».",
-        )
-
-    best = ranked[0]
-
-    # Parcours TDR : récupération lexicale/sémantique puis arbitrage distant indépendant.
+    # Le parcours TDR possède son propre moteur de récupération hybride.
+    # Ne pas exécuter score_documents() ici : cela recalculait inutilement
+    # les embeddings avant que le moteur RAG ne reclasse tout le corpus.
     if kind == "duplicate":
         from src.tdr_rag.independent_engine import (
             analyze_tdr_independently,
             IndependentTDRError,
         )
         try:
-            result = analyze_tdr_independently(candidate)
+            return analyze_tdr_independently(candidate)
         except IndependentTDRError as exc:
             raise HTTPException(
                 status_code=503,
@@ -421,7 +404,16 @@ def run_detection(
                     "hint": "Vérifiez la configuration du fournisseur Qwen distant dans frontend/.env.",
                 },
             ) from exc
-        return result
+
+    # Le parcours plagiat conserve son classement documentaire existant.
+    ranked = score_documents(candidate, kind)
+    if not ranked:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Aucun document de référence indexé pour le mode « {kind} ».",
+        )
+
+    best = ranked[0]
 
     # ---------------------------------------------------------
     # PARCOURS RAPPORTS : analyse des passages et analyse
