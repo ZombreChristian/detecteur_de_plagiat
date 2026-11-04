@@ -1201,11 +1201,18 @@ def tdr_rag_independent(request):
     if not _require_permission(request, "can_verify_tdr", "Votre profil ne dispose pas de l'accès à la vérification des TDR."):
         return redirect("detector:dashboard")
     if request.method != "POST":
-        return render(request, "tdr_rag_independent.html")
+        active_analysis = Analysis.objects.filter(
+            user=request.user, mode="duplicate", status="running"
+        ).order_by("-created_at").first()
+        return render(request, "tdr_rag_independent.html", {
+            "active_analysis": active_analysis,
+            "analysis_status_url": reverse("detector:analysis_status", kwargs={"pk": active_analysis.pk}) if active_analysis else "",
+            "active_analysis_url": reverse("detector:analysis_detail", kwargs={"pk": active_analysis.pk}) if active_analysis else "",
+        })
     uploaded = _get_uploaded_docx(request)
     if not uploaded or not _validate_document(uploaded) or getattr(uploaded, "size", 0) <= 0:
         messages.error(request, "Sélectionnez un document DOCX ou PDF non vide.")
-        return render(request, "tdr_rag_independent.html")
+        return render(request, "tdr_rag_independent.html", {"active_analysis": Analysis.objects.filter(user=request.user, mode="duplicate", status="running").order_by("-created_at").first()})
     uploaded_path = _save_uploaded_document(uploaded)
     analysis = Analysis.objects.create(
         user=request.user, document_name=uploaded.name, mode="duplicate",
