@@ -3,6 +3,7 @@ from io import BytesIO
 import re
 import os
 import time
+import threading
 import requests
 from pathlib import Path
 from django.core.files.storage import FileSystemStorage
@@ -20,8 +21,9 @@ from django.urls import reverse
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
+from django.db import close_old_connections
 from django.db.models import Q
-from django.http import FileResponse, HttpResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from openpyxl import Workbook
 from pypdf import PdfReader
@@ -40,6 +42,64 @@ from .forms import (
     UserPasswordChangeForm,
 )
 from .models import Analysis, StudyDocument
+
+
+
+def _run_tdr_analysis_in_background(analysis_id, relative_path, document_name, content_type):
+    """Exécute une analyse TDR hors requête HTTP et persiste son état."""
+    close_old_connections()
+    try:
+        analysis = Analysis.objects.get(pk=analysis_id)
+        document_path = (Path(settings.MEDIA_ROOT) / relative_path).resolve()
+        document_path.relative_to(Path(settings.MEDIA_ROOT).resolve())
+        started_at = time.perf_counter()
+        with document_path.open("rb") as document_file:
+            response = requests.post(
+                f"{settings.FASTAPI_URL}/api/tdr-rag/analyze",
+                files={"file": (document_name, document_file, content_type)},
+                timeout=1800,
+            )
+        response.raise_for_status()
+        result = response.json()
+        result["uploaded_path"] = relative_path
+        duration_ms = round((time.perf_counter() - started_at) * 1000)
+        result["duration_ms"] = duration_ms
+        analysis.result_json = result
+        analysis.decision = result.get("decision", "")
+        analysis.duration_ms = duration_ms
+        analysis.status = "success"
+        analysis.error_message = ""
+        analysis.save(update_fields=["result_json", "decision", "duration_ms", "status", "error_message"])
+    except Exception as exc:
+        try:
+            analysis = Analysis.objects.get(pk=analysis_id)
+            analysis.status = "error"
+            analysis.error_message = str(exc)[:4000]
+            analysis.save(update_fields=["status", "error_message"])
+        except Exception:
+            pass
+    finally:
+        close_old_connections()
+
+
+def _start_tdr_analysis(analysis, uploaded_path, document_name, content_type):
+    threading.Thread(
+        target=_run_tdr_analysis_in_background,
+        args=(analysis.pk, uploaded_path, document_name, content_type),
+        name=f"tdr-analysis-{analysis.pk}",
+        daemon=True,
+    ).start()
+
+
+@login_required
+def analysis_status(request, pk):
+    analysis = get_object_or_404(Analysis, pk=pk, user=request.user)
+    return JsonResponse({
+        "status": analysis.status,
+        "decision": analysis.decision,
+        "error": analysis.error_message,
+        "result_url": reverse("detector:analysis_detail", kwargs={"pk": analysis.pk}),
+    })
 
 
 def login_view(request):
@@ -1126,80 +1186,22 @@ def administration_utilisateur(request, pk):
 
 @login_required
 def tdr_rag_independent(request):
-    """Page indépendante dédiée à l'analyse RAG complète des TDR."""
-    if not _require_permission(
-        request, "can_verify_tdr",
-        "Votre profil ne dispose pas de l'accès à la vérification des TDR."
-    ):
+    """Lance une analyse TDR en arrière-plan et ouvre immédiatement son suivi."""
+    if not _require_permission(request, "can_verify_tdr", "Votre profil ne dispose pas de l'accès à la vérification des TDR."):
         return redirect("detector:dashboard")
-
     if request.method != "POST":
         return render(request, "tdr_rag_independent.html")
-
-    # Accepte le nom du champ du formulaire RAG et les champs de fichier
-    # courants utilisés ailleurs dans l'application, sans dépendre d'un seul nom.
     uploaded = _get_uploaded_docx(request)
-    if not uploaded:
-        messages.error(request, "Aucun fichier reçu. Sélectionnez un fichier DOCX ou PDF puis réessayez.")
+    if not uploaded or not _validate_document(uploaded) or getattr(uploaded, "size", 0) <= 0:
+        messages.error(request, "Sélectionnez un document DOCX ou PDF non vide.")
         return render(request, "tdr_rag_independent.html")
-    if not _validate_document(uploaded):
-        messages.error(
-            request,
-            f"Format non pris en charge : « {uploaded.name} ». Sélectionnez un fichier Word (.docx) ou PDF (.pdf)."
-        )
-        return render(request, "tdr_rag_independent.html")
-    if getattr(uploaded, "size", 0) <= 0:
-        messages.error(request, "Le fichier sélectionné est vide. Choisissez un autre document.")
-        return render(request, "tdr_rag_independent.html")
-
     uploaded_path = _save_uploaded_document(uploaded)
-    started_at = time.perf_counter()
-    try:
-        uploaded.seek(0)
-        response = requests.post(
-            f"{settings.FASTAPI_URL}/api/tdr-rag/analyze",
-            files={"file": (
-                uploaded.name, uploaded.file,
-                uploaded.content_type or _document_content_type(uploaded)
-            )},
-            timeout=1800,
-        )
-        response.raise_for_status()
-        result = response.json()
-        result["uploaded_path"] = uploaded_path
-        duration_ms = round((time.perf_counter() - started_at) * 1000)
-        result["duration_ms"] = duration_ms
-        analysis = Analysis.objects.create(
-            user=request.user,
-            document_name=uploaded.name,
-            mode="duplicate",
-            decision=result.get("decision", ""),
-            hybrid_score=None,
-            semantic_score=None,
-            tfidf_score=None,
-            novelty_score=None,
-            result_json=result,
-            duration_ms=duration_ms,
-            status="success",
-        )
-        messages.success(
-            request,
-            "Analyse RAG terminée. Consultez les documents de référence examinés et les justificatifs dans le détail du résultat."
-        )
-        return redirect("detector:analysis_detail", pk=analysis.pk)
-    except requests.RequestException as exc:
-        response = getattr(exc, "response", None)
-        detail = None
-        if response is not None:
-            try:
-                payload = response.json()
-                detail = payload.get("detail", payload)
-                if isinstance(detail, dict):
-                    detail = detail.get("message") or str(detail)
-            except (ValueError, AttributeError):
-                detail = None
-        messages.error(
-            request,
-            "Analyse RAG indépendante non terminée : " + (str(detail) if detail else str(exc))
-        )
-        return render(request, "tdr_rag_independent.html")
+    analysis = Analysis.objects.create(
+        user=request.user, document_name=uploaded.name, mode="duplicate",
+        status="running", result_json={"uploaded_path": uploaded_path},
+    )
+    _start_tdr_analysis(
+        analysis, uploaded_path, uploaded.name,
+        uploaded.content_type or _document_content_type(uploaded),
+    )
+    return redirect("detector:analysis_detail", pk=analysis.pk)
