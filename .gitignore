@@ -4,7 +4,7 @@ __pycache__/
 .venv/
 venv/
 
-frontend/.env/
+frontend/.env
 
 
 
