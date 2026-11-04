@@ -45,6 +45,17 @@ from .models import Analysis, StudyDocument
 
 
 
+
+def _format_duration_ms(duration_ms):
+    """Formate une durée en minutes et secondes pour l'affichage utilisateur."""
+    if duration_ms is None:
+        return "—"
+    total_seconds = max(0, round(duration_ms / 1000))
+    minutes, seconds = divmod(total_seconds, 60)
+    if minutes:
+        return f"{minutes} min {seconds:02d} s"
+    return f"{seconds} s"
+
 def _run_tdr_analysis_in_background(analysis_id, relative_path, document_name, content_type):
     """Exécute une analyse TDR hors requête HTTP et persiste son état."""
     close_old_connections()
@@ -87,6 +98,74 @@ def _start_tdr_analysis(analysis, uploaded_path, document_name, content_type):
         target=_run_tdr_analysis_in_background,
         args=(analysis.pk, uploaded_path, document_name, content_type),
         name=f"tdr-analysis-{analysis.pk}",
+        daemon=True,
+    ).start()
+
+
+def _run_reception_analysis_in_background(analysis_id, relative_path, document_name, content_type, mode, threshold=None, workflow_prefix="reception"):
+    """Exécute séparément le contrôle TDR ou rapport et enregistre son résultat."""
+    close_old_connections()
+    analysis = None
+    try:
+        analysis = Analysis.objects.get(pk=analysis_id)
+        document_path = (Path(settings.MEDIA_ROOT) / relative_path).resolve()
+        document_path.relative_to(Path(settings.MEDIA_ROOT).resolve())
+        endpoint = "/api/tdr-rag/analyze" if mode == "tdr" else "/api/detect/plagiarism"
+        payload = {"file": (document_name, document_path.open("rb"), content_type)}
+        started_at = time.perf_counter()
+        try:
+            if mode == "report":
+                response = requests.post(
+                    f"{settings.FASTAPI_URL}{endpoint}",
+                    data={"threshold": threshold},
+                    files=payload,
+                    timeout=600,
+                )
+            else:
+                response = requests.post(
+                    f"{settings.FASTAPI_URL}{endpoint}",
+                    files=payload,
+                    timeout=1800,
+                )
+        finally:
+            payload["file"][1].close()
+        response.raise_for_status()
+        result = response.json()
+        result["uploaded_path"] = relative_path
+        result["workflow"] = f"{workflow_prefix}_tdr" if mode == "tdr" else f"{workflow_prefix}_report"
+        duration_ms = round((time.perf_counter() - started_at) * 1000)
+        result["duration_ms"] = duration_ms
+        analysis.result_json = result
+        analysis.decision = result.get("decision", "")
+        analysis.hybrid_score = result.get("hybrid_score")
+        analysis.semantic_score = result.get("semantic_score")
+        analysis.tfidf_score = result.get("tfidf_score")
+        analysis.novelty_score = result.get("novelty_score")
+        analysis.duration_ms = duration_ms
+        analysis.status = "success"
+        analysis.error_message = ""
+        analysis.save(update_fields=[
+            "result_json", "decision", "hybrid_score", "semantic_score",
+            "tfidf_score", "novelty_score", "duration_ms", "status", "error_message",
+        ])
+    except Exception as exc:
+        try:
+            if analysis is None:
+                analysis = Analysis.objects.get(pk=analysis_id)
+            analysis.status = "error"
+            analysis.error_message = str(exc)[:4000]
+            analysis.save(update_fields=["status", "error_message"])
+        except Exception:
+            pass
+    finally:
+        close_old_connections()
+
+
+def _start_reception_analysis(analysis, uploaded_path, document_name, content_type, mode, threshold=None, workflow_prefix="reception"):
+    threading.Thread(
+        target=_run_reception_analysis_in_background,
+        args=(analysis.pk, uploaded_path, document_name, content_type, mode, threshold, workflow_prefix),
+        name=f"reception-{mode}-{analysis.pk}",
         daemon=True,
     ).start()
 
@@ -706,7 +785,7 @@ def analysis_detail(request, pk):
         "analysis": analysis,
         "result": result,
         "analysis_status_url": reverse("detector:analysis_status", kwargs={"pk": analysis.pk}),
-        "duration_seconds": (f"{analysis.duration_ms / 1000:.1f}".replace(".", ",") if analysis.duration_ms is not None else None),
+        "duration_seconds": _format_duration_ms(analysis.duration_ms),
         "document_url": _document_url(uploaded_path),
         "document_path": uploaded_path,
     })
@@ -716,96 +795,109 @@ def analysis_detail(request, pk):
 def reception(request):
     if not _require_permission(request, "can_verify_tdr", "Votre profil ne dispose pas de l'accès à la vérification des TDR."):
         return redirect("detector:dashboard")
-    if request.method == "GET":
-        return render(request, "reception.html")
-    mode = request.POST.get("mode", "tdr")
-    uploaded = _get_uploaded_docx(request)
-    if not _validate_document(uploaded):
-        messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
-        return redirect("detector:reception")
-    uploaded_path = _save_uploaded_document(uploaded)
-    if mode not in ("tdr", "report"):
-        messages.error(request, "Type de contrôle invalide.")
-        return redirect("detector:reception")
 
-    # Qwen arbitre les TDR via RAG : aucun seuil de similarité n'est demandé.
-    data = {}
-    if mode == "report":
-        try:
-            threshold = float(request.POST.get("threshold", "")) / 100.0
-            if not 0.01 <= threshold <= 1.0:
-                raise ValueError
-        except (TypeError, ValueError):
-            messages.error(request, "Le seuil du rapport doit être compris entre 1 % et 100 %.")
-            return redirect("detector:reception")
-        data["threshold"] = threshold
+    if request.method == "POST":
+        mode = request.POST.get("mode", "tdr")
+        if mode == "report" and not _require_permission(request, "can_analyze_report", "Votre profil ne dispose pas de l'accès à l'analyse des rapports."):
+            return JsonResponse({"error": "Accès refusé à l'analyse des rapports."}, status=403) if request.headers.get("x-requested-with") == "XMLHttpRequest" else redirect("detector:dashboard")
+        uploaded = _get_uploaded_docx(request)
+        if mode not in ("tdr", "report"):
+            message = "Type de contrôle invalide."
+            return JsonResponse({"error": message}, status=400) if request.headers.get("x-requested-with") == "XMLHttpRequest" else redirect("detector:reception")
+        if not _validate_document(uploaded) or getattr(uploaded, "size", 0) <= 0:
+            message = "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide."
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse({"error": message}, status=400)
+            messages.error(request, message)
+        else:
+            threshold = None
+            if mode == "report":
+                try:
+                    threshold = float(request.POST.get("threshold", "")) / 100.0
+                    if not 0.01 <= threshold <= 1.0:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    message = "Le seuil du rapport doit être compris entre 1 % et 100 %."
+                    return JsonResponse({"error": message}, status=400) if request.headers.get("x-requested-with") == "XMLHttpRequest" else redirect("detector:reception")
 
-    # Le contrôle du TDR passe par le même moteur RAG que la page dédiée ; le rapport garde son moteur de plagiat.
-    endpoint = "/api/tdr-rag/analyze" if mode == "tdr" else "/api/detect/plagiarism"
-    start = time.perf_counter()
-    try:
-        upload_payload = {"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))}
-        if mode == "duplicate":
-            response = requests.post(
-                f"{settings.FASTAPI_URL}{endpoint}",
-                files=upload_payload,
-                timeout=1800,
+            uploaded_path = _save_uploaded_document(uploaded)
+            workflow = "reception_tdr" if mode == "tdr" else "reception_report"
+            analysis = Analysis.objects.create(
+                user=request.user,
+                document_name=uploaded.name,
+                mode="duplicate" if mode == "tdr" else "plagiarism",
+                status="running",
+                result_json={"uploaded_path": uploaded_path, "workflow": workflow},
             )
-        else:
-            response = requests.post(
-                f"{settings.FASTAPI_URL}{endpoint}",
-                data=data,
-                files=upload_payload,
-                timeout=600,
+            session_key = "reception_tdr_analysis_id" if mode == "tdr" else "reception_report_analysis_id"
+            request.session[session_key] = analysis.pk
+            _start_reception_analysis(
+                analysis, uploaded_path, uploaded.name,
+                uploaded.content_type or _document_content_type(uploaded),
+                mode, threshold,
             )
-        response.raise_for_status()
-        result = response.json()
-        result["uploaded_path"] = uploaded_path
-        duration = round((time.perf_counter() - start) * 1000)
-        result["duration_ms"] = duration
-        analysis = Analysis.objects.create(
-            user=request.user, document_name=uploaded.name,
-            mode="duplicate" if mode == "tdr" else "plagiarism",
-            decision=result.get("decision", ""), hybrid_score=result.get("hybrid_score"),
-            semantic_score=result.get("semantic_score"), tfidf_score=result.get("tfidf_score"),
-            novelty_score=result.get("novelty_score"), result_json=result, duration_ms=duration,
-        )
-        request.session["last_result"] = result
-        request.session["last_analysis_id"] = analysis.id
-        request.session["last_document_name"] = uploaded.name
-        if mode == "tdr" and result.get("decision") == "DIFFERENT":
-            # Le verdict reste distinct selon le cas : une autre zone peut
-            # partager les objectifs sans constituer le même TDR.
-            request.session["validated_tdr_name"] = uploaded.name
-            case_id = (result.get("rag_analysis") or {}).get("case_id")
-            if case_id == "CAS_3_MEME_OBJECTIF_ZONE_DIFFERENTE":
-                messages.success(request, "Le TDR porte sur une zone différente d'une étude aux objectifs comparables. Consultez le verdict détaillé avant de poursuivre.")
-            else:
-                messages.success(request, "Aucune référence suffisamment pertinente n'a été retenue par Qwen. Le TDR n'a pas été ajouté automatiquement au registre.")
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse({
+                    "id": analysis.pk,
+                    "status": "running",
+                    "status_url": reverse("detector:analysis_status", kwargs={"pk": analysis.pk}),
+                    "workflow": workflow,
+                }, status=202)
             return redirect("detector:reception")
-        if mode == "tdr" and result.get("decision") == "SIMILAIRE":
-            messages.error(request, "TDR non retenu : Qwen a identifié une étude correspondant essentiellement au même sujet.")
-        elif mode == "tdr" and result.get("decision") == "SIMILARITÉ PARTIELLE":
-            messages.warning(request, "Des ressemblances importantes ont été identifiées. Consultez le détail et vérifiez les différences avant de conclure.")
-        elif mode == "report":
-            messages.info(request, "Rapport analysé. Consultez le détail des résultats.")
-        return redirect("detector:resultats")
-    except requests.RequestException as exc:
-        response = getattr(exc, "response", None)
-        detail = None
-        if response is not None:
-            try:
-                payload = response.json()
-                detail = payload.get("detail", payload)
-                if isinstance(detail, dict):
-                    detail = detail.get("message") or detail.get("error") or str(detail)
-            except (ValueError, AttributeError):
-                detail = None
-        if detail:
-            messages.error(request, f"Analyse non terminée : {detail}")
-        else:
-            messages.error(request, f"Le moteur d'analyse est indisponible : {exc}")
-    return redirect("detector:reception")
+
+    def get_workflow_analysis(session_key, workflow):
+        analysis_id = request.session.get(session_key)
+        analysis = None
+        if analysis_id:
+            analysis = Analysis.objects.filter(
+                pk=analysis_id, user=request.user, result_json__workflow=workflow
+            ).first()
+        if analysis is None:
+            analysis = Analysis.objects.filter(
+                user=request.user, result_json__workflow=workflow
+            ).order_by("-created_at").first()
+            if analysis:
+                request.session[session_key] = analysis.pk
+        return analysis
+
+    tdr_analysis = get_workflow_analysis("reception_tdr_analysis_id", "reception_tdr")
+    report_analysis = get_workflow_analysis("reception_report_analysis_id", "reception_report")
+    validated_tdr = (
+        tdr_analysis
+        if tdr_analysis and tdr_analysis.status == "success" and tdr_analysis.decision == "DIFFERENT"
+        else None
+    )
+
+    # Un résultat terminé est affiché une seule fois sur la page de réception.
+    # Il reste consultable dans l'historique, mais disparaît de cette page après actualisation.
+    show_tdr_analysis = bool(tdr_analysis and (
+        tdr_analysis.status != "success"
+        or request.session.get("reception_tdr_result_seen_id") != tdr_analysis.pk
+    ))
+    show_report_analysis = bool(report_analysis and (
+        report_analysis.status != "success"
+        or request.session.get("reception_report_result_seen_id") != report_analysis.pk
+    ))
+    if tdr_analysis and tdr_analysis.status == "success" and show_tdr_analysis:
+        request.session["reception_tdr_result_seen_id"] = tdr_analysis.pk
+    if report_analysis and report_analysis.status == "success" and show_report_analysis:
+        request.session["reception_report_result_seen_id"] = report_analysis.pk
+
+    return render(request, "reception.html", {
+        "tdr_analysis": tdr_analysis,
+        "report_analysis": report_analysis,
+        "show_tdr_analysis": show_tdr_analysis,
+        "show_report_analysis": show_report_analysis,
+        "validated_tdr_analysis": validated_tdr,
+        "tdr_duration_display": _format_duration_ms(tdr_analysis.duration_ms) if tdr_analysis else "—",
+        "report_duration_display": _format_duration_ms(report_analysis.duration_ms) if report_analysis else "—",
+        "tdr_status_url": reverse("detector:analysis_status", kwargs={"pk": tdr_analysis.pk}) if tdr_analysis else "",
+        "report_status_url": reverse("detector:analysis_status", kwargs={"pk": report_analysis.pk}) if report_analysis else "",
+        "tdr_detail_url": reverse("detector:analysis_detail", kwargs={"pk": tdr_analysis.pk}) if tdr_analysis else "",
+        "report_detail_url": reverse("detector:analysis_detail", kwargs={"pk": report_analysis.pk}) if report_analysis else "",
+        "tdr_result": (tdr_analysis.result_json or {}) if tdr_analysis else {},
+        "report_result": (report_analysis.result_json or {}) if report_analysis else {},
+    })
 
 
 
@@ -862,94 +954,100 @@ def upload_report_for_tdr(request, pk):
 
 @login_required
 def analyser(request):
-    if not _require_permission(request, "can_analyze_report", "Votre profil ne dispose pas de l'accès à l'analyse des rapports."):
-        return redirect("detector:dashboard")
-    if request.method != "POST":
-        return render(request, "analyser.html")
-    uploaded = _get_uploaded_docx(request)
-    mode = request.POST.get("mode", "plagiarism")
-    if mode not in ("plagiarism", "duplicate"):
-        messages.error(request, "Mode d'analyse invalide.")
-        return redirect("detector:analyser")
-    if not _validate_document(uploaded):
-        messages.error(request, "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide.")
-        return redirect("detector:analyser")
-    uploaded_path = _save_uploaded_document(uploaded)
-    if mode == "duplicate":
-        analysis = Analysis.objects.create(
-            user=request.user, document_name=uploaded.name, mode="duplicate",
-            status="running", result_json={"uploaded_path": uploaded_path},
+    """Deux contrôles indépendants dont l'état est conservé sur cette page."""
+    if request.method == "POST":
+        mode = request.POST.get("mode", "plagiarism")
+        required_permission = "can_verify_tdr" if mode == "duplicate" else "can_analyze_report"
+        permission_message = (
+            "Votre profil ne dispose pas de l'accès à la vérification des TDR."
+            if mode == "duplicate"
+            else "Votre profil ne dispose pas de l'accès à l'analyse des rapports."
         )
-        _start_tdr_analysis(
-            analysis, uploaded_path, uploaded.name,
-            uploaded.content_type or _document_content_type(uploaded),
-        )
-        return redirect("detector:analysis_detail", pk=analysis.pk)
-    # Le verdict TDR est arbitré par le moteur RAG/LLM, pas par un seuil utilisateur.
-    # Le seuil reste configurable uniquement pour le contrôle de plagiat des rapports.
-    data = {}
-    if mode == "plagiarism":
-        try:
-            threshold = float(request.POST.get("threshold", "")) / 100.0
-            if not 0.01 <= threshold <= 1.0:
-                raise ValueError
-        except (TypeError, ValueError):
-            messages.error(request, "Le seuil doit être compris entre 1 % et 100 %.")
-            return redirect("detector:analyser")
-        data["threshold"] = threshold
-    # Tous les contrôles de TDR utilisent le moteur RAG complet ; le contrôle des rapports reste inchangé.
-    endpoint = "/api/tdr-rag/analyze" if mode == "duplicate" else "/api/detect/plagiarism"
-    start = time.perf_counter()
-    try:
-        upload_payload = {"file": (uploaded.name, uploaded.file, uploaded.content_type or _document_content_type(uploaded))}
-        if mode == "tdr":
-            response = requests.post(
-                f"{settings.FASTAPI_URL}{endpoint}",
-                files=upload_payload,
-                timeout=1800,
-            )
-        else:
-            response = requests.post(
-                f"{settings.FASTAPI_URL}{endpoint}",
-                data=data,
-                files=upload_payload,
-                timeout=600,
-            )
-        response.raise_for_status()
-        result = response.json()
-        result["uploaded_path"] = uploaded_path
-        duration = round((time.perf_counter() - start) * 1000)
-        result["duration_ms"] = duration
-        analysis = Analysis.objects.create(
-            user=request.user, document_name=uploaded.name, mode=mode,
-            decision=result.get("decision", ""), hybrid_score=result.get("hybrid_score"),
-            semantic_score=result.get("semantic_score"), tfidf_score=result.get("tfidf_score"),
-            novelty_score=result.get("novelty_score"), result_json=result, duration_ms=duration,
-        )
-        request.session["last_result"] = result
-        request.session["last_analysis_id"] = analysis.id
-        request.session["last_document_name"] = uploaded.name
-        if mode == "duplicate":
-            return redirect("detector:analysis_detail", pk=analysis.pk)
-        return redirect("detector:resultats")
-    except requests.RequestException as exc:
-        response = getattr(exc, "response", None)
-        detail = None
-        if response is not None:
+        if mode not in ("plagiarism", "duplicate"):
+            message = "Mode d'analyse invalide."
+            return JsonResponse({"error": message}, status=400) if request.headers.get("x-requested-with") == "XMLHttpRequest" else redirect("detector:analyser")
+        if not _require_permission(request, required_permission, permission_message):
+            return JsonResponse({"error": permission_message}, status=403) if request.headers.get("x-requested-with") == "XMLHttpRequest" else redirect("detector:dashboard")
+
+        uploaded = _get_uploaded_docx(request)
+        if not _validate_document(uploaded) or getattr(uploaded, "size", 0) <= 0:
+            message = "Veuillez sélectionner un document Word (.docx) ou PDF (.pdf) valide."
+            return JsonResponse({"error": message}, status=400) if request.headers.get("x-requested-with") == "XMLHttpRequest" else redirect("detector:analyser")
+
+        threshold = None
+        if mode == "plagiarism":
             try:
-                payload = response.json()
-                detail = payload.get("detail", payload)
-                if isinstance(detail, dict):
-                    detail = detail.get("message") or detail.get("error") or str(detail)
-            except (ValueError, AttributeError):
-                detail = None
-        if detail:
-            messages.error(request, f"Analyse non terminée : {detail}")
-        else:
-            messages.error(request, f"Le moteur FastAPI est indisponible : {exc}")
-    except Exception as exc:
-        messages.error(request, f"Erreur pendant l'analyse : {exc}")
-    return render(request, "analyser.html")
+                threshold = float(request.POST.get("threshold", "")) / 100.0
+                if not 0.01 <= threshold <= 1.0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                message = "Le seuil doit être compris entre 1 % et 100 %."
+                return JsonResponse({"error": message}, status=400) if request.headers.get("x-requested-with") == "XMLHttpRequest" else redirect("detector:analyser")
+
+        uploaded_path = _save_uploaded_document(uploaded)
+        workflow = "nouvelle_analyse_tdr" if mode == "duplicate" else "nouvelle_analyse_report"
+        analysis = Analysis.objects.create(
+            user=request.user,
+            document_name=uploaded.name,
+            mode="duplicate" if mode == "duplicate" else "plagiarism",
+            status="running",
+            result_json={"uploaded_path": uploaded_path, "workflow": workflow},
+        )
+        session_key = "nouvelle_analyse_tdr_id" if mode == "duplicate" else "nouvelle_analyse_report_id"
+        request.session[session_key] = analysis.pk
+        _start_reception_analysis(
+            analysis,
+            uploaded_path,
+            uploaded.name,
+            uploaded.content_type or _document_content_type(uploaded),
+            "tdr" if mode == "duplicate" else "report",
+            threshold,
+            workflow_prefix="nouvelle_analyse",
+        )
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({
+                "id": analysis.pk,
+                "status": "running",
+                "status_url": reverse("detector:analysis_status", kwargs={"pk": analysis.pk}),
+                "workflow": workflow,
+            }, status=202)
+        return redirect("detector:analyser")
+
+    def get_workflow_analysis(session_key, workflow, clear_when_finished=False):
+        analysis_id = request.session.get(session_key)
+        analysis = None
+        if analysis_id:
+            analysis = Analysis.objects.filter(
+                pk=analysis_id, user=request.user, result_json__workflow=workflow
+            ).first()
+        if analysis is None and not clear_when_finished:
+            analysis = Analysis.objects.filter(
+                user=request.user, result_json__workflow=workflow
+            ).order_by("-created_at").first()
+            if analysis:
+                request.session[session_key] = analysis.pk
+        if clear_when_finished and analysis and analysis.status != "running":
+            request.session.pop(session_key, None)
+        return analysis
+
+    # Le résultat TDR est affiché une seule fois : au prochain rafraîchissement,
+    # la session ne le recharge plus depuis l'historique.
+    tdr_analysis = get_workflow_analysis(
+        "nouvelle_analyse_tdr_id", "nouvelle_analyse_tdr", clear_when_finished=True
+    )
+    report_analysis = get_workflow_analysis("nouvelle_analyse_report_id", "nouvelle_analyse_report")
+    return render(request, "analyser.html", {
+        "tdr_analysis": tdr_analysis,
+        "report_analysis": report_analysis,
+        "tdr_result": (tdr_analysis.result_json or {}) if tdr_analysis else {},
+        "report_result": (report_analysis.result_json or {}) if report_analysis else {},
+        "tdr_status_url": reverse("detector:analysis_status", kwargs={"pk": tdr_analysis.pk}) if tdr_analysis else "",
+        "report_status_url": reverse("detector:analysis_status", kwargs={"pk": report_analysis.pk}) if report_analysis else "",
+        "tdr_detail_url": reverse("detector:analysis_detail", kwargs={"pk": tdr_analysis.pk}) if tdr_analysis else "",
+        "report_detail_url": reverse("detector:analysis_detail", kwargs={"pk": report_analysis.pk}) if report_analysis else "",
+        "can_verify_tdr": _has_permission(request.user, "can_verify_tdr"),
+        "can_analyze_report": _has_permission(request.user, "can_analyze_report"),
+    })
 
 
 @login_required
@@ -1197,22 +1295,62 @@ def administration_utilisateur(request, pk):
 
 @login_required
 def tdr_rag_independent(request):
-    """Lance une analyse TDR en arrière-plan et ouvre immédiatement son suivi."""
+    """Lance et conserve le suivi de l'analyse sur sa propre page."""
     if not _require_permission(request, "can_verify_tdr", "Votre profil ne dispose pas de l'accès à la vérification des TDR."):
         return redirect("detector:dashboard")
-    if request.method != "POST":
-        return render(request, "tdr_rag_independent.html")
-    uploaded = _get_uploaded_docx(request)
-    if not uploaded or not _validate_document(uploaded) or getattr(uploaded, "size", 0) <= 0:
-        messages.error(request, "Sélectionnez un document DOCX ou PDF non vide.")
-        return render(request, "tdr_rag_independent.html")
-    uploaded_path = _save_uploaded_document(uploaded)
-    analysis = Analysis.objects.create(
-        user=request.user, document_name=uploaded.name, mode="duplicate",
-        status="running", result_json={"uploaded_path": uploaded_path},
-    )
-    _start_tdr_analysis(
-        analysis, uploaded_path, uploaded.name,
-        uploaded.content_type or _document_content_type(uploaded),
-    )
-    return redirect("detector:analysis_detail", pk=analysis.pk)
+
+    if request.method == "POST":
+        uploaded = _get_uploaded_docx(request)
+        if not uploaded or not _validate_document(uploaded) or getattr(uploaded, "size", 0) <= 0:
+            message = "Sélectionnez un document DOCX ou PDF non vide."
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse({"error": message}, status=400)
+            messages.error(request, message)
+        else:
+            uploaded_path = _save_uploaded_document(uploaded)
+            analysis = Analysis.objects.create(
+                user=request.user,
+                document_name=uploaded.name,
+                mode="duplicate",
+                status="running",
+                result_json={"uploaded_path": uploaded_path},
+            )
+            request.session["tdr_rag_active_analysis_id"] = analysis.pk
+            _start_tdr_analysis(
+                analysis,
+                uploaded_path,
+                uploaded.name,
+                uploaded.content_type or _document_content_type(uploaded),
+            )
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse({
+                    "id": analysis.pk,
+                    "status": analysis.status,
+                    "status_url": reverse("detector:analysis_status", kwargs={"pk": analysis.pk}),
+                }, status=202)
+            return redirect("detector:tdr_rag_independent")
+
+    active_id = request.session.get("tdr_rag_active_analysis_id")
+    active_analysis = None
+    if active_id:
+        active_analysis = Analysis.objects.filter(
+            pk=active_id, user=request.user, mode="duplicate"
+        ).first()
+    if active_analysis is None:
+        active_analysis = Analysis.objects.filter(
+            user=request.user, mode="duplicate"
+        ).order_by("-created_at").first()
+        if active_analysis:
+            request.session["tdr_rag_active_analysis_id"] = active_analysis.pk
+
+    active_result = active_analysis.result_json or {} if active_analysis else {}
+    return render(request, "tdr_rag_independent.html", {
+        "active_analysis": active_analysis,
+        "active_result": active_result,
+        "analysis_status_url": reverse("detector:analysis_status", kwargs={"pk": active_analysis.pk}) if active_analysis else "",
+        "active_analysis_url": reverse("detector:analysis_detail", kwargs={"pk": active_analysis.pk}) if active_analysis else "",
+        "duration_seconds": (
+            f"{active_analysis.duration_ms / 1000:.1f}".replace(".", ",")
+            if active_analysis and active_analysis.duration_ms is not None else None
+        ),
+    })
