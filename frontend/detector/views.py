@@ -893,6 +893,8 @@ def reception(request):
         "report_duration_display": _format_duration_ms(report_analysis.duration_ms) if report_analysis else "—",
         "tdr_status_url": reverse("detector:analysis_status", kwargs={"pk": tdr_analysis.pk}) if tdr_analysis else "",
         "report_status_url": reverse("detector:analysis_status", kwargs={"pk": report_analysis.pk}) if report_analysis else "",
+        "tdr_detail_url": reverse("detector:analysis_detail", kwargs={"pk": tdr_analysis.pk}) if tdr_analysis else "",
+        "report_detail_url": reverse("detector:analysis_detail", kwargs={"pk": report_analysis.pk}) if report_analysis else "",
         "tdr_result": (tdr_analysis.result_json or {}) if tdr_analysis else {},
         "report_result": (report_analysis.result_json or {}) if report_analysis else {},
     })
