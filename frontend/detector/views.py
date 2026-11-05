@@ -56,6 +56,22 @@ def _format_duration_ms(duration_ms):
         return f"{minutes} min {seconds:02d} s"
     return f"{seconds} s"
 
+def _fastapi_error_message(response):
+    """Extrait le message métier renvoyé par FastAPI sans perdre le détail HTTP."""
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    detail = payload.get("detail", payload) if isinstance(payload, dict) else payload
+    if isinstance(detail, dict):
+        message = detail.get("message") or detail.get("error") or detail.get("detail")
+        if message:
+            return str(message)
+    if isinstance(detail, str) and detail.strip():
+        return detail.strip()
+    return f"Le service d'analyse a renvoyé une erreur HTTP {response.status_code}."
+
+
 def _run_tdr_analysis_in_background(analysis_id, relative_path, document_name, content_type):
     """Exécute une analyse TDR hors requête HTTP et persiste son état."""
     close_old_connections()
@@ -70,7 +86,8 @@ def _run_tdr_analysis_in_background(analysis_id, relative_path, document_name, c
                 files={"file": (document_name, document_file, content_type)},
                 timeout=1800,
             )
-        response.raise_for_status()
+        if not response.ok:
+            raise RuntimeError(_fastapi_error_message(response))
         result = response.json()
         result["uploaded_path"] = relative_path
         duration_ms = round((time.perf_counter() - started_at) * 1000)
@@ -129,6 +146,8 @@ def _run_reception_analysis_in_background(analysis_id, relative_path, document_n
                 )
         finally:
             payload["file"][1].close()
+        if mode == "tdr" and not response.ok:
+            raise RuntimeError(_fastapi_error_message(response))
         response.raise_for_status()
         result = response.json()
         result["uploaded_path"] = relative_path
