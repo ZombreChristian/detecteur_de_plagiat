@@ -302,6 +302,26 @@ def _load_all_indexed_references():
     )
 
 
+def _semantic_chunks(text: str, size: int = 1200, overlap: int = 150) -> list[str]:
+    """Découpe un TDR en segments qui conservent le contexte local."""
+    normalized = " ".join(str(text or "").split())
+    chunks = []
+    start = 0
+    while start < len(normalized):
+        end = min(start + size, len(normalized))
+        if end < len(normalized):
+            boundary = normalized.rfind(" ", start + size // 2, end)
+            if boundary > start:
+                end = boundary
+        chunk = normalized[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        if end >= len(normalized):
+            break
+        start = max(start + 1, end - overlap)
+    return chunks
+
+
 def _rank_all_references(candidate: str, rows):
     """Classe tout le corpus avec TF-IDF lexical (30 %) et cosinus sémantique (70 %)."""
     from sklearn.feature_extraction.text import TfidfVectorizer
@@ -324,11 +344,37 @@ def _rank_all_references(candidate: str, rows):
         [candidate], normalize_embeddings=True, show_progress_bar=False,
         convert_to_numpy=True,
     )[0]
+
+    # Récupération sémantique par segments, plutôt que par un seul vecteur
+    # global qui peut masquer les objectifs ou la méthodologie d'un long TDR.
+    chunk_texts = []
+    chunk_owners = []
+    for index, row in enumerate(rows):
+        source = row.extracted_text or row.cleaned_text or row.title or ""
+        chunks = _semantic_chunks(source)
+        if not chunks:
+            chunks = [str(row.title or "")]
+        chunk_texts.extend(chunks)
+        chunk_owners.extend([index] * len(chunks))
+
+    chunk_vectors = model.encode(
+        chunk_texts,
+        batch_size=64,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+        convert_to_numpy=True,
+    )
+    similarities = np.asarray(chunk_vectors, dtype=np.float32) @ np.asarray(
+        candidate_vector, dtype=np.float32
+    )
+    document_scores = [[] for _ in rows]
+    for owner, score in zip(chunk_owners, similarities):
+        document_scores[owner].append(float(score))
+
     ranked = []
     for index, row in enumerate(rows):
-        vector = np.asarray(row.embedding, dtype=np.float32)
-        norm = float(np.linalg.norm(vector))
-        semantic = float(np.dot(vector / norm, candidate_vector)) if norm else 0.0
+        best_chunks = sorted(document_scores[index], reverse=True)[:3]
+        semantic = float(np.mean(best_chunks)) if best_chunks else 0.0
         semantic = max(0.0, min(1.0, semantic))
         lexical = max(0.0, min(1.0, float(lexical_scores[index])))
         hybrid = 0.30 * lexical + 0.70 * semantic
