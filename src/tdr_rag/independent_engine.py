@@ -56,7 +56,7 @@ CASE_3 = "CAS_3_Aucune correspondance à une étude existante"
 CASES = {CASE_1, CASE_2, CASE_3}
 
 CASE_TITLES = {
-    CASE_1: "Forte correspondance",
+    CASE_1: "Correspondance forte",
     CASE_2: "Correspondance partielle",
     CASE_3: "Aucune correspondance",
 }
@@ -629,7 +629,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "explanation": display_explanation[:2500],
             "matched_reference": reference_name,
             "matched_references": per_reference,
-            "confidence": str(final.get("confidence", "À confirmer"))[:80],
+            "confidence": "À confirmer",
             "common_points": _as_list(final.get("common_points", []), 10, 500),
             "differences": _as_list(final.get("differences", []), 10, 500),
             "recommendation": str(final.get("recommendation", ""))[:2000],
