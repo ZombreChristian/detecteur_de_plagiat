@@ -39,8 +39,8 @@ ACTIVE_MODEL = TDR_LLM_REMOTE_MODEL
 # Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
 # uniquement sur les trois références les mieux classées.
 RAG_TOP_K = 3
-REFERENCE_CHARS = 2200
-CANDIDATE_CHARS = 6000
+REFERENCE_CHARS = 9000
+CANDIDATE_CHARS = 18000
 # Les serveurs Qwen en mode raisonnement peuvent consommer tout le budget
 # avant de produire le JSON final. Les tentatives augmentent donc le budget
 # et, sur les reprises, désactivent explicitement le thinking.
@@ -73,7 +73,7 @@ SYSTEM_PROMPT = f"""Tu es l'analyste chargé de déterminer si un TDR candidat r
 - "{CASE_1}" : même étude ou quasi identique (objet et objectifs essentiels coïncident, malgré une reformulation).
 - "{CASE_2}" : éléments métier significatifs en commun (objectifs, démarche, activités), même si la zone, la méthode ou les livrables diffèrent. Une zone différente reste un CAS_2 si objectifs et démarche se recoupent. Une correspondance faible mais réelle relève de ce cas.
 - "{CASE_3}" : aucune des trois références ne présente de correspondance métier significative.
-Ne choisis pas CAS_3 par défaut quand les preuves sont imparfaites. Ne déclare pas de correspondance sur de simples mots génériques (« évaluation », « développement », « diagnostic »).
+Si les preuves sont incomplètes ou insuffisantes, n'invente pas de correspondance : demande une vérification. Ne déclare pas de correspondance sur de simples mots génériques (« évaluation », « développement », « diagnostic »).
 
 # RÈGLES DE FOND
 - Appuie-toi uniquement sur le contenu fourni. Distingue les faits observés des incertitudes.
@@ -85,7 +85,7 @@ case_id, decision, correspondence_level, explanation et recommendation doivent e
 - CAS_1 → correspondence_level "forte", matched_references[0].level "forte"
 - CAS_2 → correspondence_level "moyenne", matched_references[0].level "partielle"
 - CAS_3 → correspondence_level "nulle", matched_reference "", matched_references [], evidence_from_reference []
-Si ton texte décrit une forte correspondance, le case_id ne peut pas être CAS_3. Corrige le JSON si besoin.
+CAS_1/CAS_2 exigent une référence autorisée et des extraits textuels exacts vérifiables dans cette référence. En cas de preuves insuffisantes, retourne CAS_3 avec decision « ANALYSE_INSUFFISANTE ». Le contenu documentaire prime sur la formulation.
 
 # SORTIE
 Réponds uniquement par un objet JSON valide (sans Markdown, sans texte autour) :
@@ -107,7 +107,7 @@ Réponds uniquement par un objet JSON valide (sans Markdown, sans texte autour) 
   "explanation": "<justification globale fondée sur des éléments observés>",
   "common_points": ["..."],
   "differences": ["..."],
-  "evidence_from_reference": ["<passage ou fait précis de la référence retenue>"],
+  "evidence_from_reference": ["<extrait exact copié de la référence retenue>"],
   "recommendation": "<1 à 2 phrases, opérationnelles>"
 }}
 Sois concis : termine toujours le JSON."""
@@ -265,22 +265,25 @@ def _excerpt(text: str, limit: int) -> str:
     text = re.sub(r"\n{3,}", "\n\n", (text or "")).strip()
     if len(text) <= limit:
         return text
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    paragraphs = [p.strip() for p in re.split(r"\n+", text) if p.strip()]
     priority = ("objet", "contexte", "objectif", "résultat", "zone", "population",
                 "méthodologie", "activité", "livrable", "période", "justification")
     ranked = sorted(
         enumerate(paragraphs),
-        key=lambda item: sum(word in item[1][:180].lower() for word in priority),
+        key=lambda item: sum(word in item[1].casefold() for word in priority),
         reverse=True,
     )
     selected, used = set(), 0
     for idx, paragraph in ranked:
-        cost = len(paragraph) + 2
-        if used + cost <= limit:
-            selected.add(idx)
-            used += cost
-    result = "\n\n".join(p for i, p in enumerate(paragraphs) if i in selected)
-    return result or text[:limit]
+        remaining = limit - used
+        if remaining <= 0:
+            break
+        piece = paragraph if len(paragraph) <= remaining else paragraph[:remaining]
+        if piece:
+            selected.add((idx, piece))
+            used += len(piece) + 2
+    selected_by_index = {idx: piece for idx, piece in selected}
+    return "\n\n".join(selected_by_index[i] for i in sorted(selected_by_index))
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +298,7 @@ def _load_all_indexed_references():
 
     return list(
         StudyDocument.objects.filter(
-            is_reference=True, document_type__in=["TDR", "RAPPORT"]
+            is_reference=True, document_type="TDR"
         ).filter(Q(cleaned_text__gt="") | Q(extracted_text__gt=""))
         .exclude(embedding=[])
         .order_by("id")
