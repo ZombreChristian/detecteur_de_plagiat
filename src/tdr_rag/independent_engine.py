@@ -360,7 +360,7 @@ def _normalize_evidence(value: str) -> str:
     import unicodedata
 
     normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
-    return re.sub(r"\\s+", " ", normalized).strip()
+    return re.sub(r"\s+", " ", normalized).strip()
 
 
 def _verified_evidence(values, source_text: str) -> list[str]:
