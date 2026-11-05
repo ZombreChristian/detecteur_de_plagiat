@@ -265,7 +265,9 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
             InsufficientEvidenceError,
         )
         try:
-            result = analyze_tdr_independently(candidate)
+            # Conserver les retours à la ligne du DOCX/PDF pour l'extraction
+            # des sections et des passages pertinents dans le moteur RAG.
+            result = analyze_tdr_independently(candidate_text)
         except InsufficientEvidenceError as exc:
             raise HTTPException(
                 status_code=422,
