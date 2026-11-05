@@ -136,6 +136,16 @@ Pour forcer une réindexation complète, uniquement si nécessaire :
 python manage.py prepare_reference_index --force
 ```
 
+### Tests des garde-fous RAG TDR
+
+Depuis la racine du dépôt :
+
+```powershell
+python -m pytest tests/test_tdr_rag_guards.py -q
+```
+
+Ces tests vérifient le découpage sémantique, la sélection d'extraits et le rejet des citations absentes du document source.
+
 ## Démarrer les services
 
 Lancer les services dans des terminaux PowerShell distincts, avec l'environnement virtuel activé.
