@@ -355,16 +355,25 @@ def _item_name(item) -> str:
     return str(item).strip()
 
 
-STRONG_PHRASES = (
-    "correspond fortement", "correspondance forte", "identiques ou très proches",
-    "même étude", "meme etude", "reformulation très proche",
-    "reformulation tres proche", "ne pas enregistrer", "même tdr",
-    "meme tdr", "contenu et la structure", "alignés avec",
-)
-PARTIAL_PHRASES = (
-    "correspondance partielle", "proche mais", "objectifs comparables",
-    "similitude méthodologique", "similitude methodologique",
-)
+def _normalize_evidence(value: str) -> str:
+    import unicodedata
+
+    normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
+    return re.sub(r"\\s+", " ", normalized).strip()
+
+
+def _verified_evidence(values, source_text: str) -> list[str]:
+    """Conserve uniquement les citations exactes et assez longues du document source."""
+    if not isinstance(values, list):
+        return []
+    source = _normalize_evidence(source_text)
+    verified = []
+    for value in values[:8]:
+        quote = str(value).strip()[:700]
+        normalized = _normalize_evidence(quote)
+        if len(normalized) >= 35 and normalized in source and quote not in verified:
+            verified.append(quote)
+    return verified
 
 
 # ---------------------------------------------------------------------------
@@ -426,22 +435,8 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         logger.warning("case_id inconnu renvoyé par le modèle : %r -> repli sur CAS_3", case_id)
         case_id = CASE_3
 
-    # --- Garde-fou : contradiction texte/verdict (journalisée pour mesurer la fiabilité) ---
-    explanation_text = str(final.get("explanation", ""))
-    recommendation_text = str(final.get("recommendation", ""))
-    common_points_raw = final.get("common_points", [])
-    reasoning_text = " ".join([
-        explanation_text,
-        recommendation_text,
-        " ".join(str(x) for x in common_points_raw) if isinstance(common_points_raw, list) else "",
-    ]).casefold()
-    if case_id == CASE_3:
-        if any(p in reasoning_text for p in STRONG_PHRASES):
-            logger.warning("Garde-fou : CAS_3 contredit par le texte -> CAS_1")
-            case_id = CASE_1
-        elif any(p in reasoning_text for p in PARTIAL_PHRASES):
-            logger.warning("Garde-fou : CAS_3 contredit par le texte -> CAS_2")
-            case_id = CASE_2
+    # Le verdict ne doit jamais être promu par détection de mots dans l'explication.
+    # Les preuves documentaires seront vérifiées après identification de la référence.
 
     # --- Références effectivement transmises au modèle ---
     allowed_rows = {Path(row.file_path).name: row for _, _, _, row in selected}
@@ -465,12 +460,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         row = allowed_rows.get(name)
         if row is None:
             needle = name.casefold()
-            row = next(
-                (c for _, _, _, c in selected
-                 if needle in Path(c.file_path).name.casefold()
-                 or needle in str(c.title or "").casefold()),
-                None,
-            )
+            row = None  # Un nom approximatif ne constitue pas une référence autorisée.
         if row is not None and row not in matched_rows:
             matched_rows.append(row)
 
@@ -489,44 +479,60 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         matched_rows.sort(key=lambda r: 0 if _model_level_for(r) == "forte" else 1)
         matched_rows = matched_rows[:1]
 
-    # --- Cohérence verdict / référence retenue ---
-    if matched_rows:
-        if case_id == CASE_3:
-            # Le modèle cite une référence : on ne peut pas afficher « aucune correspondance ».
-            case_id = CASE_1 if _model_level_for(matched_rows[0]) == "forte" else CASE_2
-        elif _model_level_for(matched_rows[0]) == "forte" and case_id == CASE_2:
-            case_id = CASE_1
-    elif case_id != CASE_3:
-        # Verdict CAS_1/CAS_2 sans référence exploitable : on retient la mieux classée.
-        matched_rows = [selected[0][3]]
-
+    # Une citation doit être réellement présente dans le texte de la référence.
     matched_row = matched_rows[0] if matched_rows else None
+    model_item = _model_item_for(matched_row) if matched_row is not None else {}
+    source_text = (
+        matched_row.extracted_text or matched_row.cleaned_text or ""
+        if matched_row is not None else ""
+    )
+    source_evidence = _verified_evidence(
+        model_item.get("source_evidence") or final.get("evidence_from_reference", []),
+        source_text,
+    )
+
+    # Aucun CAS_1/CAS_2 sans référence exacte et au moins deux citations vérifiées.
+    if case_id in {CASE_1, CASE_2} and (
+        matched_row is None or len(source_evidence) < 2
+    ):
+        raise IndependentTDRError(
+            "Analyse insuffisante : la référence retenue ou les deux extraits exacts "
+            "nécessaires n'ont pas pu être vérifiés dans le document source. "
+            "Aucun verdict de doublon n'a été enregistré. Vérifiez l'extraction et l'index, "
+            "puis relancez l'analyse."
+        )
+
+    if case_id == CASE_3:
+        matched_row = None
+        matched_rows = []
+        source_evidence = []
+    else:
+        matched_rows = [matched_row]
+
     reference_name = Path(matched_row.file_path).name if matched_row else ""
 
     per_reference = []
-    for row in matched_rows:
-        item = _model_item_for(row)
-        level = str(item.get("level", "")).casefold()
-        if level not in {"forte", "partielle"}:
-            level = "forte" if case_id == CASE_1 else "partielle"
+    if matched_row is not None:
+        level = "forte" if case_id == CASE_1 else "partielle"
         per_reference.append({
-            "source_id": row.id,
-            "source": Path(row.file_path).name,
-            "title": str(row.title or ""),
-            "document_type": row.get_document_type_display(),
+            "source_id": matched_row.id,
+            "source": reference_name,
+            "title": str(matched_row.title or ""),
+            "document_type": matched_row.get_document_type_display(),
             "level": level,
-            "explanation": str(item.get("explanation") or final.get("explanation", ""))[:1200],
+            "explanation": str(model_item.get("explanation") or final.get("explanation", ""))[:1200],
             "common_points": _as_list(
-                item.get("common_points") or final.get("common_points", []), 8, 400),
+                model_item.get("common_points") or final.get("common_points", []), 8, 400),
             "differences": _as_list(
-                item.get("differences") or final.get("differences", []), 8, 400),
+                model_item.get("differences") or final.get("differences", []), 8, 400),
+            "source_evidence": source_evidence,
         })
 
     evidence = [{
         "source": item["source"],
-        "point": item["explanation"][:900],
-        "justification": "Référence retenue après examen du contenu par le RAG.",
-    } for item in per_reference]
+        "point": quote,
+        "justification": "Extrait vérifié : le texte cité est présent dans le document de référence.",
+    } for item in per_reference for quote in item["source_evidence"]]
 
     # L'interface ne présente qu'une référence : retirer de l'explication
     # toute phrase qui évoque les candidates écartées ou une comparaison de liste.
