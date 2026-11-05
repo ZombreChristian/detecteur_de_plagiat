@@ -103,7 +103,6 @@ Réponds uniquement par un objet JSON valide (sans Markdown, sans texte autour) 
       "common_points": ["..."],
       "differences": ["..."],
       "source_evidence": ["<au moins deux extraits exacts copiés mot pour mot de cette référence>"],
-      "source_evidence": ["<au moins deux extraits exacts copiés mot pour mot de cette référence>"]
     }}
   ],
   "explanation": "<justification globale fondée sur des éléments observés>",
