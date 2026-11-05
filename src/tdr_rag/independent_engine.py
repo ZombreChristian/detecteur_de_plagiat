@@ -601,7 +601,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     raw_explanation = str(final.get("explanation", "")).strip()
     excluded_names = [
         Path(row.file_path).name for _, _, _, row in selected
-        if matched_row is not None and row.id != matched_row.id
+        if matched_row is None or row.id != matched_row.id
     ]
     explanation_sentences = re.split(r"(?<=[.!?])\s+", raw_explanation)
     visible_sentences = []
