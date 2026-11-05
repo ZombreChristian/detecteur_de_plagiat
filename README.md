@@ -11,9 +11,11 @@ TDRDOC-SCAN est une application de contrôle documentaire destinée à comparer 
 
 1. Le texte du document DOCX ou PDF est extrait et préparé.
 2. Le moteur lexical et sémantique classe les documents de référence indexés dans PostgreSQL.
-3. Les références candidates sont transmises au moteur RAG et au modèle configuré.
-4. L'analyse compare le contenu métier : objet, problématique, objectifs, activités, zone géographique, population cible, période, méthodologie et livrables, lorsque ces informations sont disponibles.
-5. L'application retourne un verdict expliqué, les références retenues, les points communs, les différences et une recommandation.
+3. Le moteur classe les TDR de référence et récupère les passages les plus pertinents à l'échelle des segments documentaires.
+4. Le LLM compare le contenu métier : objet, problématique, objectifs, activités, zone géographique, population cible, période, méthodologie et livrables, lorsque ces informations sont disponibles.
+5. Une correspondance forte ou partielle n'est acceptée que si une référence exacte du registre est identifiée et si au moins deux extraits cités sont vérifiés dans le texte source.
+6. Si les preuves sont insuffisantes ou invérifiables, l'analyse est signalée comme insuffisante ; aucun verdict de doublon n'est fabriqué.
+7. L'application présente une seule référence retenue, les éléments de preuve vérifiés, les points communs, les différences et une recommandation.
 
 Les scores TF-IDF, sémantiques et hybrides servent à **retrouver et classer les références candidates**. Ils ne doivent pas, à eux seuls, déterminer le verdict métier du TDR.
 
@@ -32,7 +34,7 @@ Le parcours des rapports conserve la recherche lexicale et sémantique, l'analys
 
 ### Registre et index de référence
 
-Les documents de référence sont préparés et indexés séparément. Un document candidat soumis à l'analyse ne doit pas être ajouté automatiquement au registre des références.
+Les documents de référence TDR sont préparés et indexés séparément. Un document candidat soumis à l'analyse ne doit pas être ajouté automatiquement au registre. À chaque vérification de l'index, les empreintes de contenu et le nom du modèle d'embedding sont contrôlés ; les références supprimées du corpus source sont désactivées.
 
 ## Architecture technique
 
@@ -40,7 +42,7 @@ Les documents de référence sont préparés et indexés séparément. Un docume
 - **API :** FastAPI, dans `api/app.py`.
 - **Application Django :** `frontend/detector/`.
 - **Moteur RAG TDR indépendant :** `src/tdr_rag/independent_engine.py`.
-- **Recherche documentaire :** TF-IDF, embeddings multilingues et similarité cosinus.
+- **Recherche documentaire :** TF-IDF sur les documents et similarité sémantique sur des segments chevauchants, puis sélection des trois références candidates. Les scores servent uniquement à la récupération, jamais au verdict métier.
 - **Base de données :** PostgreSQL.
 - **Modèle d'embeddings par défaut :** `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`.
 - **LLM TDR :** fournisseur distant compatible OpenAI, configuré par `TDR_LLM_PROVIDER`, `TDR_LLM_BASE_URL`, `TDR_LLM_MODEL` et `TDR_LLM_API_KEY`.
