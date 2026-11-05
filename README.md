@@ -17,6 +17,8 @@ TDRDOC-SCAN est une application de contrôle documentaire destinée à comparer 
 6. Si les preuves sont insuffisantes ou invérifiables, l'analyse est signalée comme insuffisante ; aucun verdict de doublon n'est fabriqué.
 7. L'application présente une seule référence retenue, les éléments de preuve vérifiés, les points communs, les différences et une recommandation.
 
+Les PDF contenant uniquement des pages scannées (images) ne sont pas OCRisés par le moteur actuel. Si aucun texte n'est extrait, l'analyse est refusée comme document inexploitable : aucun verdict n'est produit.
+
 Les scores TF-IDF, sémantiques et hybrides servent à **retrouver et classer les références candidates**. Ils ne doivent pas, à eux seuls, déterminer le verdict métier du TDR.
 
 Les niveaux de conclusion utilisés par le moteur RAG indépendant sont :
