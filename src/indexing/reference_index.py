@@ -82,11 +82,13 @@ def index_reference_corpus(force: bool = False) -> dict[str, int]:
     model = get_model()
     pending: list[dict[str, Any]] = []
     skipped = 0
+    invalid_sources: set[Path] = set()
 
     for path, document_type in sources:
         extracted = extract_docx(path)
         cleaned = clean_text(extracted)
         if not cleaned:
+            invalid_sources.add(path)
             continue
 
         file_path = _relative_path(path)
@@ -121,7 +123,10 @@ def index_reference_corpus(force: bool = False) -> dict[str, int]:
     # Les documents ajoutés manuellement au registre (hors ces dossiers) sont préservés.
     from django.db.models import Q
 
-    current_paths = [_relative_path(path) for path, _ in sources]
+    current_paths = [
+        _relative_path(path) for path, _ in sources
+        if path not in invalid_sources
+    ]
     corpus_rows = StudyDocument.objects.filter(
         is_reference=True,
         document_type__in=["TDR", "RAPPORT"],
