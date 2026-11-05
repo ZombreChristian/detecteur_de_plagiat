@@ -102,6 +102,7 @@ Réponds uniquement par un objet JSON valide (sans Markdown, sans texte autour) 
       "explanation": "<justification concrète, 3 à 5 phrases>",
       "common_points": ["..."],
       "differences": ["..."],
+      "source_evidence": ["<au moins deux extraits exacts copiés mot pour mot de cette référence>"],
       "source_evidence": ["<au moins deux extraits exacts copiés mot pour mot de cette référence>"]
     }}
   ],
@@ -249,16 +250,11 @@ def extract_tdr_document(path: Path) -> str:
         pages = ((page.extract_text() or "").strip() for page in reader.pages)
         return "\n\n".join(text for text in pages if text)
     if suffix == ".docx":
-        from docx import Document
+        # Même extraction pour le candidat et les références afin d'éviter
+        # des écarts de traitement entre les deux côtés de la comparaison.
+        from src.extraction.extract_docx import extract_docx
 
-        document = Document(str(path))
-        parts = [p.text.strip() for p in document.paragraphs if p.text.strip()]
-        for table in document.tables:
-            for row in table.rows:
-                cells = [cell.text.strip() for cell in row.cells]
-                if any(cells):
-                    parts.append(" | ".join(cells))
-        return "\n\n".join(parts)
+        return extract_docx(path)
     raise IndependentTDRError("Format non pris en charge. Utilisez un fichier DOCX ou PDF.")
 
 
