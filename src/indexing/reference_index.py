@@ -163,21 +163,9 @@ def index_reference_corpus(force: bool = False) -> dict[str, int]:
 
 
 def ensure_reference_index() -> dict[str, int]:
-    """Construit automatiquement l'index au premier démarrage uniquement."""
-    ensure_database_schema()
-
-    from detector.models import StudyDocument
-
-    references = list(
-        StudyDocument.objects.filter(is_reference=True).only("id", "embedding")
-    )
-    if references and all(bool(item.embedding) for item in references):
-        return {
-            "created_or_updated": 0,
-            "skipped": len(references),
-            "total": len(references),
-        }
-
+    """Vérifie systématiquement le corpus, ses empreintes et le modèle d'embedding."""
+    # index_reference_corpus compare le hash du texte et le modèle utilisé.
+    # Ne pas court-circuiter ce contrôle sur la seule présence d'un embedding.
     return index_reference_corpus(force=False)
 
 
