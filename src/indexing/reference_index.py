@@ -117,11 +117,29 @@ def index_reference_corpus(force: bool = False) -> dict[str, int]:
             }
         )
 
+    # Désactiver les références issues du corpus qui ont été supprimées/renommées.
+    # Les documents ajoutés manuellement au registre (hors ces dossiers) sont préservés.
+    from django.db.models import Q
+
+    current_paths = [_relative_path(path) for path, _ in sources]
+    corpus_rows = StudyDocument.objects.filter(
+        is_reference=True,
+        document_type__in=["TDR", "RAPPORT"],
+    ).filter(
+        Q(file_path__startswith="donnees/TDR/")
+        | Q(file_path__startswith="donnees/Rapport d'etude/")
+    ).exclude(file_path__in=current_paths)
+    stale_count = corpus_rows.update(
+        is_reference=False,
+        status="Référence absente du corpus source",
+    )
+
     if not pending:
         return {
             "created_or_updated": 0,
             "skipped": skipped,
             "total": len(sources),
+            "deactivated": stale_count,
         }
 
     embeddings = model.encode(
@@ -159,6 +177,7 @@ def index_reference_corpus(force: bool = False) -> dict[str, int]:
         "created_or_updated": len(pending),
         "skipped": skipped,
         "total": len(sources),
+        "deactivated": stale_count,
     }
 
 
