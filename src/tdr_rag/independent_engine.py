@@ -101,7 +101,8 @@ Réponds uniquement par un objet JSON valide (sans Markdown, sans texte autour) 
       "level": "forte | partielle",
       "explanation": "<justification concrète, 3 à 5 phrases>",
       "common_points": ["..."],
-      "differences": ["..."]
+      "differences": ["..."],
+      "source_evidence": ["<au moins deux extraits exacts copiés mot pour mot de cette référence>"]
     }}
   ],
   "explanation": "<justification globale fondée sur des éléments observés>",
@@ -432,8 +433,16 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
 
     case_id = str(final.get("case_id", CASE_3))
     if case_id not in CASES:
-        logger.warning("case_id inconnu renvoyé par le modèle : %r -> repli sur CAS_3", case_id)
-        case_id = CASE_3
+        logger.warning("case_id inconnu renvoyé par le modèle : %r -> vérification requise", case_id)
+        raise IndependentTDRError(
+            "Analyse insuffisante : le modèle a renvoyé un verdict non reconnu. "
+            "Aucun verdict n'a été enregistré."
+        )
+    if str(final.get("decision", "")).strip().upper() == "ANALYSE_INSUFFISANTE":
+        raise IndependentTDRError(
+            "Analyse insuffisante : les éléments disponibles ne permettent pas de conclure. "
+            "Vérifiez les objectifs, la zone/population, la méthodologie et les livrables."
+        )
 
     # Le verdict ne doit jamais être promu par détection de mots dans l'explication.
     # Les preuves documentaires seront vérifiées après identification de la référence.
@@ -565,7 +574,11 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "case_title": CASE_TITLES[case_id],
             "model": llm_audit.get("reported_model") or ACTIVE_MODEL,
             "model_audit": llm_audit,
-            "decision": str(final.get("decision", case_id)),
+            "decision": (
+                "Correspondance forte" if case_id == CASE_1 else
+                "Correspondance partielle" if case_id == CASE_2 else
+                "Aucune correspondance"
+            ),
             "explanation": display_explanation[:2500],
             "matched_reference": reference_name,
             "matched_references": per_reference,
@@ -573,9 +586,11 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "common_points": _as_list(final.get("common_points", []), 10, 500),
             "differences": _as_list(final.get("differences", []), 10, 500),
             "recommendation": str(final.get("recommendation", ""))[:2000],
-            "correspondence_level": str(final.get("correspondence_level", "À confirmer"))[:40],
-            "evidence_from_reference": _as_list(
-                final.get("evidence_from_reference", []), 8, 500),
+            "correspondence_level": (
+                "forte" if case_id == CASE_1 else
+                "moyenne" if case_id == CASE_2 else "nulle"
+            ),
+            "evidence_from_reference": source_evidence,
             "references_examined": len(selected),
             "retrieval_candidates": [
                 {
