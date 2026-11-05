@@ -119,6 +119,11 @@ class IndependentTDRError(RuntimeError):
     pass
 
 
+class InsufficientEvidenceError(IndependentTDRError):
+    """Le contenu extrait ne permet pas de confirmer un verdict métier."""
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Appel LLM
 # ---------------------------------------------------------------------------
@@ -481,7 +486,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "Aucun verdict n'a été enregistré."
         )
     if str(final.get("decision", "")).strip().upper() == "ANALYSE_INSUFFISANTE":
-        raise IndependentTDRError(
+        raise InsufficientEvidenceError(
             "Analyse insuffisante : les éléments disponibles ne permettent pas de conclure. "
             "Vérifiez les objectifs, la zone/population, la méthodologie et les livrables."
         )
@@ -546,7 +551,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     if case_id in {CASE_1, CASE_2} and (
         matched_row is None or len(source_evidence) < 2
     ):
-        raise IndependentTDRError(
+        raise InsufficientEvidenceError(
             "Analyse insuffisante : la référence retenue ou les deux extraits exacts "
             "nécessaires n'ont pas pu être vérifiés dans le document source. "
             "Aucun verdict de doublon n'a été enregistré. Vérifiez l'extraction et l'index, "
