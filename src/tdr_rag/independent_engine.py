@@ -61,7 +61,7 @@ CASE_TITLES = {
     CASE_3: "Aucune correspondance",
 }
 
-SYSTEM_PROMPT = f"""Tu es l'analyste chargé de déterminer si un TDR candidat reprend, reformule ou recoupe un document déjà présent dans la base (TDR ou rapport d'étude).
+SYSTEM_PROMPT = f"""Tu es l'analyste chargé de déterminer si un TDR candidat reprend, reformule ou recoupe un TDR déjà présent dans le registre.
 
 # MÉTHODE
 1. Lis le TDR candidat, puis les trois références fournies.
@@ -384,7 +384,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     rows = _load_all_indexed_references()
     if not rows:
         raise IndependentTDRError(
-            "Aucun TDR ni rapport d'étude de référence n'est présent dans l'index PostgreSQL. "
+            "Aucun TDR de référence n'est présent dans l'index PostgreSQL. "
             "Préparez l'index avant de lancer l'analyse."
         )
 
