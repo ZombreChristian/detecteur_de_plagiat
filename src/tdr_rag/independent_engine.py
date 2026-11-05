@@ -560,7 +560,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     if case_id == CASE_3:
         # Un CAS_3 accompagné d'une référence ou de citations est contradictoire.
         # Ne pas le promouvoir automatiquement : demander une vérification humaine.
-        if matched_row is not None or source_evidence:
+        if matched_row is not None or source_evidence or final.get("evidence_from_reference"):
             raise InsufficientEvidenceError(
                 "Analyse insuffisante : le verdict « aucune correspondance » contredit "
                 "la référence ou les extraits cités par le modèle. Vérification humaine requise."
