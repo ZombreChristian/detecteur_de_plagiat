@@ -47,26 +47,34 @@ def extract_docx(path: Path) -> str:
 
     parts = []
 
-    # Paragraphes
+    # Paragraphes du corps : conserver une séparation nette pour le découpage RAG.
     for paragraph in doc.paragraphs:
         text = paragraph.text.strip()
-
         if text:
             parts.append(text)
 
-    # Tableaux
+    # En-têtes et pieds de page (souvent porteurs du titre, de la zone ou du projet).
+    for section in doc.sections:
+        for container in (section.header, section.footer):
+            for paragraph in container.paragraphs:
+                text = paragraph.text.strip()
+                if text:
+                    parts.append(text)
+            for table in container.tables:
+                for row in table.rows:
+                    cells = [cell.text.strip() for cell in row.cells]
+                    if any(cells):
+                        parts.append(" | ".join(cells))
+
+    # Tableaux du corps.
     for table in doc.tables:
         for row in table.rows:
-
-            cells = [
-                cell.text.strip()
-                for cell in row.cells
-            ]
-
+            cells = [cell.text.strip() for cell in row.cells]
             if any(cells):
                 parts.append(" | ".join(cells))
 
-    return "\n".join(parts)
+    # Dédupliquer les lignes identiques sans perdre leur ordre.
+    return "\n\n".join(dict.fromkeys(parts))
 
 
 # ============================================================
