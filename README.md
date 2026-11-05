@@ -26,7 +26,7 @@ Les niveaux de conclusion utilisés par le moteur RAG indépendant sont :
 
 Une zone géographique différente n'exclut pas automatiquement une correspondance partielle si les objectifs et la démarche se recoupent réellement.
 
-Si le fournisseur LLM est indisponible ou renvoie une réponse inexploitable, l'analyse doit signaler l'indisponibilité au lieu de fabriquer un verdict à partir des seuls scores de recherche.
+Si le fournisseur LLM est indisponible ou renvoie une réponse inexploitable, l'analyse signale une indisponibilité au lieu de fabriquer un verdict à partir des seuls scores de recherche. Si une référence ou les citations exactes nécessaires ne peuvent pas être vérifiées, l'API renvoie un statut « Analyse insuffisante » (HTTP 422), distinct d'une panne du fournisseur (HTTP 503).
 
 ### Analyse des rapports (mode « Plagiat »)
 
