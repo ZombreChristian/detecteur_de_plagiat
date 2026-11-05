@@ -262,9 +262,18 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
         from src.tdr_rag.independent_engine import (
             analyze_tdr_independently,
             IndependentTDRError,
+            InsufficientEvidenceError,
         )
         try:
             result = analyze_tdr_independently(candidate)
+        except InsufficientEvidenceError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "TDR_ANALYSIS_INSUFFICIENT",
+                    "message": str(exc),
+                },
+            ) from exc
         except IndependentTDRError as exc:
             raise HTTPException(
                 status_code=503,
@@ -524,6 +533,7 @@ async def analyze_tdr_rag_independent(file: UploadFile = File(...)):
         analyze_tdr_independently,
         extract_tdr_document,
         IndependentTDRError,
+        InsufficientEvidenceError,
     )
     try:
         with tempfile.TemporaryDirectory() as directory:
@@ -533,5 +543,10 @@ async def analyze_tdr_rag_independent(file: UploadFile = File(...)):
             candidate_text = extract_tdr_document(path)
         result = await run_in_threadpool(analyze_tdr_independently, candidate_text)
         return result
+    except InsufficientEvidenceError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "TDR_ANALYSIS_INSUFFICIENT", "message": str(exc)},
+        ) from exc
     except IndependentTDRError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
