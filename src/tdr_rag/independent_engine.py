@@ -5,16 +5,26 @@ Le LLM analyse ensuite les trois meilleures candidates et renvoie un verdict glo
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import re
 import sys
+import threading
+import time
 from pathlib import Path
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+# Cache mémoire du corpus de recherche : les références sont stables entre deux
+# analyses. Les embeddings des segments et la matrice TF-IDF ne sont reconstruits
+# que si le contenu du registre change.
+_REFERENCE_SEARCH_CACHE = None
+_REFERENCE_SEARCH_CACHE_KEY = None
+_REFERENCE_SEARCH_CACHE_LOCK = threading.RLock()
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_DIR = ROOT / "frontend"
@@ -326,54 +336,90 @@ def _semantic_chunks(text: str, size: int = 1200, overlap: int = 150) -> list[st
     return chunks
 
 
-def _rank_all_references(candidate: str, rows):
-    """Classe tout le corpus avec TF-IDF lexical (30 %) et cosinus sémantique (70 %)."""
+def _reference_cache_key(rows) -> tuple:
+    """Empreinte déterministe du corpus pour invalider le cache si une référence change."""
+    fingerprint = []
+    for row in rows:
+        source = (row.extracted_text or row.cleaned_text or row.title or "").strip()
+        digest = str(row.content_hash or hashlib.sha256(source.encode("utf-8")).hexdigest())
+        fingerprint.append((row.pk, digest, str(row.embedding_model or "")))
+    return tuple(fingerprint)
+
+
+def _get_reference_search_cache(rows, model):
+    """Construit une seule fois les représentations coûteuses des références."""
     from sklearn.feature_extraction.text import TfidfVectorizer
+
+    global _REFERENCE_SEARCH_CACHE, _REFERENCE_SEARCH_CACHE_KEY
+
+    cache_key = _reference_cache_key(rows)
+    with _REFERENCE_SEARCH_CACHE_LOCK:
+        if _REFERENCE_SEARCH_CACHE is not None and _REFERENCE_SEARCH_CACHE_KEY == cache_key:
+            return _REFERENCE_SEARCH_CACHE, True
+
+        reference_texts = [
+            (row.cleaned_text or row.extracted_text or row.title or "").strip()
+            for row in rows
+        ]
+        vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True)
+        try:
+            reference_matrix = vectorizer.fit_transform(reference_texts)
+        except ValueError:
+            vectorizer = None
+            reference_matrix = None
+
+        chunk_texts = []
+        chunk_owners = []
+        for index, row in enumerate(rows):
+            source = row.extracted_text or row.cleaned_text or row.title or ""
+            chunks = _semantic_chunks(source) or [str(row.title or "")]
+            chunk_texts.extend(chunks)
+            chunk_owners.extend([index] * len(chunks))
+
+        chunk_vectors = model.encode(
+            chunk_texts,
+            batch_size=64,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+        )
+        cache = {
+            "vectorizer": vectorizer,
+            "reference_matrix": reference_matrix,
+            "chunk_vectors": np.asarray(chunk_vectors, dtype=np.float32),
+            "chunk_owners": np.asarray(chunk_owners, dtype=np.int32),
+            "chunk_count": len(chunk_texts),
+        }
+        _REFERENCE_SEARCH_CACHE = cache
+        _REFERENCE_SEARCH_CACHE_KEY = cache_key
+        return cache, False
+
+
+def _rank_all_references(candidate: str, rows, metrics: dict | None = None):
+    """Classe le corpus ; les représentations des références sont mises en cache."""
     from sklearn.metrics.pairwise import cosine_similarity
     from src.similarity.model_manager import get_model
 
-    reference_texts = [
-        (row.cleaned_text or row.extracted_text or row.title or "").strip()
-        for row in rows
-    ]
-    vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True)
-    try:
-        matrix = vectorizer.fit_transform([candidate] + reference_texts)
-        lexical_scores = cosine_similarity(matrix[0:1], matrix[1:]).ravel()
-    except ValueError:
+    model = get_model()
+    cache, cache_hit = _get_reference_search_cache(rows, model)
+
+    if cache["vectorizer"] is not None and cache["reference_matrix"] is not None:
+        candidate_tfidf = cache["vectorizer"].transform([candidate])
+        lexical_scores = cosine_similarity(
+            candidate_tfidf, cache["reference_matrix"]
+        ).ravel()
+    else:
         lexical_scores = np.zeros(len(rows), dtype=np.float32)
 
-    model = get_model()
+    # Seul le vecteur du document candidat est recalculé à chaque analyse.
     candidate_vector = model.encode(
         [candidate], normalize_embeddings=True, show_progress_bar=False,
         convert_to_numpy=True,
     )[0]
-
-    # Récupération sémantique par segments, plutôt que par un seul vecteur
-    # global qui peut masquer les objectifs ou la méthodologie d'un long TDR.
-    chunk_texts = []
-    chunk_owners = []
-    for index, row in enumerate(rows):
-        source = row.extracted_text or row.cleaned_text or row.title or ""
-        chunks = _semantic_chunks(source)
-        if not chunks:
-            chunks = [str(row.title or "")]
-        chunk_texts.extend(chunks)
-        chunk_owners.extend([index] * len(chunks))
-
-    chunk_vectors = model.encode(
-        chunk_texts,
-        batch_size=64,
-        normalize_embeddings=True,
-        show_progress_bar=False,
-        convert_to_numpy=True,
-    )
-    similarities = np.asarray(chunk_vectors, dtype=np.float32) @ np.asarray(
-        candidate_vector, dtype=np.float32
-    )
+    similarities = cache["chunk_vectors"] @ np.asarray(candidate_vector, dtype=np.float32)
     document_scores = [[] for _ in rows]
-    for owner, score in zip(chunk_owners, similarities):
-        document_scores[owner].append(float(score))
+    for owner, score in zip(cache["chunk_owners"], similarities):
+        document_scores[int(owner)].append(float(score))
 
     ranked = []
     for index, row in enumerate(rows):
@@ -384,6 +430,10 @@ def _rank_all_references(candidate: str, rows):
         hybrid = 0.30 * lexical + 0.70 * semantic
         ranked.append((hybrid, lexical, semantic, row))
     ranked.sort(key=lambda item: item[0], reverse=True)
+
+    if metrics is not None:
+        metrics["reference_embedding_cache_hit"] = cache_hit
+        metrics["reference_chunks_cached"] = cache["chunk_count"]
     return ranked
 
 
@@ -492,10 +542,14 @@ def _recover_case2_evidence(
 # ---------------------------------------------------------------------------
 def analyze_tdr_independently(candidate_text: str) -> dict:
     """Classe le corpus, puis demande au LLM un seul verdict fondé sur les 3 meilleurs TDR."""
+    analysis_started = time.perf_counter()
+    performance = {}
     candidate = (candidate_text or "").strip()
     if len(candidate) < 80:
         raise IndependentTDRError("Le TDR contient trop peu de texte exploitable.")
+    load_started = time.perf_counter()
     rows = _load_all_indexed_references()
+    performance["reference_load_ms"] = round((time.perf_counter() - load_started) * 1000)
     if not rows:
         raise IndependentTDRError(
             "Aucun TDR de référence n'est présent dans l'index PostgreSQL. "
@@ -504,7 +558,9 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
 
     # Le classement sert uniquement à retrouver les références candidates ;
     # le LLM reste responsable du verdict métier.
-    ranked = _rank_all_references(candidate, rows)
+    retrieval_started = time.perf_counter()
+    ranked = _rank_all_references(candidate, rows, metrics=performance)
+    performance["retrieval_ms"] = round((time.perf_counter() - retrieval_started) * 1000)
     if not ranked:
         raise IndependentTDRError("Aucune référence TDR exploitable n'a été trouvée.")
     selected = ranked[:RAG_TOP_K]
@@ -532,7 +588,12 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             for _, _, _, row in selected
         )
     )
+    performance["prompt_build_ms"] = round(
+        (time.perf_counter() - retrieval_started) * 1000
+    ) - performance["retrieval_ms"]
+    llm_started = time.perf_counter()
     final = _request_llm_json(SYSTEM_PROMPT, user_prompt, tokens=OUTPUT_TOKENS)
+    performance["llm_ms"] = round((time.perf_counter() - llm_started) * 1000)
 
     llm_audit = final.pop("_llm_audit", {
         "provider": TDR_LLM_PROVIDER,
@@ -742,6 +803,10 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "evidence": evidence,
             # Un seul verdict global : pas de verdicts par référence.
             "batch_findings": [],
+            "performance": {
+                **performance,
+                "total_ms": round((time.perf_counter() - analysis_started) * 1000),
+            },
         },
         "best_source_id": matched_row.id if matched_row else None,
         "best_source": reference_name or None,
