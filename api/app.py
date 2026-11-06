@@ -46,7 +46,12 @@ def read_document(path: Path) -> str:
     try:
         if path.suffix.lower() == ".pdf":
             reader = PdfReader(str(path))
-            return "\n\n".join((page.extract_text() or "").strip() for page in reader.pages if (page.extract_text() or "").strip())
+            pages_text = []
+            for page in reader.pages:
+                page_text = (page.extract_text() or "").strip()
+                if page_text:
+                    pages_text.append(page_text)
+            return "\n\n".join(pages_text)
         doc = Document(path)
     except Exception as exc:
         raise HTTPException(400, f"Document DOCX invalide : {exc}")
