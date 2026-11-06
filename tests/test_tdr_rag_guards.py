@@ -50,7 +50,7 @@ class TDRRAGGuardTests(unittest.TestCase):
         recovered = _recover_case2_evidence(
             source_text=source,
             candidate_text="Étude des conditions de vie des ménages ruraux et accès aux services.",
-            common_points=["conditions de vie des ménages ruraux", "accès aux services"],
+            common_points=["conditions de vie des ménages ruraux", "enquête quantitative et entretiens qualitatifs"],
             existing_evidence=[],
         )
         self.assertEqual(len(recovered), 2)
@@ -71,7 +71,7 @@ class TDRRAGGuardTests(unittest.TestCase):
         recovered = _recover_case2_evidence(
             source_text=source,
             candidate_text="Étude des conditions de vie des ménages ruraux.",
-            common_points=["conditions de vie des ménages ruraux", "enquête auprès des ménages"],
+            common_points=["conditions de vie des ménages ruraux", "enquête quantitative et entretiens qualitatifs"],
             existing_evidence=[first],
         )
         self.assertEqual(recovered[0], first)
