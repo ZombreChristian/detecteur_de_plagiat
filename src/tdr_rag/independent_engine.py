@@ -49,12 +49,12 @@ ACTIVE_MODEL = TDR_LLM_REMOTE_MODEL
 # Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
 # uniquement sur les trois références les mieux classées.
 RAG_TOP_K = 3
-REFERENCE_CHARS = 9000
-CANDIDATE_CHARS = 18000
+REFERENCE_CHARS = 4500
+CANDIDATE_CHARS = 10000
 # Les serveurs Qwen en mode raisonnement peuvent consommer tout le budget
 # avant de produire le JSON final. Les tentatives augmentent donc le budget
 # et, sur les reprises, désactivent explicitement le thinking.
-OUTPUT_TOKENS = 2048
+OUTPUT_TOKENS = 1200
 
 # ---------------------------------------------------------------------------
 # Identifiants de cas : UNE SEULE source de vérité (prompt + code)
@@ -161,9 +161,12 @@ def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT
         "completion_tokens": None,
         "total_tokens": None,
     }
-    token_budgets = (max(tokens, 2048), max(tokens, 4096), max(tokens, 6144))
+    token_budgets = (max(tokens, 1200), max(tokens, 1800))
 
-    for attempt in range(3):
+    # Deux appels maximum : la première génération est déjà configurée sans
+    # thinking afin d'éviter de payer plusieurs dizaines de secondes de raisonnement
+    # avant l'émission du JSON métier.
+    for attempt in range(2):
         token_budget = token_budgets[attempt]
         retry_note = ""
         if attempt:
@@ -192,12 +195,10 @@ def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT
                 "temperature": 0,
                 "max_tokens": token_budget,
             }
-            if attempt == 0:
-                request_kwargs["response_format"] = {"type": "json_object"}
-            else:
-                request_kwargs["extra_body"] = {
-                    "chat_template_kwargs": {"enable_thinking": False}
-                }
+            request_kwargs["response_format"] = {"type": "json_object"}
+            request_kwargs["extra_body"] = {
+                "chat_template_kwargs": {"enable_thinking": False}
+            }
             response = client.chat.completions.create(**request_kwargs)
             llm_audit["attempts"] = attempt + 1
             llm_audit["reported_model"] = getattr(response, "model", None)
@@ -258,7 +259,7 @@ def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT
 
     preview = re.sub(r"\s+", " ", last_content)[:240]
     raise IndependentTDRError(
-        f"Le fournisseur LLM ({ACTIVE_MODEL}) n'a pas produit de JSON valide après 3 tentatives. "
+        f"Le fournisseur LLM ({ACTIVE_MODEL}) n'a pas produit de JSON valide après 2 tentatives. "
         f"Dernière erreur : {last_error}. Début de la réponse : {preview!r}"
     ) from last_error
 
@@ -766,6 +767,25 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         matched_rows = [matched_row]
 
     reference_name = Path(matched_row.file_path).name if matched_row else ""
+    # La recommandation est produite côté serveur à partir de la référence
+    # effectivement validée. Cela évite qu'un alias ou un ancien identifiant
+    # inventé par le LLM contredise le fichier affiché à l'utilisateur.
+    reference_label = Path(reference_name).stem if reference_name else ""
+    if case_id == CASE_1 and reference_label:
+        recommendation = (
+            f"Considérer le TDR candidat comme un doublon ou une reformulation "
+            f"de la référence « {reference_label} » du registre."
+        )
+    elif case_id == CASE_2 and reference_label:
+        recommendation = (
+            f"Faire vérifier les éléments communs avec la référence « {reference_label} » "
+            "avant toute validation ou programmation de l'étude."
+        )
+    else:
+        recommendation = (
+            "Aucune référence du registre ne présente de correspondance métier suffisante. "
+            "Le TDR peut poursuivre le circuit normal de validation."
+        )
 
     per_reference = []
     if matched_row is not None:
@@ -839,7 +859,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "confidence": "À confirmer",
             "common_points": _as_list(final.get("common_points", []), 10, 500),
             "differences": _as_list(final.get("differences", []), 10, 500),
-            "recommendation": str(final.get("recommendation", ""))[:2000],
+            "recommendation": recommendation,
             "correspondence_level": (
                 "forte" if case_id == CASE_1 else
                 "moyenne" if case_id == CASE_2 else "nulle"
