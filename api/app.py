@@ -529,6 +529,7 @@ async def compare(file_a: UploadFile = File(...), file_b: UploadFile = File(...)
 @app.post("/api/tdr-rag/analyze")
 async def analyze_tdr_rag_independent(file: UploadFile = File(...)):
     """Point d'entrée dédié au moteur RAG indépendant des TDR."""
+    request_started = time.perf_counter()
     if not file.filename or Path(file.filename).suffix.lower() not in {".docx", ".pdf"}:
         raise HTTPException(400, "Formats acceptés : DOCX et PDF.")
     from src.tdr_rag.independent_engine import (
@@ -541,9 +542,34 @@ async def analyze_tdr_rag_independent(file: UploadFile = File(...)):
         with tempfile.TemporaryDirectory() as directory:
             safe_name = re.sub(r"[^\w.\- ]", "_", file.filename)
             path = Path(directory) / safe_name
-            path.write_bytes(await file.read())
+            upload_started = time.perf_counter()
+            file_content = await file.read()
+            file_read_ms = round((time.perf_counter() - upload_started) * 1000)
+            path.write_bytes(file_content)
+
+            extraction_started = time.perf_counter()
             candidate_text = extract_tdr_document(path)
+            extraction_ms = round(
+                (time.perf_counter() - extraction_started) * 1000
+            )
+
+        engine_started = time.perf_counter()
         result = await run_in_threadpool(analyze_tdr_independently, candidate_text)
+        engine_ms = round((time.perf_counter() - engine_started) * 1000)
+
+        rag_analysis = result.get("rag_analysis")
+        if isinstance(rag_analysis, dict):
+            performance = rag_analysis.setdefault("performance", {})
+            performance.update({
+                "upload_read_ms": file_read_ms,
+                "document_extraction_ms": extraction_ms,
+                "engine_wall_ms": engine_ms,
+                "request_total_ms": round(
+                    (time.perf_counter() - request_started) * 1000
+                ),
+                "uploaded_bytes": len(file_content),
+                "extracted_chars": len(candidate_text),
+            })
         return result
     except InsufficientEvidenceError as exc:
         raise HTTPException(
