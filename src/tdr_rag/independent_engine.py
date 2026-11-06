@@ -54,7 +54,7 @@ CANDIDATE_CHARS = 10000
 # Les serveurs Qwen en mode raisonnement peuvent consommer tout le budget
 # avant de produire le JSON final. Les tentatives augmentent donc le budget
 # et, sur les reprises, désactivent explicitement le thinking.
-OUTPUT_TOKENS = 1200
+OUTPUT_TOKENS = 1000
 
 # ---------------------------------------------------------------------------
 # Identifiants de cas : UNE SEULE source de vérité (prompt + code)
@@ -119,7 +119,6 @@ Réponds uniquement par un objet JSON valide (sans Markdown, sans texte autour) 
   "common_points": ["..."],
   "differences": ["..."],
   "evidence_from_reference": ["<extrait exact copié de la référence retenue>"],
-  "recommendation": "<1 à 2 phrases, opérationnelles>"
 }}
 Sois concis : termine toujours le JSON."""
 
@@ -161,7 +160,7 @@ def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT
         "completion_tokens": None,
         "total_tokens": None,
     }
-    token_budgets = (max(tokens, 1200), max(tokens, 1800))
+    token_budgets = (max(tokens, 1000), max(tokens, 1500))
 
     # Deux appels maximum : la première génération est déjà configurée sans
     # thinking afin d'éviter de payer plusieurs dizaines de secondes de raisonnement
