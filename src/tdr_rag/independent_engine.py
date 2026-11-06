@@ -423,6 +423,70 @@ def _verified_evidence(values, source_text: str) -> list[str]:
     return verified
 
 
+def _recover_case2_evidence(
+    source_text: str,
+    candidate_text: str,
+    common_points,
+    existing_evidence: list[str],
+) -> list[str]:
+    """Récupère des phrases exactes de la référence pour étayer un CAS_2.
+
+    Cette récupération ne décide jamais du verdict : elle ne s'exécute qu'après
+    le choix CAS_2 du LLM et ne retient que des phrases réellement présentes
+    dans le document source, avec plusieurs termes métier partagés.
+    """
+    import unicodedata
+
+    stopwords = {
+        "avec", "dans", "pour", "par", "sur", "les", "des", "une", "dans",
+        "entre", "ainsi", "leur", "leurs", "cette", "ces", "sont", "être",
+        "avoir", "plus", "moins", "tout", "tous", "elle", "elles", "nous",
+        "vous", "qui", "que", "quoi", "dont", "aux", "au", "du", "de",
+        "la", "le", "un", "et", "ou", "en", "est", "sa", "son", "ses",
+        "comme", "notamment", "également", "etc", "afin", "cadre",
+    }
+
+    def terms(value: str) -> set[str]:
+        normalized = unicodedata.normalize("NFKD", str(value or "").casefold())
+        normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+        return {
+            token for token in re.findall(r"[a-z0-9]{4,}", normalized)
+            if token not in stopwords
+        }
+
+    points = " ".join(str(item) for item in common_points) if isinstance(common_points, list) else ""
+    query_terms = terms(points + " " + candidate_text)
+    if len(query_terms) < 3:
+        return list(existing_evidence[:2])
+
+    recovered = list(existing_evidence[:2])
+    normalized_existing = {_normalize_evidence(item) for item in recovered}
+    sentences = re.split(r"(?<=[.!?])\s+|\n+", source_text or "")
+    ranked = []
+    for sentence in sentences:
+        quote = sentence.strip()
+        sentence_terms = terms(quote)
+        if len(quote) < 55 or len(sentence_terms) < 5:
+            continue
+        normalized = _normalize_evidence(quote)
+        if normalized in normalized_existing:
+            continue
+        overlap = sentence_terms & query_terms
+        if len(overlap) < 3:
+            continue
+        coverage = len(overlap) / max(1, len(sentence_terms))
+        if coverage < 0.25:
+            continue
+        ranked.append((len(overlap), coverage, quote))
+
+    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    for _, _, quote in ranked:
+        if len(recovered) >= 2:
+            break
+        recovered.append(quote)
+    return recovered
+
+
 # ---------------------------------------------------------------------------
 # Analyse principale
 # ---------------------------------------------------------------------------
@@ -545,6 +609,21 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
         model_item.get("source_evidence") or final.get("evidence_from_reference", []),
         source_text,
     )
+
+    # CAS_2 : si le modèle a fourni trop peu de citations, récupérer deux
+    # phrases exactes dans la référence retenue à partir des points communs
+    # qu'il a lui-même identifiés. Cette étape ne modifie jamais le verdict.
+    if case_id == CASE_2 and matched_row is not None and len(source_evidence) < 2:
+        recovery_points = (
+            model_item.get("common_points")
+            or final.get("common_points", [])
+        )
+        source_evidence = _recover_case2_evidence(
+            source_text=source_text,
+            candidate_text=candidate,
+            common_points=recovery_points,
+            existing_evidence=source_evidence,
+        )
 
     # Aucun CAS_1/CAS_2 sans référence exacte et au moins deux citations vérifiées.
     if case_id in {CASE_1, CASE_2} and (
