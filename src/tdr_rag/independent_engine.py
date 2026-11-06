@@ -324,6 +324,19 @@ def _load_all_indexed_references():
             is_reference=True, document_type="TDR"
         ).filter(Q(cleaned_text__gt="") | Q(extracted_text__gt=""))
         .exclude(embedding=[])
+        # Le moteur RAG autonome n'utilise pas les vecteurs JSON stockés en base :
+        # il encode les textes du registre et conserve les vecteurs dans son cache
+        # mémoire. Ne pas transférer ces gros champs à chaque analyse.
+        .only(
+            "id",
+            "title",
+            "file_path",
+            "document_type",
+            "extracted_text",
+            "cleaned_text",
+            "content_hash",
+            "embedding_model",
+        )
         .order_by("id")
     )
 
