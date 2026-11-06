@@ -36,6 +36,48 @@ class TDRRAGGuardTests(unittest.TestCase):
         result = _verified_evidence([valid, invalid], source)
         self.assertEqual(result, [valid])
 
+    def test_case2_evidence_recovery_uses_exact_source_sentences(self):
+        from src.tdr_rag.independent_engine import _recover_case2_evidence
+
+        source = (
+            "Le projet vise à améliorer durablement les conditions de vie "
+            "des ménages ruraux dans les communes ciblées. "
+            "La collecte des données repose sur une enquête quantitative "
+            "auprès des ménages et des entretiens qualitatifs. "
+            "Les résultats permettront d'analyser les revenus et l'accès "
+            "aux services sociaux de base."
+        )
+        recovered = _recover_case2_evidence(
+            source_text=source,
+            candidate_text="Étude des conditions de vie des ménages ruraux et accès aux services.",
+            common_points=["conditions de vie des ménages ruraux", "accès aux services"],
+            existing_evidence=[],
+        )
+        self.assertEqual(len(recovered), 2)
+        self.assertTrue(all(quote in source for quote in recovered))
+
+    def test_case2_evidence_recovery_keeps_existing_verified_quote(self):
+        from src.tdr_rag.independent_engine import _recover_case2_evidence
+
+        first = (
+            "Le projet vise à améliorer durablement les conditions de vie "
+            "des ménages ruraux dans les communes ciblées."
+        )
+        second = (
+            "La collecte des données repose sur une enquête quantitative "
+            "auprès des ménages et des entretiens qualitatifs."
+        )
+        source = first + " " + second
+        recovered = _recover_case2_evidence(
+            source_text=source,
+            candidate_text="Étude des conditions de vie des ménages ruraux.",
+            common_points=["conditions de vie des ménages ruraux", "enquête auprès des ménages"],
+            existing_evidence=[first],
+        )
+        self.assertEqual(recovered[0], first)
+        self.assertEqual(len(recovered), 2)
+        self.assertIn(recovered[1], source)
+
 
 if __name__ == "__main__":
     unittest.main()
