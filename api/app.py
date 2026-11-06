@@ -243,9 +243,21 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
     if not candidate:
         raise HTTPException(400, "Le document ne contient aucun texte exploitable.")
 
-    # Parcours TDR : le moteur RAG indépendant réalise déjà son propre
-    # classement lexical + sémantique. Ne pas exécuter score_documents()
-    # avant lui : cela ferait une seconde recherche complète inutile.
+    ranked = score_documents(candidate, kind)
+    if not ranked:
+        if kind == "duplicate":
+            raise HTTPException(
+                409,
+                "Aucune référence TDR n'est indexée dans la base. Impossible de comparer ce document.",
+            )
+        raise HTTPException(
+            500,
+            f"Aucun document de référence indexé pour le mode « {kind} ».",
+        )
+
+    best = ranked[0]
+
+    # Parcours TDR : récupération lexicale/sémantique puis arbitrage distant indépendant.
     if kind == "duplicate":
         from src.tdr_rag.independent_engine import (
             analyze_tdr_independently,
@@ -270,20 +282,12 @@ def run_detection(candidate_text: str, kind: str, threshold: float | None = None
                 detail={
                     "error": "TDR_RAG_UNAVAILABLE",
                     "message": str(exc),
-                    "hint": "Vérifiez la configuration du fournisseur LLM distant dans frontend/.env.",
+                    "hint": "Vérifiez la configuration du fournisseur Qwen distant dans frontend/.env.",
                 },
             ) from exc
         return result
 
     # Parcours rapports : seuil et moteur contextuel historiques conservés.
-    ranked = score_documents(candidate, kind)
-    if not ranked:
-        raise HTTPException(
-            500,
-            f"Aucun document de référence indexé pour le mode « {kind} ».",
-        )
-
-    best = ranked[0]
 
     if threshold is None:
         threshold = THRESHOLDS[kind]
