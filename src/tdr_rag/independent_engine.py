@@ -598,14 +598,19 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     candidate_excerpt = _excerpt(candidate, CANDIDATE_CHARS)
 
     reference_blocks = []
+    reference_excerpt_chars = 0
     for _, _, _, row in selected:
+        reference_excerpt = _excerpt(
+            row.extracted_text or row.cleaned_text, REFERENCE_CHARS
+        )
+        reference_excerpt_chars += len(reference_excerpt)
         reference_blocks.append(
             "DOCUMENT DE RÉFÉRENCE\n"
             f"ID: {row.id}\n"
             f"TITRE: {row.title}\n"
             f"TYPE DE DOCUMENT: {row.get_document_type_display()}\n"
             f"FICHIER: {Path(row.file_path).name}\n"
-            f"CONTENU:\n{_excerpt(row.extracted_text or row.cleaned_text, REFERENCE_CHARS)}"
+            f"CONTENU:\n{reference_excerpt}"
         )
 
     user_prompt = (
@@ -624,10 +629,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     ) - performance["retrieval_ms"]
     performance["candidate_chars"] = len(candidate)
     performance["candidate_excerpt_chars"] = len(candidate_excerpt)
-    performance["reference_excerpt_chars"] = sum(
-        len(_excerpt(row.extracted_text or row.cleaned_text, REFERENCE_CHARS))
-        for _, _, _, row in selected
-    )
+    performance["reference_excerpt_chars"] = reference_excerpt_chars
     performance["prompt_chars"] = len(SYSTEM_PROMPT) + len(user_prompt)
     llm_started = time.perf_counter()
     final = _request_llm_json(SYSTEM_PROMPT, user_prompt, tokens=OUTPUT_TOKENS)
