@@ -76,15 +76,15 @@ CASE_TITLES = {
 SYSTEM_PROMPT = f"""Tu es l'analyste chargé de déterminer si un TDR candidat reprend, reformule ou recoupe un TDR déjà présent dans le registre.
 
 # MÉTHODE
-1. Lis le TDR candidat, puis les trois références fournies.
+1. Lis intégralement le TDR candidat, puis la référence unique retenue par le moteur de recherche.
 2. Compare le SENS, pas les mots : objet, problème traité, objectif général et spécifiques, activités, zone, population cible, période, méthode, livrables. Une reformulation, des synonymes ou un titre différent ne suffisent pas à conclure à une étude nouvelle.
-3. Compare les trois références en interne, puis retiens UNE SEULE référence : celle dont l'objet et les objectifs sont les plus proches (en cas d'égalité, celle aux preuves les plus solides).
+3. La référence fournie est la référence la mieux classée dans le registre. Vérifie directement son contenu intégral face au candidat.
 4. Ne mentionne jamais les références écartées, ni « TDR 1 / TDR 2 », ni les scores de recherche (ce sont des indices de récupération, pas des preuves).
 
 # GRILLE DE DÉCISION (case_id : recopie la chaîne exacte)
 - "{CASE_1}" : même étude ou quasi identique (objet et objectifs essentiels coïncident, malgré une reformulation).
 - "{CASE_2}" : éléments métier significatifs en commun (objectifs, démarche, activités), même si la zone, la méthode ou les livrables diffèrent. Une zone différente reste un CAS_2 si objectifs et démarche se recoupent. Une correspondance faible mais réelle relève de ce cas.
-- "{CASE_3}" : aucune des trois références ne présente de correspondance métier significative.
+- "{CASE_3}" : la référence retenue ne présente pas de correspondance métier significative.
 Si les preuves sont incomplètes ou insuffisantes, n'invente pas de correspondance : demande une vérification. Ne déclare pas de correspondance sur de simples mots génériques (« évaluation », « développement », « diagnostic »).
 
 # RÈGLES DE FOND
@@ -629,9 +629,9 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
 
     user_prompt = (
         "TDR CANDIDAT À ÉVALUER:\n" + candidate_excerpt
-        + "\n\nLES TROIS RÉFÉRENCES LES MIEUX CLASSÉES À EXAMINER AVANT DE CONCLURE:\n"
+        + "\n\nRÉFÉRENCE UNIQUE DU REGISTRE À EXAMINER INTÉGRALEMENT :\n"
         + "\n\n--- DOCUMENT SUIVANT ---\n\n".join(reference_blocks)
-        + "\n\nLISTE AUTORISÉE DES RÉFÉRENCES (reprends exactement un nom de fichier de cette liste) :\n"
+        + "\n\nRÉFÉRENCE AUTORISÉE (reprends exactement son nom de fichier) :\n"
         + "\n".join(
             f"- ID={row.id} | TYPE={row.get_document_type_display()} | "
             f"TITRE={row.title} | FICHIER={Path(row.file_path).name}"
