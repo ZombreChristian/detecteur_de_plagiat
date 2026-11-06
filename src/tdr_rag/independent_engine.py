@@ -155,6 +155,11 @@ def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT
         "requested_model": ACTIVE_MODEL,
         "reported_model": None,
         "request_id": None,
+        "attempts": 0,
+        "finish_reason": None,
+        "prompt_tokens": None,
+        "completion_tokens": None,
+        "total_tokens": None,
     }
     token_budgets = (max(tokens, 2048), max(tokens, 4096), max(tokens, 6144))
 
@@ -194,7 +199,13 @@ def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT
                     "chat_template_kwargs": {"enable_thinking": False}
                 }
             response = client.chat.completions.create(**request_kwargs)
+            llm_audit["attempts"] = attempt + 1
             llm_audit["reported_model"] = getattr(response, "model", None)
+            usage = getattr(response, "usage", None)
+            if usage is not None:
+                llm_audit["prompt_tokens"] = getattr(usage, "prompt_tokens", None)
+                llm_audit["completion_tokens"] = getattr(usage, "completion_tokens", None)
+                llm_audit["total_tokens"] = getattr(usage, "total_tokens", None)
             llm_audit["request_id"] = getattr(response, "id", None)
             if not response.choices:
                 raise ValueError("Le serveur LLM n'a renvoyé aucun choix (choices vide).")
@@ -202,6 +213,7 @@ def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT
             message = choice.message
             last_content = (getattr(message, "content", None) or "").strip()
             finish_reason = getattr(choice, "finish_reason", None)
+            llm_audit["finish_reason"] = finish_reason
             if not last_content:
                 refusal = (getattr(message, "refusal", None) or "").strip()
                 reasoning = (getattr(message, "reasoning_content", None) or "").strip()
@@ -346,7 +358,7 @@ def _reference_cache_key(rows) -> tuple:
     return tuple(fingerprint)
 
 
-def _get_reference_search_cache(rows, model):
+def _get_reference_search_cache(rows, model, metrics: dict | None = None):
     """Construit une seule fois les représentations coûteuses des références."""
     from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -355,8 +367,11 @@ def _get_reference_search_cache(rows, model):
     cache_key = _reference_cache_key(rows)
     with _REFERENCE_SEARCH_CACHE_LOCK:
         if _REFERENCE_SEARCH_CACHE is not None and _REFERENCE_SEARCH_CACHE_KEY == cache_key:
+            if metrics is not None:
+                metrics["reference_cache_build_ms"] = 0
             return _REFERENCE_SEARCH_CACHE, True
 
+        cache_started = time.perf_counter()
         reference_texts = [
             (row.cleaned_text or row.extracted_text or row.title or "").strip()
             for row in rows
@@ -392,6 +407,10 @@ def _get_reference_search_cache(rows, model):
         }
         _REFERENCE_SEARCH_CACHE = cache
         _REFERENCE_SEARCH_CACHE_KEY = cache_key
+        if metrics is not None:
+            metrics["reference_cache_build_ms"] = round(
+                (time.perf_counter() - cache_started) * 1000
+            )
         return cache, False
 
 
@@ -400,8 +419,10 @@ def _rank_all_references(candidate: str, rows, metrics: dict | None = None):
     from sklearn.metrics.pairwise import cosine_similarity
     from src.similarity.model_manager import get_model
 
+    model_started = time.perf_counter()
     model = get_model()
-    cache, cache_hit = _get_reference_search_cache(rows, model)
+    model_load_ms = round((time.perf_counter() - model_started) * 1000)
+    cache, cache_hit = _get_reference_search_cache(rows, model, metrics=metrics)
 
     if cache["vectorizer"] is not None and cache["reference_matrix"] is not None:
         candidate_tfidf = cache["vectorizer"].transform([candidate])
@@ -412,10 +433,15 @@ def _rank_all_references(candidate: str, rows, metrics: dict | None = None):
         lexical_scores = np.zeros(len(rows), dtype=np.float32)
 
     # Seul le vecteur du document candidat est recalculé à chaque analyse.
+    candidate_embedding_started = time.perf_counter()
     candidate_vector = model.encode(
         [candidate], normalize_embeddings=True, show_progress_bar=False,
         convert_to_numpy=True,
     )[0]
+    candidate_embedding_ms = round(
+        (time.perf_counter() - candidate_embedding_started) * 1000
+    )
+    scoring_started = time.perf_counter()
     similarities = cache["chunk_vectors"] @ np.asarray(candidate_vector, dtype=np.float32)
     document_scores = [[] for _ in rows]
     for owner, score in zip(cache["chunk_owners"], similarities):
@@ -432,6 +458,11 @@ def _rank_all_references(candidate: str, rows, metrics: dict | None = None):
     ranked.sort(key=lambda item: item[0], reverse=True)
 
     if metrics is not None:
+        metrics["model_load_ms"] = model_load_ms
+        metrics["candidate_embedding_ms"] = candidate_embedding_ms
+        metrics["similarity_scoring_ms"] = round(
+            (time.perf_counter() - scoring_started) * 1000
+        )
         metrics["reference_embedding_cache_hit"] = cache_hit
         metrics["reference_chunks_cached"] = cache["chunk_count"]
     return ranked
@@ -591,9 +622,17 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     performance["prompt_build_ms"] = round(
         (time.perf_counter() - retrieval_started) * 1000
     ) - performance["retrieval_ms"]
+    performance["candidate_chars"] = len(candidate)
+    performance["candidate_excerpt_chars"] = len(candidate_excerpt)
+    performance["reference_excerpt_chars"] = sum(
+        len(_excerpt(row.extracted_text or row.cleaned_text, REFERENCE_CHARS))
+        for _, _, _, row in selected
+    )
+    performance["prompt_chars"] = len(SYSTEM_PROMPT) + len(user_prompt)
     llm_started = time.perf_counter()
     final = _request_llm_json(SYSTEM_PROMPT, user_prompt, tokens=OUTPUT_TOKENS)
     performance["llm_ms"] = round((time.perf_counter() - llm_started) * 1000)
+    validation_started = time.perf_counter()
 
     llm_audit = final.pop("_llm_audit", {
         "provider": TDR_LLM_PROVIDER,
@@ -758,6 +797,13 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             visible_sentences.append(sentence.strip())
     display_explanation = " ".join(visible_sentences)
 
+    performance["validation_and_formatting_ms"] = round(
+        (time.perf_counter() - validation_started) * 1000
+    )
+    performance["total_ms"] = round(
+        (time.perf_counter() - analysis_started) * 1000
+    )
+
     return {
         "mode": "tdr_rag_independent",
         "decision_provider": "independent_rag",
@@ -803,10 +849,7 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
             "evidence": evidence,
             # Un seul verdict global : pas de verdicts par référence.
             "batch_findings": [],
-            "performance": {
-                **performance,
-                "total_ms": round((time.perf_counter() - analysis_started) * 1000),
-            },
+            "performance": dict(performance),
         },
         "best_source_id": matched_row.id if matched_row else None,
         "best_source": reference_name or None,
