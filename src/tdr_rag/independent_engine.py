@@ -48,13 +48,15 @@ ACTIVE_MODEL = TDR_LLM_REMOTE_MODEL
 
 # Recherche rapide lexical + sémantique sur l'ensemble du corpus, puis arbitrage RAG
 # uniquement sur les trois références les mieux classées.
-RAG_TOP_K = 3
-REFERENCE_CHARS = 4500
-CANDIDATE_CHARS = 10000
+RAG_TOP_K = 1
+# Le LLM reçoit l'intégralité du candidat et de la référence retenue.
+# La réduction du contexte vient du choix d'une référence, pas d'une troncature.
+REFERENCE_CHARS = None
+CANDIDATE_CHARS = None
 # Les serveurs Qwen en mode raisonnement peuvent consommer tout le budget
 # avant de produire le JSON final. Les tentatives augmentent donc le budget
 # et, sur les reprises, désactivent explicitement le thinking.
-OUTPUT_TOKENS = 1000
+OUTPUT_TOKENS = 4096
 
 # ---------------------------------------------------------------------------
 # Identifiants de cas : UNE SEULE source de vérité (prompt + code)
@@ -160,7 +162,7 @@ def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT
         "completion_tokens": None,
         "total_tokens": None,
     }
-    token_budgets = (max(tokens, 1000), max(tokens, 1500))
+    token_budgets = (max(tokens, 4096), max(tokens, 6144))
 
     # Deux appels maximum : la première génération est déjà configurée sans
     # thinking afin d'éviter de payer plusieurs dizaines de secondes de raisonnement
@@ -195,9 +197,6 @@ def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT
                 "max_tokens": token_budget,
             }
             request_kwargs["response_format"] = {"type": "json_object"}
-            request_kwargs["extra_body"] = {
-                "chat_template_kwargs": {"enable_thinking": False}
-            }
             response = client.chat.completions.create(**request_kwargs)
             llm_audit["attempts"] = attempt + 1
             llm_audit["reported_model"] = getattr(response, "model", None)
@@ -242,7 +241,7 @@ def _request_llm_json(system_prompt: str, user_prompt: str, tokens: int = OUTPUT
         except Exception as exc:
             last_error = exc
             logger.warning(
-                "TDR LLM tentative %d/3 échouée (modèle=%s, budget=%d) : %s",
+                "TDR LLM tentative %d/2 échouée (modèle=%s, budget=%d) : %s",
                 attempt + 1, ACTIVE_MODEL, token_budget, exc,
             )
             # Cloudflare 524 : le proxy a expiré après ~120 s. Ne pas relancer
@@ -428,7 +427,7 @@ def _get_reference_search_cache(rows, model, metrics: dict | None = None):
 
 
 def _rank_all_references(candidate: str, rows, metrics: dict | None = None):
-    """Classe le corpus ; les représentations des références sont mises en cache."""
+    """Classe tout le corpus ; le LLM examine intégralement la référence la mieux classée."""
     from sklearn.metrics.pairwise import cosine_similarity
     from src.similarity.model_manager import get_model
 
@@ -585,7 +584,7 @@ def _recover_case2_evidence(
 # Analyse principale
 # ---------------------------------------------------------------------------
 def analyze_tdr_independently(candidate_text: str) -> dict:
-    """Classe le corpus, puis demande au LLM un seul verdict fondé sur les 3 meilleurs TDR."""
+    """Classe le registre, puis demande au LLM un verdict sur le TDR complet et sa référence la plus proche."""
     analysis_started = time.perf_counter()
     performance = {}
     candidate = (candidate_text or "").strip()
@@ -607,15 +606,17 @@ def analyze_tdr_independently(candidate_text: str) -> dict:
     performance["retrieval_ms"] = round((time.perf_counter() - retrieval_started) * 1000)
     if not ranked:
         raise IndependentTDRError("Aucune référence TDR exploitable n'a été trouvée.")
-    selected = ranked[:RAG_TOP_K]
-    candidate_excerpt = _excerpt(candidate, CANDIDATE_CHARS)
+    # Le classement parcourt tout le registre, mais l'arbitrage détaillé porte
+    # sur la seule référence la mieux classée. Les scores ne sont jamais des
+    # seuils de décision métier.
+    selected = ranked[:1]
+    candidate_excerpt = candidate
 
     reference_blocks = []
     reference_excerpt_chars = 0
     for _, _, _, row in selected:
-        reference_excerpt = _excerpt(
-            row.extracted_text or row.cleaned_text, REFERENCE_CHARS
-        )
+        # Le LLM reçoit le texte intégral de la référence, sans troncature.
+        reference_excerpt = row.extracted_text or row.cleaned_text or ""
         reference_excerpt_chars += len(reference_excerpt)
         reference_blocks.append(
             "DOCUMENT DE RÉFÉRENCE\n"
